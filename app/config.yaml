@@ -1,6 +1,9 @@
 chat:
   quick_prompts:
     scout:
+      - "Tell me about yourself"
       - "What's our PTO policy?"
       - "How do I deploy to production?"
-      - "What's the SLA for P1 incidents?"
+      - "What are our Q4 OKRs?"
+      - "What is our system architecture?"
+      - "How do I handle incidents?"
