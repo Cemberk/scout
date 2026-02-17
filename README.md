@@ -93,9 +93,6 @@ Scout improves without retraining through two complementary systems:
 railway login
 ./scripts/railway_up.sh
 
-# Set DOCUMENTS_DIR to your Railway volume mount path
-railway variables set DOCUMENTS_DIR=/documents
-
 # Load knowledge
 railway run python -m scout.scripts.load_knowledge
 ```
