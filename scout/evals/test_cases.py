@@ -3,11 +3,11 @@ Test cases for evaluating Scout.
 
 Each test case includes:
 - question: The natural language question to ask
-- expected_strings: Strings that should appear in the response
+- expected_strings: Strings that should appear in the response (for backward compatibility)
 - category: Test category for filtering
 - golden_path: Optional file path where the answer should be found
 
-When golden_path is provided and --check-sources is enabled, the evaluation will:
+When golden_path is provided, the evaluation will:
 1. Verify the agent cited the correct source document
 2. Factor source citation into the pass/fail decision
 """

@@ -50,9 +50,9 @@ What's our PTO policy?
 How do I deploy to production?
 → Here's the deployment process from the runbook...
 
-What's the SLA for SEV1 incidents?
-→ SEV1 incidents require acknowledgment within 5 minutes and resolution
-  within 1 hour. Full incident response process in the runbook...
+What's the SLA for P1 incidents?
+→ P1 incidents require acknowledgment within 15 minutes and resolution
+  within 4 hours. Full incident response process in the runbook...
 ```
 
 ## Documents Directory

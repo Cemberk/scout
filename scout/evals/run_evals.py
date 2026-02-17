@@ -11,7 +11,7 @@ Usage:
 
 import argparse
 import time
-from typing import Any, TypedDict
+from typing import TypedDict
 
 from rich.console import Console
 from rich.panel import Panel
@@ -30,10 +30,9 @@ class EvalResult(TypedDict, total=False):
     duration: float
     response: str | None
     error: str
-    # LLM grading fields
+    # New fields for enhanced evaluation
     llm_grade: float | None
     llm_reasoning: str | None
-    # Source citation check
     source_match: bool | None
     source_explanation: str | None
 
@@ -45,29 +44,6 @@ def check_strings_in_response(response: str, expected: list[str]) -> list[str]:
     """Check which expected strings are missing from the response."""
     response_lower = response.lower()
     return [v for v in expected if v.lower() not in response_lower]
-
-
-def check_source_citation(response: str, golden_path: str) -> tuple[bool, str]:
-    """Check if the response cites the expected source document."""
-    response_lower = response.lower()
-
-    # Check for the full path or filename
-    if golden_path.lower() in response_lower:
-        return True, f"Found full path: {golden_path}"
-
-    # Check for just the filename
-    filename = golden_path.split("/")[-1]
-    if filename.lower() in response_lower:
-        return True, f"Found filename: {filename}"
-
-    # Check for path segments (e.g., "runbooks/deployment")
-    parts = golden_path.split("/")
-    if len(parts) >= 2:
-        partial = "/".join(parts[-2:])
-        if partial.lower() in response_lower:
-            return True, f"Found partial path: {partial}"
-
-    return False, f"Expected citation: {golden_path}"
 
 
 def run_evals(
@@ -85,6 +61,8 @@ def run_evals(
         llm_grader: Use LLM to grade responses
         check_sources: Check source citations and factor into pass/fail
     """
+    from scout.agent import scout
+
     # Filter tests
     tests = TEST_CASES
     if category:
@@ -112,9 +90,6 @@ def run_evals(
 
     results: list[EvalResult] = []
     start = time.time()
-
-    # Import agent here to avoid slow import at module level
-    from scout.agent import scout
 
     with Progress(
         SpinnerColumn(),
@@ -176,7 +151,7 @@ def run_evals(
     total_duration = time.time() - start
 
     # Results table
-    display_results(results, verbose, llm_grader)
+    display_results(results, verbose, llm_grader, check_sources)
 
     # Summary
     display_summary(results, total_duration, category)
@@ -187,7 +162,7 @@ def evaluate_response(
     response: str,
     llm_grader: bool = False,
     check_sources: bool = False,
-) -> dict[str, Any]:
+) -> dict:
     """
     Evaluate an agent response using configured methods.
 
@@ -199,21 +174,26 @@ def evaluate_response(
         - source_match: bool if golden path was cited
         - source_explanation: string explanation of source check
     """
-    result: dict[str, Any] = {}
+    result: dict = {}
 
     # 1. String matching (always run)
     missing = check_strings_in_response(response, test_case.expected_strings)
     result["missing"] = missing if missing else None
     string_pass = len(missing) == 0
 
-    # 2. Source citation check (if golden_path provided)
+    # 2. Source citation check (if enabled and golden_path exists)
     source_pass: bool | None = None
-    if test_case.golden_path:
-        source_match, source_explanation = check_source_citation(response, test_case.golden_path)
-        result["source_match"] = source_match
-        result["source_explanation"] = source_explanation
-        if check_sources:
+    if check_sources and test_case.golden_path:
+        try:
+            from scout.evals.grader import check_source_citation
+
+            source_match, source_explanation = check_source_citation(response, test_case.golden_path)
+            result["source_match"] = source_match
+            result["source_explanation"] = source_explanation
             source_pass = source_match
+        except Exception as e:
+            result["source_match"] = None
+            result["source_explanation"] = f"Error checking source: {e}"
 
     # 3. LLM grading (if enabled)
     llm_pass: bool | None = None
@@ -239,7 +219,7 @@ def evaluate_response(
     if llm_grader and llm_pass is not None:
         result["status"] = "PASS" if llm_pass else "FAIL"
     elif check_sources and source_pass is not None:
-        result["status"] = "PASS" if (string_pass and source_pass) else "FAIL"
+        result["status"] = "PASS" if source_pass else "FAIL"
     else:
         result["status"] = "PASS" if string_pass else "FAIL"
 
@@ -250,6 +230,7 @@ def display_results(
     results: list[EvalResult],
     verbose: bool,
     llm_grader: bool,
+    check_sources: bool,
 ):
     """Display results table."""
     table = Table(title="Results", show_lines=True)
@@ -265,8 +246,6 @@ def display_results(
             notes = ""
             if llm_grader and r.get("llm_grade") is not None:
                 notes = f"LLM: {r['llm_grade']:.1f}"
-            if r.get("source_match") is True:
-                notes += " [dim]src:ok[/dim]" if notes else "[dim]src:ok[/dim]"
         elif r["status"] == "FAIL":
             status = Text("FAIL", style="red")
             llm_reasoning = r.get("llm_reasoning")
@@ -277,8 +256,6 @@ def display_results(
                 notes = f"Missing: {', '.join(missing[:2])}"
             else:
                 notes = ""
-            if r.get("source_match") is False:
-                notes += " [dim]src:miss[/dim]"
         else:
             status = Text("ERR", style="yellow")
             notes = (r.get("error") or "")[:35]
@@ -335,12 +312,6 @@ def display_summary(results: list[EvalResult], total_duration: float, category: 
     summary.add_row("Errors:", Text(str(errors), style="yellow" if errors else "dim"))
     summary.add_row("Avg time:", f"{total_duration / total:.1f}s per test" if total else "N/A")
 
-    # Source citation stats
-    source_checks = [r for r in results if r.get("source_match") is not None]
-    if source_checks:
-        source_hits = sum(1 for r in source_checks if r["source_match"])
-        summary.add_row("Source cited:", f"{source_hits}/{len(source_checks)}")
-
     # Add LLM grading average if available
     llm_grades: list[float] = [
         r["llm_grade"] for r in results if r.get("llm_grade") is not None and isinstance(r["llm_grade"], (int, float))
@@ -382,8 +353,7 @@ def display_summary(results: list[EvalResult], total_duration: float, category: 
         console.print(cat_table)
 
 
-def main():
-    """CLI entry point for running evaluations."""
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Scout evaluations")
     parser.add_argument("--category", "-c", choices=CATEGORIES, help="Filter by category")
     parser.add_argument("--verbose", "-v", action="store_true", help="Show full responses on failure")
@@ -407,7 +377,3 @@ def main():
         llm_grader=args.llm_grader,
         check_sources=args.check_sources,
     )
-
-
-if __name__ == "__main__":
-    main()

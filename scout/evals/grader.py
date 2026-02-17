@@ -122,3 +122,26 @@ def _parse_grade_response(response: str) -> GradeResult:
             reasoning = line.split(":", 1)[1].strip()
 
     return GradeResult(passed=passed, reasoning=reasoning, score=score)
+
+
+def check_source_citation(response: str, golden_path: str) -> tuple[bool, str]:
+    """Check if the response cites the expected source document."""
+    response_lower = response.lower()
+
+    # Check for the full path or filename
+    if golden_path.lower() in response_lower:
+        return True, f"Found full path: {golden_path}"
+
+    # Check for just the filename
+    filename = golden_path.split("/")[-1]
+    if filename.lower() in response_lower:
+        return True, f"Found filename: {filename}"
+
+    # Check for path segments (e.g., "runbooks/deployment")
+    parts = golden_path.split("/")
+    if len(parts) >= 2:
+        partial = "/".join(parts[-2:])
+        if partial.lower() in response_lower:
+            return True, f"Found partial path: {partial}"
+
+    return False, f"Expected citation: {golden_path}"
