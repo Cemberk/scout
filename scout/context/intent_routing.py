@@ -6,7 +6,7 @@ from typing import Any
 
 from agno.utils.log import logger
 
-from ..paths import ROUTING_DIR
+from scout.paths import ROUTING_DIR
 
 
 def load_intent_rules(routing_dir: Path | None = None) -> dict[str, Any]:

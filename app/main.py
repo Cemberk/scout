@@ -1,6 +1,6 @@
 """
-Scout API
-=========
+Scout AgentOS
+========
 
 Production deployment entry point for Scout.
 
@@ -13,17 +13,18 @@ from pathlib import Path
 
 from agno.os import AgentOS
 
+from scout.agent import scout
 from db import get_postgres_db
-from scout import scout
 
-# ============================================================================
+# ---------------------------------------------------------------------------
 # Create AgentOS
-# ============================================================================
+# ---------------------------------------------------------------------------
 agent_os = AgentOS(
     name="Scout",
-    tracing=True,
-    db=get_postgres_db(),
     agents=[scout],
+    tracing=True,
+    scheduler=True,
+    db=get_postgres_db(),
     config=str(Path(__file__).parent / "config.yaml"),
 )
 

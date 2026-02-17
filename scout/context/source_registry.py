@@ -6,7 +6,7 @@ from typing import Any
 
 from agno.utils.log import logger
 
-from ..paths import SOURCES_DIR
+from scout.paths import SOURCES_DIR
 
 
 def load_source_metadata(sources_dir: Path | None = None) -> list[dict[str, Any]]:

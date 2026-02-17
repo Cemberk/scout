@@ -1,5 +1,6 @@
 """
 Scout - Enterprise Knowledge Agent
+===============================
 
 Run:
     python -m scout
@@ -18,32 +19,36 @@ from agno.tools.file import FileTools
 from agno.tools.mcp import MCPTools
 
 from db import create_knowledge, get_postgres_db
-
-from .context.intent_routing import INTENT_ROUTING_CONTEXT
-from .context.source_registry import SOURCE_REGISTRY_STR
-from .paths import DOCUMENTS_DIR
-from .tools import (
+from scout.context.intent_routing import INTENT_ROUTING_CONTEXT
+from scout.context.source_registry import SOURCE_REGISTRY_STR
+from scout.paths import DOCUMENTS_DIR
+from scout.tools import (
     create_get_metadata_tool,
     create_list_sources_tool,
     create_save_intent_discovery_tool,
     create_search_content_tool,
 )
 
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
 agent_db = get_postgres_db()
 
+# Dual knowledge system
 # KNOWLEDGE: Static, curated (source registry, intent routing, known patterns)
 scout_knowledge = create_knowledge("Scout Knowledge", "scout_knowledge")
-
 # LEARNINGS: Dynamic, discovered (decision traces, what worked, what didn't)
 scout_learnings = create_knowledge("Scout Learnings", "scout_learnings")
 
+# ---------------------------------------------------------------------------
+# Tools
+# ---------------------------------------------------------------------------
 list_sources = create_list_sources_tool()
 get_metadata = create_get_metadata_tool(DOCUMENTS_DIR)
 search_content = create_search_content_tool(DOCUMENTS_DIR)
 save_intent_discovery = create_save_intent_discovery_tool(scout_knowledge)
 
 base_tools: list = [
-    # Primary file access
     FileTools(
         base_dir=DOCUMENTS_DIR,
         enable_read_file=True,
@@ -52,19 +57,16 @@ base_tools: list = [
         enable_replace_file_chunk=False,
         enable_delete_file=False,
     ),
-    # Content search
     search_content,
-    # Awareness tools
     list_sources,
     get_metadata,
-    # Learning tools
     save_intent_discovery,
+    MCPTools(url=f"https://mcp.exa.ai/mcp?exaApiKey={getenv('EXA_API_KEY', '')}&tools=web_search_exa"),
 ]
 
-# External search (optional)
-if getenv("EXA_API_KEY"):
-    base_tools.append(MCPTools(url=f"https://mcp.exa.ai/mcp?exaApiKey={getenv('EXA_API_KEY')}&tools=web_search_exa"))
-
+# ---------------------------------------------------------------------------
+# Instructions
+# ---------------------------------------------------------------------------
 INSTRUCTIONS = f"""\
 You are Scout, a self-learning knowledge agent that finds **answers**, not just documents.
 
@@ -185,6 +187,9 @@ context from the previous answer to navigate directly to the right section.
 {INTENT_ROUTING_CONTEXT}\
 """
 
+# ---------------------------------------------------------------------------
+# Create Agent
+# ---------------------------------------------------------------------------
 scout = Agent(
     id="scout",
     name="Scout",
@@ -193,12 +198,12 @@ scout = Agent(
     instructions=INSTRUCTIONS,
     knowledge=scout_knowledge,
     search_knowledge=True,
+    enable_agentic_memory=True,
     learning=LearningMachine(
         knowledge=scout_learnings,
         learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
     ),
     tools=base_tools,
-    enable_agentic_memory=True,
     add_datetime_to_context=True,
     add_history_to_context=True,
     read_chat_history=True,
@@ -206,14 +211,8 @@ scout = Agent(
     markdown=True,
 )
 
+# ---------------------------------------------------------------------------
+# Run Agent
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    test_cases = [
-        "What is our PTO policy?",
-        "Find the deployment runbook",
-        "What is the incident response process?",
-        "How do I request access to production systems?",
-    ]
-    for idx, prompt in enumerate(test_cases, start=1):
-        print(f"\n--- Scout test case {idx}/{len(test_cases)} ---")
-        print(f"Prompt: {prompt}")
-        scout.print_response(prompt, stream=True)
+    scout.print_response("What is our PTO policy?", stream=True)

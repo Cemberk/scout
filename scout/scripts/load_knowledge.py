@@ -8,7 +8,7 @@ Usage:
 
 import argparse
 
-from ..paths import KNOWLEDGE_DIR
+from scout.paths import KNOWLEDGE_DIR
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Load knowledge into vector database")
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    from ..agent import scout_knowledge
+    from scout.agent import scout_knowledge
 
     if args.recreate:
         print("Recreating knowledge base (dropping existing data)...\n")
