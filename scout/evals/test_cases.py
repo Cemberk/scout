@@ -137,9 +137,3 @@ TEST_CASES: list[TestCase] = [
 
 # Categories for filtering
 CATEGORIES = ["policy", "runbook", "navigation", "edge_case"]
-
-
-# Backward compatibility: export as tuples for any code expecting the old format
-def get_legacy_test_cases() -> list[tuple[str, list[str], str]]:
-    """Get test cases in legacy tuple format (question, expected_strings, category)."""
-    return [(tc.question, tc.expected_strings, tc.category) for tc in TEST_CASES]
