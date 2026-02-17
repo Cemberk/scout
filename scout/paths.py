@@ -3,6 +3,9 @@
 from os import getenv
 from pathlib import Path
 
+# Document directory resolution:
+#   1. DOCUMENTS_DIR environment variable
+#   2. ./documents fallback (local development)
 _env_dir = getenv("DOCUMENTS_DIR")
 if _env_dir:
     DOCUMENTS_DIR = Path(_env_dir)
