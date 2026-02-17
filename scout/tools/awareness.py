@@ -9,7 +9,7 @@ from pathlib import Path
 
 from agno.tools import tool
 
-from ..context.source_registry import SOURCE_REGISTRY
+from scout.context.source_registry import SOURCE_REGISTRY
 
 
 def _format_size(size: int) -> str:

@@ -1,4 +1,4 @@
-"""Run Scout agent from the command line: python -m scout"""
+"""CLI entry point: python -m scout"""
 
 from scout.agent import scout
 

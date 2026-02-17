@@ -24,6 +24,10 @@ scout/
 │   ├── awareness.py          # list_sources, get_metadata
 │   ├── search.py             # search_content (grep-like)
 │   └── save_discovery.py     # Save successful discoveries
+├── evals/
+│   ├── test_cases.py         # Test cases with expected strings
+│   ├── grader.py             # LLM-based response grading
+│   └── run_evals.py          # Evaluation runner with rich output
 ├── knowledge/
 │   ├── sources/files.json    # Source registry metadata
 │   ├── routing/intents.json  # Intent routing rules
@@ -56,6 +60,14 @@ python -m scout          # CLI mode
 # Knowledge
 python -m scout.scripts.load_knowledge              # Load knowledge into vector DB
 python -m scout.scripts.load_knowledge --recreate    # Drop & reload
+
+# Evaluations
+python -m scout.evals.run_evals                     # String matching (default)
+python -m scout.evals.run_evals --category policy   # Filter by category
+python -m scout.evals.run_evals --llm-grader        # LLM-based grading
+python -m scout.evals.run_evals --verbose           # Show responses on failure
+python -m scout.evals.run_evals --check-sources      # Source citation affects pass/fail
+python -m scout.evals.run_evals -g -s -v             # All modes combined
 ```
 
 ## Two Knowledge Systems
