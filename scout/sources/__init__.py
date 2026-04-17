@@ -24,10 +24,14 @@ from scout.config import (
     GOOGLE_DRIVE_FOLDER_IDS,
     SCOUT_COMPILED_DIR,
     SCOUT_RAW_DIR,
+    SLACK_CHANNEL_ALLOWLIST,
+    SLACK_SOURCE_ENABLED,
+    SLACK_TOKEN,
 )
 from scout.sources.base import Source
 from scout.sources.drive import GoogleDriveSource
 from scout.sources.local_folder import LocalFolderSource
+from scout.sources.slack import SlackSource
 
 
 @lru_cache(maxsize=1)
@@ -63,6 +67,18 @@ def get_sources() -> tuple[Source, ...]:
             )
         )
 
+    if SLACK_SOURCE_ENABLED:
+        sources.append(
+            SlackSource(
+                token=SLACK_TOKEN,
+                channel_allowlist=SLACK_CHANNEL_ALLOWLIST,
+                id="slack",
+                name="Slack",
+                compile=False,
+                live_read=True,
+            )
+        )
+
     return tuple(sources)
 
 
@@ -81,6 +97,7 @@ def get_source(source_id: str) -> Source | None:
 __all__ = [
     "GoogleDriveSource",
     "LocalFolderSource",
+    "SlackSource",
     "get_source",
     "get_sources",
     "reload_sources",

@@ -21,6 +21,8 @@ SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET", "")
 SLACK_CHANNEL_ALLOWLIST = tuple(
     c.strip() for c in getenv("SLACK_CHANNEL_ALLOWLIST", "").split(",") if c.strip()
 )
+# SlackSource is live-read only. Needs a token; allowlist is optional.
+SLACK_SOURCE_ENABLED = bool(SLACK_TOKEN)
 
 GOOGLE_CLIENT_ID = getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = getenv("GOOGLE_CLIENT_SECRET", "")
@@ -52,11 +54,34 @@ GITHUB_ACCESS_TOKEN = getenv("GITHUB_ACCESS_TOKEN", "")
 SCOUT_REPO_URL = getenv("SCOUT_REPO_URL", "")
 GIT_SYNC_ENABLED = bool(GITHUB_ACCESS_TOKEN and SCOUT_REPO_URL)
 
+# GitHubSource — live-read over locally cloned repos + ad-hoc search_code.
+# GITHUB_ACCESS_TOKEN is Scout's own context repo token (not this one).
+GITHUB_READ_TOKEN = getenv("GITHUB_READ_TOKEN", "")
+GITHUB_REPOS = tuple(
+    r.strip() for r in getenv("GITHUB_REPOS", "").split(",") if r.strip()
+)
+GITHUB_SOURCE_ENABLED = bool(GITHUB_REPOS and GITHUB_READ_TOKEN)
+
+# S3Source — compile-only in this build. S3_BUCKETS entries are
+# `bucket[:prefix]`. One Source instance is registered per entry.
+AWS_ACCESS_KEY_ID = getenv("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = getenv("AWS_SECRET_ACCESS_KEY", "")
+AWS_REGION = getenv("AWS_REGION", "")
+S3_BUCKETS = tuple(
+    b.strip() for b in getenv("S3_BUCKETS", "").split(",") if b.strip()
+)
+S3_SOURCE_ENABLED = bool(
+    S3_BUCKETS and AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and AWS_REGION
+)
+
 # Compile model — same as agents in Phase 1; can be split later
 COMPILE_MODEL_ID = getenv("SCOUT_COMPILE_MODEL", "gpt-5.4")
 
 # Re-export for convenience
 __all__ = [
+    "AWS_ACCESS_KEY_ID",
+    "AWS_REGION",
+    "AWS_SECRET_ACCESS_KEY",
     "CONTEXT_COMPILED_DIR",
     "CONTEXT_DIR",
     "CONTEXT_RAW_DIR",
@@ -68,12 +93,17 @@ __all__ = [
     "EXA_MCP_URL",
     "GIT_SYNC_ENABLED",
     "GITHUB_ACCESS_TOKEN",
+    "GITHUB_READ_TOKEN",
+    "GITHUB_REPOS",
+    "GITHUB_SOURCE_ENABLED",
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
     "GOOGLE_DRIVE_FOLDER_IDS",
     "GOOGLE_INTEGRATION_ENABLED",
     "GOOGLE_PROJECT_ID",
     "PARALLEL_API_KEY",
+    "S3_BUCKETS",
+    "S3_SOURCE_ENABLED",
     "SCOUT_COMPILED_DIR",
     "SCOUT_CONTEXT_DIR",
     "SCOUT_RAW_DIR",
@@ -81,6 +111,7 @@ __all__ = [
     "SCOUT_VOICE_DIR",
     "SLACK_CHANNEL_ALLOWLIST",
     "SLACK_SIGNING_SECRET",
+    "SLACK_SOURCE_ENABLED",
     "SLACK_TOKEN",
     "WORKSPACE_ID",
 ]
