@@ -14,6 +14,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
 from scout.agents.settings import agent_db
+from scout.instructions import build_syncer_instructions
 from scout.tools import build_syncer_tools
 
 SYNCER_INSTRUCTIONS = """\
@@ -54,7 +55,7 @@ syncer = Agent(
     role="Commits and pushes context/ changes to GitHub",
     model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
-    instructions=SYNCER_INSTRUCTIONS,
+    instructions=build_syncer_instructions(SYNCER_INSTRUCTIONS),
     tools=build_syncer_tools(),
     add_datetime_to_context=True,
     markdown=True,

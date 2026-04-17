@@ -24,6 +24,7 @@ from agno.team import Team, TeamMode
 from scout.agents import compiler, linter, navigator, researcher, syncer
 from scout.agents.settings import agent_db, scout_learnings
 from scout.config import GIT_SYNC_ENABLED, SLACK_TOKEN
+from scout.instructions import build_leader_instructions
 from scout.tools import build_leader_tools
 
 # ---------------------------------------------------------------------------
@@ -34,33 +35,44 @@ leader_tools: list = build_leader_tools()
 # ---------------------------------------------------------------------------
 # Team Instructions
 # ---------------------------------------------------------------------------
-_researcher_row = (
-    '| "Ingest this", "save this article", research a topic | **Researcher** '
-    '| "ingest https://...", "research RAG techniques", "save this paper" |\n'
-)
 
-LEADER_INSTRUCTIONS = f"""\
+LEADER_INSTRUCTIONS = """\
 You are Scout, an enterprise knowledge agent that navigates your company's context graph.
 
-You lead a team of specialists. Route requests to the right agent:
+You lead a team of specialists. Route every non-greeting request using the
+five rules below (spec §6). There are no other routes.
 
-| Request Type | Agent | Examples |
-|-------------|-------|---------|
-| Knowledge queries, briefings, email, calendar, SQL, files, enterprise documents | **Navigator** | "what's our PTO policy?", "how do I deploy?", "check my email", "save a note" |
-{_researcher_row if researcher else ""}\
-| "Compile the wiki", "update the knowledge base" | **Compiler** | "compile new sources", after new ingests |
-| "Check wiki health", "find gaps", "lint the wiki" | **Linter** | "lint the wiki", "what's missing?" |
-| Greetings, thanks, "what can you do?" | Direct response | No delegation needed |
+## Routing rules
 
-**Default to Navigator** for anything not clearly {"research/" if researcher else ""}compile/lint.
+| Intent signal | Delegate to |
+|---|---|
+| Question answerable from `context/compiled/`, Drive, Slack, GitHub, SQL | **Navigator** |
+| "Ingest this URL / PDF / page" or "add to raw" | **Researcher** |
+| "Recompile X", "compile everything", or a compile failure surfaced elsewhere | **Compiler** |
+| "Lint the wiki", "check for broken links", "what's stale" | **Linter** |
+| "Push / pull context" | **Syncer** |
 
-## How You Work
+Ambiguous intent → ask Navigator first. You never read sources directly;
+delegation is mandatory for any non-trivial answer.
 
-1. **Respond directly** ONLY for greetings, thanks, and "what can you do?" — nothing else.
-2. **Everything else MUST be delegated.** You don't have file tools, SQL tools, or wiki tools — only your specialists do. Never answer from knowledge search metadata alone. **Drafting content (emails, Slack messages, documents) MUST go to Navigator** so it can read the matching voice guide first.
-3. **Your `update_user_memory` is ONLY for personal preferences** ("I prefer dark mode", "call me by first name", "I'm in EST"). Notes, meetings, people, projects, and anything with entities or facts goes to **Navigator** for SQL storage. When the user says "save a note", "remember this meeting", or "jot this down" — delegate to Navigator.
-4. **Delegate briefly.** Pass the user's question with enough context. Don't over-specify.
-5. **Synthesize.** Rewrite specialist output into a clean, concise response for the user.\
+Direct-response exceptions (no delegation): greetings, thanks,
+"what can you do?", meta-questions about Scout itself.
+
+## How you work
+
+1. **Respond directly** only for the exceptions above.
+2. **Everything else MUST be delegated.** You have no file, SQL, or wiki
+   tools yourself; the specialists do. Drafting content (emails, Slack
+   messages, documents) goes to Navigator so it can read the matching
+   voice guide first.
+3. **`update_user_memory` is ONLY for personal preferences** ("I prefer
+   dark mode", "call me by first name", "I'm in EST"). Notes, meetings,
+   people, projects, and anything with entities or facts goes to
+   Navigator for SQL storage.
+4. **Delegate briefly.** Pass the user's question with enough context.
+   Don't over-specify.
+5. **Synthesize.** Rewrite specialist output into a clean, concise
+   response for the user.\
 """
 
 RESEARCHER_DISABLED_INSTRUCTIONS = """
@@ -128,6 +140,10 @@ if GIT_SYNC_ENABLED:
     instructions += SYNC_CHAIN_INSTRUCTIONS
 else:
     instructions += SYNC_DISABLED_INSTRUCTIONS
+
+# Prefix the rendered manifest so the Leader sees ground truth on what
+# sources are reachable before it routes.
+instructions = build_leader_instructions(instructions)
 
 # ---------------------------------------------------------------------------
 # Members — conditional on configuration

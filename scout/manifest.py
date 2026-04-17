@@ -22,9 +22,12 @@ inspection / restart resilience.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import Engine, text
 
@@ -110,7 +113,15 @@ class Manifest:
                 last_health_at=now,
             )
         m = cls(workspace_id=workspace_id, sources=states, built_at=now)
-        m.persist()
+        # Persist() is a side-effect for observability (GET /manifest reads
+        # from the mirror table). Gating is authoritative from the in-memory
+        # Manifest and must not depend on the DB being reachable — otherwise
+        # the _smoke_gating CLI and any dev environment without Postgres
+        # would lose the safety rail. Log and move on.
+        try:
+            m.persist()
+        except Exception as exc:
+            logger.warning("Manifest.persist() skipped: %s", exc)
         return m
 
     # ------------------------------------------------------------------
@@ -120,12 +131,15 @@ class Manifest:
     def persist(self) -> None:
         with _engine_for_manifest().begin() as conn:
             for state in self.sources.values():
+                # CAST(... AS jsonb) avoids the psycopg bind-style collision
+                # that `:cfg::jsonb` hits when SQLAlchemy translates named
+                # params to %s.
                 conn.execute(
                     text(
                         f"""INSERT INTO {_TABLE}
                                (id, kind, config_json, compile, live_read,
                                 status, detail, last_health_at, workspace_id)
-                           VALUES (:id, :kind, :cfg::jsonb, :compile, :live_read,
+                           VALUES (:id, :kind, CAST(:cfg AS jsonb), :compile, :live_read,
                                    :status, :detail, NOW(), :wid)
                            ON CONFLICT (id) DO UPDATE
                                SET kind = EXCLUDED.kind,

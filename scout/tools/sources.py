@@ -3,9 +3,15 @@ Source-backed tools
 ===================
 
 A small set of dispatch tools the agents call to talk to any registered
-Source. The Manifest gates which sources each agent can reach: tools that
-target unreachable sources return an explicit "X isn't reachable" message
-rather than silently falling back, per spec §7 governance.
+Source. The Manifest gates which sources each agent can reach.
+
+Contract (spec §7):
+- When `manifest.can_call(source_id, agent_role)` returns False, the tool
+  MUST raise `PermissionError(f"{source_id} not callable for {agent_role}")`.
+  This is the only signal the gating smoke test checks, and it is the
+  contract the Leader / Navigator are told to trust in instructions.
+- Every other failure mode (unknown source id, SourceError, NotSupported)
+  returns a refusal JSON string so the agent can observe and course-correct.
 
 These tools are deliberately uniform across all sources. The Source
 abstraction is what lets us not write per-source tool families.
@@ -21,6 +27,12 @@ from scout.manifest import get_manifest
 from scout.sources import get_source
 from scout.sources.base import FindKind, NotSupported
 from scout.tools.redactor import redact
+
+
+def _gate(source_id: str, agent_role: str) -> None:
+    """Raise PermissionError if the calling role can't reach source_id."""
+    if not get_manifest().can_call(source_id, agent_role):
+        raise PermissionError(f"{source_id} not callable for {agent_role}")
 
 
 def _refuse(source_id: str, reason: str) -> str:
@@ -55,9 +67,7 @@ def create_source_tools(agent_role: str):
 
         Returns: JSON array of entries with id, name, kind, size, modified_at.
         """
-        manifest = get_manifest()
-        if not manifest.can_call(source_id, agent_role):
-            return _refuse(source_id, "not reachable for this agent")
+        _gate(source_id, agent_role)
         s = get_source(source_id)
         if s is None:
             return _refuse(source_id, "unknown source id")
@@ -90,9 +100,7 @@ def create_source_tools(agent_role: str):
 
         Returns JSON array of {entry_id, name, score, snippet, source_url, citation_hint}.
         """
-        manifest = get_manifest()
-        if not manifest.can_call(source_id, agent_role):
-            return _refuse(source_id, "not reachable for this agent")
+        _gate(source_id, agent_role)
         s = get_source(source_id)
         if s is None:
             return _refuse(source_id, "unknown source id")
@@ -130,9 +138,7 @@ def create_source_tools(agent_role: str):
         Returns JSON: {text, mime, source_url, citation_hint, truncated}.
         Binary entries return text=null with mime set.
         """
-        manifest = get_manifest()
-        if not manifest.can_call(source_id, agent_role):
-            return _refuse(source_id, "not reachable for this agent")
+        _gate(source_id, agent_role)
         s = get_source(source_id)
         if s is None:
             return _refuse(source_id, "unknown source id")

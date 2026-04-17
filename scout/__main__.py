@@ -8,6 +8,9 @@ Usage:
     python -m scout compile --force              # re-compile even if hash matches
     python -m scout manifest                     # print current manifest
     python -m scout sources                      # list all registered sources + capabilities
+    python -m scout _smoke_gating                # assert Navigator-role source_read
+                                                 # on a compile-only source raises
+                                                 # PermissionError (spec §7)
 """
 
 from __future__ import annotations
@@ -80,6 +83,62 @@ def _cmd_sources() -> None:
     print(json.dumps(rows, indent=2))
 
 
+def _cmd_smoke_gating() -> int:
+    """Gating smoke test — spec §7 verification requirement.
+
+    Builds a real Manifest, then constructs Navigator-role source tools and
+    calls `source_read("local:raw", "<any-entry>")`. Contract: this MUST
+    raise PermissionError. If it returns content or any other value, tool
+    gating is broken and nothing else in the build is safe.
+
+    No external network. LocalFolder is the only source the test leans on.
+    """
+    from scout.manifest import get_manifest
+    from scout.tools.sources import create_source_tools
+
+    try:
+        manifest = get_manifest()
+    except Exception as exc:
+        print(f"FAIL: could not build manifest: {exc}", file=sys.stderr)
+        return 1
+
+    raw = next((s for s in manifest.sources.values() if s.id == "local:raw"), None)
+    if raw is None:
+        print("FAIL: local:raw source missing from manifest", file=sys.stderr)
+        return 1
+    if raw.live_read:
+        print("FAIL: local:raw is flagged live_read=True — raw intake must be compile-only",
+              file=sys.stderr)
+        return 1
+
+    # Pre-flight: Compiler role must be allowed to read local:raw.
+    if not manifest.can_call("local:raw", "compiler"):
+        print("FAIL: manifest.can_call('local:raw', 'compiler') is False; gating is backwards",
+              file=sys.stderr)
+        return 1
+
+    # Core assertion: Navigator role must NOT be allowed to read local:raw.
+    tools = create_source_tools("navigator")
+    source_read = next(t for t in tools if getattr(t, "name", "") == "source_read")
+    entrypoint = getattr(source_read, "entrypoint", source_read)
+
+    try:
+        result = entrypoint(source_id="local:raw", entry_id="anything")
+    except PermissionError as exc:
+        print(f"PASS: gating raised PermissionError — {exc}")
+        return 0
+    except Exception as exc:
+        print(f"FAIL: gating raised unexpected exception {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return 1
+    print(
+        "FAIL: gating leaked — Navigator role read local:raw and got: "
+        f"{str(result)[:200]}",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="scout")
     sub = parser.add_subparsers(dest="cmd")
@@ -94,6 +153,10 @@ def main() -> None:
 
     sub.add_parser("manifest", help="Print the current source manifest")
     sub.add_parser("sources", help="List all registered sources + capabilities")
+    sub.add_parser(
+        "_smoke_gating",
+        help="Assert Navigator-role source_read on a compile-only source raises PermissionError",
+    )
 
     args = parser.parse_args()
     if args.cmd == "compile":
@@ -102,6 +165,8 @@ def main() -> None:
         _cmd_manifest()
     elif args.cmd == "sources":
         _cmd_sources()
+    elif args.cmd == "_smoke_gating":
+        sys.exit(_cmd_smoke_gating())
     else:
         # No subcommand → drop into chat (back-compat with `python -m scout`)
         _cmd_chat()

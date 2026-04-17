@@ -18,6 +18,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
 from scout.agents.settings import agent_db, scout_knowledge
+from scout.instructions import build_compiler_instructions
 from scout.tools import build_compiler_tools
 
 COMPILER_INSTRUCTIONS = """\
@@ -65,7 +66,7 @@ compiler = Agent(
     role="Iterates compile-on sources and produces Obsidian-compatible markdown wiki articles",
     model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
-    instructions=COMPILER_INSTRUCTIONS,
+    instructions=build_compiler_instructions(COMPILER_INSTRUCTIONS),
     knowledge=scout_knowledge,
     search_knowledge=True,
     tools=build_compiler_tools(scout_knowledge),

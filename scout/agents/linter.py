@@ -13,6 +13,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
 from scout.agents.settings import agent_db, scout_knowledge
+from scout.instructions import build_linter_instructions
 from scout.tools import build_linter_tools
 
 LINTER_INSTRUCTIONS = """\
@@ -36,6 +37,9 @@ the Compiler or the user resolve.
 5. **Dead Discovery: entries**: knowledge rows pointing to files that
    no longer exist. Spot-check by reading the referenced file path.
 6. **Thin articles**: under 200 words.
+7. **Oversized sources**: any article with `needs_split: true` in
+   frontmatter (or any `scout_compiled` row with `needs_split = true`).
+   These came from raw entries >20,000 chars — flag for human follow-up.
 
 ## Process
 
@@ -87,7 +91,7 @@ linter = Agent(
     role="Audits the compiled wiki and source health; writes a lint report",
     model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
-    instructions=LINTER_INSTRUCTIONS,
+    instructions=build_linter_instructions(LINTER_INSTRUCTIONS),
     knowledge=scout_knowledge,
     search_knowledge=True,
     tools=build_linter_tools(scout_knowledge),

@@ -1,5 +1,31 @@
 from scout.config import SCOUT_COMPILED_DIR, SCOUT_CONTEXT_DIR
 
+
+# ---------------------------------------------------------------------------
+# Manifest injection (spec §7)
+# ---------------------------------------------------------------------------
+#
+# Every agent's system prompt is prefixed with a manifest-rendered table of
+# the sources callable by that role. The table is ~1K tokens; it gives the
+# model ground truth on what source ids / capabilities / statuses look like
+# right now, which is what keeps the model from hallucinating a source name
+# it isn't allowed to touch.
+#
+# This helper is safe at import time: if the manifest can't build yet
+# (migrations haven't run, DB isn't up), we return a stub telling the model
+# to call `read_manifest` at runtime instead.
+
+def sources_header(agent_role: str) -> str:
+    """Render `manifest.render_for_prompt(role)` safely for prompt prefixing."""
+    try:
+        from scout.manifest import get_manifest
+
+        rendered = get_manifest().render_for_prompt(agent_role)
+    except Exception as exc:  # migrations not run yet / DB down / etc.
+        rendered = f"(manifest not yet built: {exc!s}. Call `read_manifest` before dispatching.)"
+    return f"## Sources you can call\n\n{rendered}\n\n--------------------------------\n\n"
+
+
 # {user_id} is a template variable substituted at runtime by Agno, NOT a
 # Python f-string. Use regular strings so {user_id} survives to runtime.
 # If mixing with f-strings, escape as {{user_id}}.
@@ -197,7 +223,7 @@ def build_navigator_instructions() -> str:
     """Build instructions for the Navigator agent."""
     from scout.config import GOOGLE_INTEGRATION_ENABLED
 
-    parts = [BASE_INSTRUCTIONS, EXA_INSTRUCTIONS]
+    parts = [sources_header("navigator"), BASE_INSTRUCTIONS, EXA_INSTRUCTIONS]
 
     # Navigator never posts to Slack — that's the leader's job.
     parts.append(SLACK_DISABLED_INSTRUCTIONS)
@@ -210,3 +236,31 @@ def build_navigator_instructions() -> str:
         parts.append(CALENDAR_DISABLED_INSTRUCTIONS)
 
     return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Helpers the other agents use to prefix their own instructions.
+# ---------------------------------------------------------------------------
+#
+# Each agent file already defines its own role-specific instructions string
+# (COMPILER_INSTRUCTIONS, LINTER_INSTRUCTIONS, …). At Agent() construction
+# time they now prepend `sources_header(role)` via the wrappers below.
+
+def build_compiler_instructions(role_body: str) -> str:
+    return sources_header("compiler") + role_body
+
+
+def build_linter_instructions(role_body: str) -> str:
+    return sources_header("linter") + role_body
+
+
+def build_researcher_instructions(role_body: str) -> str:
+    return sources_header("researcher") + role_body
+
+
+def build_syncer_instructions(role_body: str) -> str:
+    return sources_header("syncer") + role_body
+
+
+def build_leader_instructions(role_body: str) -> str:
+    return sources_header("leader") + role_body

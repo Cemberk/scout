@@ -17,6 +17,7 @@ from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 from agno.models.openai import OpenAIResponses
 
 from scout.agents.settings import agent_db, scout_knowledge, scout_learnings
+from scout.instructions import build_researcher_instructions
 from scout.tools import build_researcher_tools
 
 RESEARCHER_INSTRUCTIONS = """\
@@ -62,7 +63,7 @@ if getenv("PARALLEL_API_KEY"):
         role="Gathers source material from the web, converts to markdown, saves to raw/",
         model=OpenAIResponses(id="gpt-5.4"),
         db=agent_db,
-        instructions=RESEARCHER_INSTRUCTIONS,
+        instructions=build_researcher_instructions(RESEARCHER_INSTRUCTIONS),
         knowledge=scout_knowledge,
         search_knowledge=True,
         learning=LearningMachine(

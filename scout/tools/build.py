@@ -16,8 +16,12 @@ from __future__ import annotations
 from agno.knowledge import Knowledge
 from agno.tools.file import FileTools
 from agno.tools.mcp import MCPTools
-from agno.tools.parallel import ParallelTools
 from agno.tools.sql import SQLTools
+
+# ParallelTools is imported lazily in build_researcher_tools — it pulls in
+# the optional `parallel-web` package which isn't installed when Researcher
+# is disabled. Unconditional import breaks `python -m scout _smoke_gating`
+# and any other entry point that just needs manifest/gating.
 
 from db import SCOUT_SCHEMA, get_sql_engine
 from scout.config import (
@@ -66,6 +70,8 @@ def build_navigator_tools(knowledge: Knowledge) -> list:
 
 def build_researcher_tools(knowledge: Knowledge) -> list:
     """Tools for the Researcher agent — Parallel search/extract + ingest to context/raw/."""
+    from agno.tools.parallel import ParallelTools  # lazy — optional dep
+
     ingest_url, ingest_text, _read_manifest_legacy, _ = create_ingest_tools(SCOUT_RAW_DIR)
     return [
         FileTools(base_dir=SCOUT_CONTEXT_DIR, enable_delete_file=False),
