@@ -22,7 +22,6 @@ from agno.tools.sql import SQLTools
 # the optional `parallel-web` package which isn't installed when Researcher
 # is disabled. Unconditional import breaks `python -m scout _smoke_gating`
 # and any other entry point that just needs manifest/gating.
-
 from db import SCOUT_SCHEMA, get_sql_engine
 from scout.config import (
     DOCUMENTS_DIR,

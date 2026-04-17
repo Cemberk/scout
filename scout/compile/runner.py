@@ -451,9 +451,7 @@ def compile_source(
     for i, entry in enumerate(entries):
         if limit is not None and i >= limit:
             break
-        results.append(
-            compile_entry(source, entry.id, knowledge=knowledge, workspace_id=workspace_id, force=force)
-        )
+        results.append(compile_entry(source, entry.id, knowledge=knowledge, workspace_id=workspace_id, force=force))
     _refresh_index(workspace_id)
     return results
 
@@ -468,9 +466,7 @@ def compile_all(
     for source in get_sources():
         if not getattr(source, "compile", False):
             continue
-        out[source.id] = compile_source(
-            source.id, knowledge=knowledge, workspace_id=workspace_id, force=force
-        )
+        out[source.id] = compile_source(source.id, knowledge=knowledge, workspace_id=workspace_id, force=force)
     return out
 
 

@@ -44,6 +44,10 @@ from scout.sources.base import (
     SourceError,
 )
 
+# Alias builtins.list — the class body below defines `def list`, which shadows
+# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
+_list = list
+
 _CACHE_ROOT = Path(".scout-cache/repos").resolve()
 _FETCH_DEBOUNCE_S = 300  # 5 min
 _RG_PER_REPO_TIMEOUT = 30
@@ -89,7 +93,11 @@ class GitHubSource:
             self._maybe_fetch(owner_repo, target)
             return target
         target.parent.mkdir(parents=True, exist_ok=True)
-        url = f"https://{self.token}@github.com/{owner_repo}.git" if self.token else f"https://github.com/{owner_repo}.git"
+        url = (
+            f"https://{self.token}@github.com/{owner_repo}.git"
+            if self.token
+            else f"https://github.com/{owner_repo}.git"
+        )
         try:
             subprocess.run(
                 ["git", "clone", "--depth=1", url, str(target)],
@@ -142,12 +150,9 @@ class GitHubSource:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> list[Entry]:
+    def list(self, path: str = "") -> _list[Entry]:
         if not path:
-            return [
-                Entry(id=repo, name=repo, kind="folder", path=repo)
-                for repo in self.repos
-            ]
+            return [Entry(id=repo, name=repo, kind="folder", path=repo) for repo in self.repos]
         owner_repo, subpath = self._split_entry_id(path)
         clone = self._entry_for_repo(owner_repo)
         base = (clone / subpath).resolve() if subpath else clone
@@ -245,7 +250,7 @@ class GitHubSource:
             Capability.FIND_NATIVE,
         }
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> list[Hit]:
+    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
         if kind == FindKind.LEXICAL:
             return self._find_lexical(query)
         if kind == FindKind.NATIVE:
@@ -256,7 +261,7 @@ class GitHubSource:
     # Find implementations
     # ------------------------------------------------------------------
 
-    def _find_lexical(self, query: str) -> list[Hit]:
+    def _find_lexical(self, query: str) -> _list[Hit]:
         if not shutil.which("rg"):
             return []
         hits: list[Hit] = []
@@ -313,7 +318,7 @@ class GitHubSource:
                 )
         return hits
 
-    def _find_native(self, query: str) -> list[Hit]:
+    def _find_native(self, query: str) -> _list[Hit]:
         """GitHub REST search/code. Used for ad-hoc public repos only."""
         try:
             import httpx  # type: ignore[import-not-found]

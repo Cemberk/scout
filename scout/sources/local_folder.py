@@ -38,6 +38,10 @@ from scout.sources.base import (
     SourceError,
 )
 
+# Alias builtins.list — the class body below defines `def list`, which shadows
+# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
+_list = list
+
 # File extensions we'll attempt to extract text from. Anything else is
 # returned as bytes only.
 _TEXT_EXTS = {".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".csv", ".html", ".htm"}
@@ -135,7 +139,7 @@ class LocalFolderSource:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> list[Entry]:
+    def list(self, path: str = "") -> _list[Entry]:
         base = self._entry_path(path) if path else self.root
         if not base.exists():
             return []
@@ -198,7 +202,7 @@ class LocalFolderSource:
             caps.add(Capability.FIND_LEXICAL)
         return caps
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> list[Hit]:
+    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
         if kind != FindKind.LEXICAL:
             raise NotSupported(f"LocalFolderSource only supports lexical find, got {kind}")
         if not shutil.which("rg"):
@@ -252,7 +256,7 @@ class LocalFolderSource:
                 break
         return list(hits.values())
 
-    def _naive_find(self, query: str) -> list[Hit]:
+    def _naive_find(self, query: str) -> _list[Hit]:
         needle = query.lower()
         hits: list[Hit] = []
         for p in self._walk(self.root):

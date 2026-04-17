@@ -86,9 +86,7 @@ def run_team(
                 result.final_content = content
             for m in data.get("member_responses") or []:
                 if isinstance(m, dict):
-                    result.member_responses.append(
-                        {"agent_id": m.get("agent_id"), "content": m.get("content")}
-                    )
+                    result.member_responses.append({"agent_id": m.get("agent_id"), "content": m.get("content")})
         elif event_name in ("TeamToolCallCompleted", "ToolCallCompleted"):
             tool = data.get("tool") or {}
             result.tool_calls.append(

@@ -35,6 +35,10 @@ from scout.sources.base import (
     SourceError,
 )
 
+# Alias builtins.list — the class body below defines `def list`, which shadows
+# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
+_list = list
+
 _MAX_TEXT_EXTRACT_BYTES = 25 * 1024 * 1024  # 25 MB
 _PRESIGN_TTL_S = 900  # 15 min
 _TEXT_EXTS = {".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".csv", ".html", ".htm"}
@@ -130,7 +134,7 @@ class S3Source:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> list[Entry]:
+    def list(self, path: str = "") -> _list[Entry]:
         client = self._client_or_none()
         if client is None:
             raise SourceError("S3 client not configured (missing boto3 or credentials)")
@@ -147,9 +151,7 @@ class S3Source:
                         kind="file",
                         path=key,
                         size=obj.get("Size"),
-                        modified_at=(
-                            obj["LastModified"].isoformat() if obj.get("LastModified") else None
-                        ),
+                        modified_at=(obj["LastModified"].isoformat() if obj.get("LastModified") else None),
                     )
                 )
         return entries
@@ -218,10 +220,8 @@ class S3Source:
     def capabilities(self) -> set[Capability]:
         return {Capability.LIST, Capability.READ, Capability.METADATA}
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> list[Hit]:
-        raise NotSupported(
-            "S3Source has no native find. Compile the bucket and search via local:wiki."
-        )
+    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
+        raise NotSupported("S3Source has no native find. Compile the bucket and search via local:wiki.")
 
 
 def parse_bucket_spec(spec: str) -> tuple[str, str]:

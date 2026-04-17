@@ -110,10 +110,7 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
             }
 
         out = compile_all(knowledge=scout_knowledge, force=body.force)
-        summary = {
-            sid: {"count": len(rs), "status_counts": _counts(rs)}
-            for sid, rs in out.items()
-        }
+        summary = {sid: {"count": len(rs), "status_counts": _counts(rs)} for sid, rs in out.items()}
         return {"summary": summary}
 
     # ------------------------------------------------------------------
@@ -130,7 +127,9 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         """Trigger wiki health check via the Linter agent."""
         from scout.team import scout
 
-        response = await scout.arun("Run a health check on the wiki. Write a lint report.")
+        # agno's Team.arun is typed as returning TeamRunOutput but actually
+        # returns a coroutine in the non-streaming branch. Upstream bug.
+        response = await scout.arun("Run a health check on the wiki. Write a lint report.")  # type: ignore[misc]
         content = response.content if response else "No response"
         return {"status": "completed", "response": content}
 

@@ -34,6 +34,10 @@ from scout.sources.base import (
     SourceError,
 )
 
+# Alias builtins.list — the class body below defines `def list`, which shadows
+# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
+_list = list
+
 # Keep recent-message surfacing cheap — Slack API is rate-limited.
 _CHANNEL_HISTORY_LIMIT = 25
 _SEARCH_HIT_LIMIT = 20
@@ -58,7 +62,8 @@ class SlackSource:
         self.name = name
         self.compile = compile
         self.live_read = live_read
-        self._client = None  # type: ignore[var-annotated]
+        # WebClient, populated lazily. Typed loosely to allow deferred import.
+        self._client: object | None = None
 
     # ------------------------------------------------------------------
     # Client lifecycle — no network I/O at __init__.
@@ -99,7 +104,7 @@ class SlackSource:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> list[Entry]:
+    def list(self, path: str = "") -> _list[Entry]:
         client = self._client_or_none()
         if client is None:
             raise SourceError("Slack client not configured")
@@ -138,13 +143,8 @@ class SlackSource:
                 )
             return entries
 
-        resp = client.conversations_list(
-            types="public_channel,private_channel", exclude_archived=True, limit=200
-        )
-        return [
-            Entry(id=c["id"], name=c["name"], kind="channel")
-            for c in resp.get("channels", [])
-        ]
+        resp = client.conversations_list(types="public_channel,private_channel", exclude_archived=True, limit=200)
+        return [Entry(id=c["id"], name=c["name"], kind="channel") for c in resp.get("channels", [])]
 
     def read(self, entry_id: str) -> Content:
         client = self._client_or_none()
@@ -157,9 +157,7 @@ class SlackSource:
             raise SourceError(f"channel {channel} not in allowlist")
         resp = client.conversations_replies(channel=channel, ts=ts, limit=200)
         msgs = resp.get("messages", [])
-        body = "\n\n".join(
-            f"[{m.get('user', '?')} {m.get('ts', '')}] {m.get('text', '')}" for m in msgs
-        )
+        body = "\n\n".join(f"[{m.get('user', '?')} {m.get('ts', '')}] {m.get('text', '')}" for m in msgs)
         permalink = self._permalink(client, channel, ts)
         return Content(
             text=body,
@@ -205,7 +203,7 @@ class SlackSource:
     def capabilities(self) -> set[Capability]:
         return {Capability.LIST, Capability.READ, Capability.METADATA, Capability.FIND_NATIVE}
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> list[Hit]:
+    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
         if kind not in (FindKind.LEXICAL, FindKind.NATIVE):
             raise NotSupported(f"SlackSource does not support {kind}")
         client = self._client_or_none()

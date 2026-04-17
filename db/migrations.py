@@ -41,10 +41,8 @@ DDL = [
     )
     """,
     # Backfill for pre-spec installs.
-    f"ALTER TABLE {SCOUT_SCHEMA}.scout_compiled "
-    f"ADD COLUMN IF NOT EXISTS compiler_output_hash TEXT NOT NULL DEFAULT ''",
-    f"ALTER TABLE {SCOUT_SCHEMA}.scout_compiled "
-    f"ADD COLUMN IF NOT EXISTS needs_split BOOLEAN NOT NULL DEFAULT FALSE",
+    f"ALTER TABLE {SCOUT_SCHEMA}.scout_compiled ADD COLUMN IF NOT EXISTS compiler_output_hash TEXT NOT NULL DEFAULT ''",
+    f"ALTER TABLE {SCOUT_SCHEMA}.scout_compiled ADD COLUMN IF NOT EXISTS needs_split BOOLEAN NOT NULL DEFAULT FALSE",
     f"""
     CREATE INDEX IF NOT EXISTS idx_scout_compiled_lookup
         ON {SCOUT_SCHEMA}.scout_compiled (source_id, entry_id)

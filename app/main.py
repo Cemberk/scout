@@ -34,15 +34,11 @@ interfaces: list = []
 if SLACK_TOKEN and SLACK_SIGNING_SECRET:
     from agno.os.interfaces.slack import Slack
 
-    interfaces.append(
-        Slack(
-            team=scout,
-            streaming=True,
-            token=SLACK_TOKEN,
-            signing_secret=SLACK_SIGNING_SECRET,
-            resolve_user_identity=True,
-        )
-    )
+    # agno's Slack interface reads SLACK_TOKEN / SLACK_SIGNING_SECRET from
+    # env directly (both are already forwarded by compose.yaml). Pass-through
+    # kwargs the current Slack class accepts: agent / team / workflow / prefix
+    # / tags / reply_to_mentions_only.
+    interfaces.append(Slack(team=scout, reply_to_mentions_only=False))
 
 
 # ---------------------------------------------------------------------------
@@ -104,9 +100,11 @@ def _install_slack_allowlist() -> None:
         if not request.url.path.startswith("/slack"):
             return await call_next(request)
         body = await request.body()
+
         # Reconstruct the request so downstream handlers can read body.
         async def _receive():
             return {"type": "http.request", "body": body, "more_body": False}
+
         request._receive = _receive  # type: ignore[attr-defined]
 
         try:
@@ -116,11 +114,7 @@ def _install_slack_allowlist() -> None:
         except Exception:
             return await call_next(request)
 
-        channel = (
-            payload.get("event", {}).get("channel")
-            or payload.get("channel_id")
-            or payload.get("channel")
-        )
+        channel = payload.get("event", {}).get("channel") or payload.get("channel_id") or payload.get("channel")
         if channel and channel not in SLACK_CHANNEL_ALLOWLIST:
             return Response(status_code=200)  # ack, ignore
         return await call_next(request)

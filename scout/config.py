@@ -18,9 +18,7 @@ PARALLEL_API_KEY = getenv("PARALLEL_API_KEY", "")
 SLACK_TOKEN = getenv("SLACK_TOKEN", "")
 SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET", "")
 # Comma-separated channel IDs Scout is allowed to post to (empty = allow all)
-SLACK_CHANNEL_ALLOWLIST = tuple(
-    c.strip() for c in getenv("SLACK_CHANNEL_ALLOWLIST", "").split(",") if c.strip()
-)
+SLACK_CHANNEL_ALLOWLIST = tuple(c.strip() for c in getenv("SLACK_CHANNEL_ALLOWLIST", "").split(",") if c.strip())
 # SlackSource is live-read only. Needs a token; allowlist is optional.
 SLACK_SOURCE_ENABLED = bool(SLACK_TOKEN)
 
@@ -30,9 +28,7 @@ GOOGLE_PROJECT_ID = getenv("GOOGLE_PROJECT_ID", "")
 GOOGLE_INTEGRATION_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_PROJECT_ID)
 
 # Drive folder IDs (comma-separated). When set + Google enabled, GoogleDriveSource is registered.
-GOOGLE_DRIVE_FOLDER_IDS = tuple(
-    f.strip() for f in getenv("GOOGLE_DRIVE_FOLDER_IDS", "").split(",") if f.strip()
-)
+GOOGLE_DRIVE_FOLDER_IDS = tuple(f.strip() for f in getenv("GOOGLE_DRIVE_FOLDER_IDS", "").split(",") if f.strip())
 DRIVE_SOURCE_ENABLED = GOOGLE_INTEGRATION_ENABLED and bool(GOOGLE_DRIVE_FOLDER_IDS)
 
 SCOUT_CONTEXT_DIR = Path(getenv("SCOUT_CONTEXT_DIR", str(CONTEXT_DIR)))
@@ -57,9 +53,7 @@ GIT_SYNC_ENABLED = bool(GITHUB_ACCESS_TOKEN and SCOUT_REPO_URL)
 # GitHubSource — live-read over locally cloned repos + ad-hoc search_code.
 # GITHUB_ACCESS_TOKEN is Scout's own context repo token (not this one).
 GITHUB_READ_TOKEN = getenv("GITHUB_READ_TOKEN", "")
-GITHUB_REPOS = tuple(
-    r.strip() for r in getenv("GITHUB_REPOS", "").split(",") if r.strip()
-)
+GITHUB_REPOS = tuple(r.strip() for r in getenv("GITHUB_REPOS", "").split(",") if r.strip())
 GITHUB_SOURCE_ENABLED = bool(GITHUB_REPOS and GITHUB_READ_TOKEN)
 
 # S3Source — compile-only in this build. S3_BUCKETS entries are
@@ -67,12 +61,8 @@ GITHUB_SOURCE_ENABLED = bool(GITHUB_REPOS and GITHUB_READ_TOKEN)
 AWS_ACCESS_KEY_ID = getenv("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = getenv("AWS_SECRET_ACCESS_KEY", "")
 AWS_REGION = getenv("AWS_REGION", "")
-S3_BUCKETS = tuple(
-    b.strip() for b in getenv("S3_BUCKETS", "").split(",") if b.strip()
-)
-S3_SOURCE_ENABLED = bool(
-    S3_BUCKETS and AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and AWS_REGION
-)
+S3_BUCKETS = tuple(b.strip() for b in getenv("S3_BUCKETS", "").split(",") if b.strip())
+S3_SOURCE_ENABLED = bool(S3_BUCKETS and AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and AWS_REGION)
 
 
 # Re-export for convenience

@@ -74,10 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     summary = _save_summary(results)
     print()
     counts = {s: sum(1 for r in results if r.status == s) for s in ("PASS", "FAIL", "ERROR", "SKIPPED")}
-    print(
-        f"{counts['PASS']} passed, {counts['FAIL']} failed, "
-        f"{counts['ERROR']} errored, {counts['SKIPPED']} skipped"
-    )
+    print(f"{counts['PASS']} passed, {counts['FAIL']} failed, {counts['ERROR']} errored, {counts['SKIPPED']} skipped")
     print(f"summary → {summary.relative_to(REPO_ROOT)}")
     return 0 if counts["FAIL"] == 0 and counts["ERROR"] == 0 else 1
 

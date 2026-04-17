@@ -78,9 +78,7 @@ def run_case(case: EvalCase, *, base_url: str) -> tuple[CaseResult, RunResult | 
         if run.member_responses:
             failures.append(f"leader should answer directly but delegated to: {delegated}")
     elif case.expected_agent not in delegated:
-        failures.append(
-            f"expected_agent={case.expected_agent!r} not in {delegated or 'no delegations'}"
-        )
+        failures.append(f"expected_agent={case.expected_agent!r} not in {delegated or 'no delegations'}")
 
     # Response substrings
     lower = (run.final_content or "").lower()

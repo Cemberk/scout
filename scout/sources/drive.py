@@ -38,6 +38,10 @@ from scout.sources.base import (
     SourceError,
 )
 
+# Alias builtins.list — the class body below defines `def list`, which shadows
+# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
+_list = list
+
 # Google's "export as plain text" mime types for Workspace files
 _GOOGLE_EXPORT_MIME = {
     "application/vnd.google-apps.document": "text/markdown",
@@ -128,7 +132,7 @@ class GoogleDriveSource:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> list[Entry]:
+    def list(self, path: str = "") -> _list[Entry]:
         svc = self._service_or_none()
         if svc is None:
             raise SourceError("Drive client not configured (no token)")
@@ -186,12 +190,12 @@ class GoogleDriveSource:
         request = svc.files().get_media(fileId=entry_id, supportsAllDrives=True)
         data = self._download(request)
         # Try to decode common text/* mimes as text
-        text: str | None = None
+        decoded: str | None = None
         if mime.startswith("text/") or mime in {"application/json", "application/xml"}:
-            text = data.decode("utf-8", errors="replace")
+            decoded = data.decode("utf-8", errors="replace")
         return Content(
             bytes=data,
-            text=text,
+            text=decoded,
             mime=mime,
             source_url=meta.get("webViewLink"),
             citation_hint=meta.get("name"),
@@ -243,7 +247,7 @@ class GoogleDriveSource:
     def capabilities(self) -> set[Capability]:
         return {Capability.LIST, Capability.READ, Capability.METADATA, Capability.FIND_NATIVE}
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> list[Hit]:
+    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
         if kind not in (FindKind.LEXICAL, FindKind.NATIVE):
             raise NotSupported(f"GoogleDriveSource does not support {kind}")
         svc = self._service_or_none()

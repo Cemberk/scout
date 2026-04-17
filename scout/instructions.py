@@ -1,6 +1,5 @@
 from scout.config import SCOUT_COMPILED_DIR, SCOUT_CONTEXT_DIR
 
-
 # ---------------------------------------------------------------------------
 # Manifest injection (spec §7)
 # ---------------------------------------------------------------------------
@@ -14,6 +13,7 @@ from scout.config import SCOUT_COMPILED_DIR, SCOUT_CONTEXT_DIR
 # This helper is safe at import time: if the manifest can't build yet
 # (migrations haven't run, DB isn't up), we return a stub telling the model
 # to call `read_manifest` at runtime instead.
+
 
 def sources_header(agent_role: str) -> str:
     """Render `manifest.render_for_prompt(role)` safely for prompt prefixing."""
@@ -249,6 +249,7 @@ def build_navigator_instructions() -> str:
 # Each agent file already defines its own role-specific instructions string
 # (COMPILER_INSTRUCTIONS, LINTER_INSTRUCTIONS, …). At Agent() construction
 # time they now prepend `sources_header(role)` via the wrappers below.
+
 
 def build_compiler_instructions(role_body: str) -> str:
     return sources_header("compiler") + role_body

@@ -204,9 +204,7 @@ def create_ingest_tools(raw_dir: Path):
     """
 
     @tool
-    def ingest_url(
-        url: str, title: str | None = None, tags: list[str] | None = None, doc_type: str = "article"
-    ) -> str:
+    def ingest_url(url: str, title: str | None = None, tags: list[str] | None = None, doc_type: str = "article") -> str:
         """Ingest a URL into context/raw/ as `<slug>-<short-content-sha>.md`.
 
         Fetches page content via Parallel (if configured) and saves it with

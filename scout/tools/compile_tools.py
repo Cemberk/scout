@@ -45,9 +45,7 @@ def create_compile_tools(knowledge: Knowledge):
         if s is None or not getattr(s, "compile", False):
             return redact(json.dumps({"status": "error", "detail": f"{source_id} is not a compile source"}))
         result = compile_entry(s, entry_id, knowledge=knowledge, workspace_id=WORKSPACE_ID, force=force)
-        return redact(
-            json.dumps({"status": result.status, "wiki_path": result.wiki_path, "detail": result.detail})
-        )
+        return redact(json.dumps({"status": result.status, "wiki_path": result.wiki_path, "detail": result.detail}))
 
     @tool
     def compile_one_source(source_id: str, force: bool = False, limit: int | None = None) -> str:
@@ -60,9 +58,7 @@ def create_compile_tools(knowledge: Knowledge):
 
         Returns JSON summary by status.
         """
-        results = compile_source(
-            source_id, knowledge=knowledge, workspace_id=WORKSPACE_ID, force=force, limit=limit
-        )
+        results = compile_source(source_id, knowledge=knowledge, workspace_id=WORKSPACE_ID, force=force, limit=limit)
         summary: dict[str, int] = {}
         for r in results:
             summary[r.status] = summary.get(r.status, 0) + 1

@@ -21,6 +21,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol, runtime_checkable
 
+# Sources define a `def list(...)` method, which shadows `builtins.list` inside
+# every class body. Alias the built-in once at module scope so annotations like
+# `-> _list[Entry]` resolve cleanly under mypy.
+_list = list
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -143,7 +148,7 @@ class Source(Protocol):
     compile: bool
     live_read: bool
 
-    def list(self, path: str = "") -> list[Entry]:
+    def list(self, path: str = "") -> _list[Entry]:
         """Enumerate entries. May raise NotSupported."""
         ...
 
@@ -159,10 +164,10 @@ class Source(Protocol):
         """Cheap reachability check — used by Manifest builder + cron."""
         ...
 
-    def capabilities(self) -> set[Capability]:
+    def capabilities(self) -> "set[Capability]":
         """Declared capabilities — Manifest gates tool registration on this."""
         ...
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> list[Hit]:
+    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
         """Locate entries. Raises NotSupported if `kind` isn't supported."""
         ...

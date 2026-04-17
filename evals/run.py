@@ -280,10 +280,7 @@ def run_evals(category: str | None = None, verbose: bool = False) -> None:
     skipped = sum(1 for r in all_results if r["status"] == "SKIP")
 
     print(f"\n{'=' * 50}")
-    print(
-        f"Results: {passed} passed, {failed} failed, {errors} errors, "
-        f"{skipped} skipped ({total_duration}s)"
-    )
+    print(f"Results: {passed} passed, {failed} failed, {errors} errors, {skipped} skipped ({total_duration}s)")
     print(f"{'=' * 50}\n")
 
 

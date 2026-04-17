@@ -107,14 +107,12 @@ def _cmd_smoke_gating() -> int:
         print("FAIL: local:raw source missing from manifest", file=sys.stderr)
         return 1
     if raw.live_read:
-        print("FAIL: local:raw is flagged live_read=True — raw intake must be compile-only",
-              file=sys.stderr)
+        print("FAIL: local:raw is flagged live_read=True — raw intake must be compile-only", file=sys.stderr)
         return 1
 
     # Pre-flight: Compiler role must be allowed to read local:raw.
     if not manifest.can_call("local:raw", "compiler"):
-        print("FAIL: manifest.can_call('local:raw', 'compiler') is False; gating is backwards",
-              file=sys.stderr)
+        print("FAIL: manifest.can_call('local:raw', 'compiler') is False; gating is backwards", file=sys.stderr)
         return 1
 
     # Core assertion: Navigator role must NOT be allowed to read local:raw.
@@ -128,12 +126,10 @@ def _cmd_smoke_gating() -> int:
         print(f"PASS: gating raised PermissionError — {exc}")
         return 0
     except Exception as exc:
-        print(f"FAIL: gating raised unexpected exception {type(exc).__name__}: {exc}",
-              file=sys.stderr)
+        print(f"FAIL: gating raised unexpected exception {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
     print(
-        "FAIL: gating leaked — Navigator role read local:raw and got: "
-        f"{str(result)[:200]}",
+        f"FAIL: gating leaked — Navigator role read local:raw and got: {str(result)[:200]}",
         file=sys.stderr,
     )
     return 1
