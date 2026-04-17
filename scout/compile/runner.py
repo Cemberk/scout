@@ -44,6 +44,17 @@ ARTICLES_DIR = SCOUT_COMPILED_DIR / "articles"
 INDEX_PATH = SCOUT_COMPILED_DIR / "index.md"
 COMPILER_VERSION = "scout-compiler-v3"
 
+# Spec §5: "If content.text exceeds 20,000 characters, the Compiler still
+# emits a single article, adds needs_split: true to the article's
+# frontmatter, and writes a `Linter:` row so the Sunday lint pass flags
+# it." We use `Discovery:` (existing prefix in scout_knowledge) rather
+# than invent a new one — see tmp/spec-diff.md A3.
+NEEDS_SPLIT_THRESHOLD = 20_000
+
+
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
 
 @dataclass
 class CompileResult:
@@ -176,6 +187,7 @@ def _normalize_frontmatter(
     source_url: str | None,
     source_hash: str,
     compiled_at: str,
+    needs_split: bool = False,
 ) -> str:
     """Replace the article's frontmatter with one we control.
 
@@ -208,6 +220,7 @@ def _normalize_frontmatter(
         f"compiled_at: {compiled_at}",
         f"compiled_by: {COMPILER_VERSION}",
         "user_edited: false",
+        f"needs_split: {str(needs_split).lower()}",
     ]
     if tags_line:
         parts.append(tags_line)
@@ -245,18 +258,56 @@ def compile_entry(
         return CompileResult(source.id, entry_id, "skipped-empty", detail="no extractable text")
 
     source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    needs_split = len(text) > NEEDS_SPLIT_THRESHOLD
     record = get_record(source.id, entry_id, workspace_id)
 
     if record and not force and record.source_hash == source_hash:
         return CompileResult(source.id, entry_id, "skipped-unchanged", wiki_path=record.wiki_path)
 
-    if record and (record.user_edited or _read_disk_user_edited(Path(record.wiki_path))):
-        # User-edited articles are sacred — write a sibling, do not touch the original.
+    # Two-signal user-edit protection (spec §5):
+    #  1. Frontmatter `user_edited: true` on disk, OR
+    #  2. Disk sha256 of the article ≠ the compiler_output_hash we recorded
+    #     when we last wrote it (means the file has been touched since compile).
+    if record and _looks_user_edited(record):
         return _compile_and_write(
-            source, entry_id, text, content.source_url, source_hash, knowledge, workspace_id, sibling_of=record
+            source,
+            entry_id,
+            text,
+            content.source_url,
+            source_hash,
+            knowledge,
+            workspace_id,
+            needs_split=needs_split,
+            sibling_of=record,
         )
 
-    return _compile_and_write(source, entry_id, text, content.source_url, source_hash, knowledge, workspace_id)
+    return _compile_and_write(
+        source,
+        entry_id,
+        text,
+        content.source_url,
+        source_hash,
+        knowledge,
+        workspace_id,
+        needs_split=needs_split,
+    )
+
+
+def _looks_user_edited(record: CompileRecord) -> bool:
+    """Two-signal check per §5. Either trips → don't overwrite."""
+    wiki_path = Path(record.wiki_path)
+    if record.user_edited:
+        return True
+    if _read_disk_user_edited(wiki_path):
+        return True
+    if record.compiler_output_hash and wiki_path.exists():
+        try:
+            current = _sha256_bytes(wiki_path.read_bytes())
+        except OSError:
+            return False
+        if current != record.compiler_output_hash:
+            return True
+    return False
 
 
 def _compile_and_write(
@@ -267,6 +318,8 @@ def _compile_and_write(
     source_hash: str,
     knowledge,
     workspace_id: str,
+    *,
+    needs_split: bool = False,
     sibling_of: CompileRecord | None = None,
 ) -> CompileResult:
     voice = _voice_guide()
@@ -288,8 +341,16 @@ def _compile_and_write(
     if not articles:
         return CompileResult(source.id, entry_id, "error", detail="model produced no articles")
 
+    # Per §2 + §5: this build emits exactly one article per raw entry.
+    # If the model tries to split, take only the first article and flag
+    # the rest for later manual attention via the needs_split surface.
+    if len(articles) > 1:
+        needs_split = True
+        articles = articles[:1]
+
     written: list[str] = []
     primary_path: Path | None = None
+    primary_output_hash: str = ""
 
     for article in articles:
         article = _normalize_frontmatter(
@@ -299,6 +360,7 @@ def _compile_and_write(
             source_url=source_url,
             source_hash=source_hash,
             compiled_at=compiled_at,
+            needs_split=needs_split,
         )
         title = _extract_title(article)
         slug = _slugify(title)
@@ -307,10 +369,12 @@ def _compile_and_write(
             short = f"{short}-conflict"
         filename = f"{slug}-{short}.md"
         path = ARTICLES_DIR / filename
-        path.write_text(article + "\n")
+        file_bytes = (article + "\n").encode("utf-8")
+        path.write_bytes(file_bytes)
         written.append(str(path.relative_to(SCOUT_COMPILED_DIR.parent)))
         if primary_path is None:
             primary_path = path
+            primary_output_hash = _sha256_bytes(file_bytes)
         if knowledge is not None:
             try:
                 knowledge.insert(
@@ -326,20 +390,40 @@ def _compile_and_write(
     if primary_path is None:
         return CompileResult(source.id, entry_id, "error", detail="no article written")
 
+    # Linter surface row for oversized raw entries. `Discovery:` is the
+    # spec-§8 prefix we're reusing here (tmp/spec-diff.md A3).
+    if needs_split and knowledge is not None:
+        try:
+            knowledge.insert(
+                name=f"Discovery: needs_split {primary_path.name}",
+                text_content=(
+                    f"Source entry {source.id}:{entry_id} exceeded "
+                    f"{NEEDS_SPLIT_THRESHOLD} chars. Emitted a single article "
+                    f"at {primary_path.relative_to(SCOUT_COMPILED_DIR.parent)}; "
+                    "Linter should surface for human follow-up."
+                ),
+            )
+        except Exception:
+            pass
+
     upsert_record(
         CompileRecord(
             source_id=source.id,
             entry_id=entry_id,
             source_hash=source_hash,
+            compiler_output_hash=primary_output_hash,
             wiki_path=str(primary_path),
             compiled_at=compiled_at,
             compiled_by=COMPILER_VERSION,
             user_edited=False,
+            needs_split=needs_split,
             workspace_id=workspace_id,
         )
     )
 
     detail = f"wrote {len(written)} article(s)"
+    if needs_split:
+        detail += f"; needs_split=true (raw {len(text)} chars)"
     if sibling_of:
         detail += f"; sibling of user-edited {sibling_of.wiki_path}"
     return CompileResult(source.id, entry_id, "compiled", wiki_path=str(primary_path), detail=detail)
