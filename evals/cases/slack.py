@@ -12,6 +12,8 @@ that lands with demo prep.
 Eval type: AgentAsJudgeEval (binary)
 """
 
+SKIP_IF_MISSING: tuple[str, ...] = ("SLACK_TOKEN", "SLACK_SIGNING_SECRET")
+
 CRITERIA = (
     "The response should be Slack-shaped: short, direct, with citations "
     "rendered as either compiled/articles/<file>.md paths or as URLs. "

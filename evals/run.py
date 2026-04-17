@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import time
 from typing import Literal
 
@@ -198,11 +199,35 @@ def run_accuracy_cases(
 
 
 def _print_status(result: dict, verbose: bool) -> None:
-    icon = {"PASS": "PASS", "FAIL": "FAIL", "ERROR": "ERR "}[result["status"]]
+    icon = {"PASS": "PASS", "FAIL": "FAIL", "ERROR": "ERR ", "SKIP": "SKIP"}[result["status"]]
     score = f" (score: {result['score']})" if "score" in result else ""
     print(f"         {icon} ({result['duration']}s){score}")
     if verbose and result.get("reason"):
         print(f"         Reason: {result['reason']}")
+
+
+def _missing_env(module) -> list[str]:
+    """Return the list of env vars the module needs that are unset."""
+    required = getattr(module, "SKIP_IF_MISSING", ())
+    return [v for v in required if not os.getenv(v)]
+
+
+def _skip_results(cases, category: str, missing: list[str]) -> list[dict]:
+    """Emit SKIP-status dicts for each case when env is missing."""
+    skipped: list[dict] = []
+    reason = f"skipped — missing env: {', '.join(missing)}"
+    for case in cases:
+        question = case["input"] if isinstance(case, dict) else case
+        skipped.append(
+            {
+                "question": question,
+                "category": category,
+                "status": "SKIP",
+                "reason": reason,
+                "duration": 0.0,
+            }
+        )
+    return skipped
 
 
 # ---------------------------------------------------------------------------
@@ -228,6 +253,16 @@ def run_evals(category: str | None = None, verbose: bool = False) -> None:
 
         module = importlib.import_module(config["module"])
         case_count = len(module.CASES)
+
+        # Spec §13: env-dependent categories skip, not fail, when env is
+        # absent. Each case module may declare `SKIP_IF_MISSING` — if any
+        # of those env vars are unset we emit SKIP results and move on.
+        missing_env = _missing_env(module)
+        if missing_env:
+            print(f"\n--- {name} ({case_count} cases) ---  SKIP ({', '.join(missing_env)} not set)\n")
+            all_results.extend(_skip_results(module.CASES, name, missing_env))
+            continue
+
         print(f"\n--- {name} ({case_count} cases) ---\n")
 
         runner = RUNNERS[config["type"]]
@@ -242,9 +277,13 @@ def run_evals(category: str | None = None, verbose: bool = False) -> None:
     passed = sum(1 for r in all_results if r["status"] == "PASS")
     failed = sum(1 for r in all_results if r["status"] == "FAIL")
     errors = sum(1 for r in all_results if r["status"] == "ERROR")
+    skipped = sum(1 for r in all_results if r["status"] == "SKIP")
 
     print(f"\n{'=' * 50}")
-    print(f"Results: {passed} passed, {failed} failed, {errors} errors ({total_duration}s)")
+    print(
+        f"Results: {passed} passed, {failed} failed, {errors} errors, "
+        f"{skipped} skipped ({total_duration}s)"
+    )
     print(f"{'=' * 50}\n")
 
 

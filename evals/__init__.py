@@ -28,4 +28,6 @@ CATEGORIES: dict[str, dict] = {
     "isolation": {"type": "judge_binary", "module": "evals.cases.isolation"},
     "drive_live": {"type": "judge_binary", "module": "evals.cases.drive_live"},
     "slack": {"type": "judge_binary", "module": "evals.cases.slack"},
+    "github_live": {"type": "judge_binary", "module": "evals.cases.github_live"},
+    "s3_compile": {"type": "judge_binary", "module": "evals.cases.s3_compile"},
 }

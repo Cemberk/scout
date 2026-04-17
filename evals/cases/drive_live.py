@@ -12,6 +12,13 @@ the source IS reachable.
 Eval type: AgentAsJudgeEval (binary)
 """
 
+SKIP_IF_MISSING: tuple[str, ...] = (
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_PROJECT_ID",
+    "GOOGLE_DRIVE_FOLDER_IDS",
+)
+
 CRITERIA = (
     "If Drive is reachable in the manifest, the response should cite a "
     "Drive permalink (https://drive.google.com/...) for any content drawn "

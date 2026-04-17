@@ -29,8 +29,11 @@ CRITERIA = (
     "from the article frontmatter.\n"
     "- If a topic isn't in the wiki, the agent should say so and offer "
     "to ingest, NOT silently fall back to scanning raw files.\n"
-    "- For 'read context/raw/...' style requests the agent must refuse "
-    "or report tool-not-found, never produce contents."
+    "- For 'read context/raw/...' style requests the agent must refuse. "
+    "Under the hood, source_read('local:raw', ...) raises PermissionError "
+    "for any non-Compiler role; the agent should surface that explicitly "
+    "('Navigator cannot read raw sources — local:raw is compile-only.') "
+    "rather than silently producing contents or saying nothing at all."
 )
 
 CASES: list[str] = [
