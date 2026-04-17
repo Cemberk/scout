@@ -180,12 +180,16 @@ CALENDAR_INSTRUCTIONS = """
 
 ## Calendar (Google Calendar)
 
-View, create, update, and delete events.
+**Read-only** in this build (spec §9). You can list events, fetch events by
+date, find available slots, and list calendars. Create / update / delete
+are NOT wired — the tools are excluded at construction time and the OAuth
+scope is read-only. If a user asks you to create an invite, say so:
 
-**Personal events** (no external attendees): create freely.
-**Events with external attendees**: always confirm first — these send invites.
-Check availability with `find_available_slots`. Cross-reference attendees with
-`scout_contacts`. Present schedules grouped by day.\
+> I can read your calendar but can't create events in this build. I can
+> draft the invite text for you to send.
+
+Check availability with `find_available_slots`. Cross-reference attendees
+with `scout_contacts`. Present schedules grouped by day.\
 """
 
 SLACK_DISABLED_INSTRUCTIONS = """

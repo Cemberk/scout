@@ -59,11 +59,26 @@ def build_navigator_tools(knowledge: Knowledge) -> list:
     ]
 
     if GOOGLE_INTEGRATION_ENABLED:
-        from agno.tools.google.calendar import GoogleCalendarTools
-        from agno.tools.google.gmail import GmailTools
+        # Spec §9 governance: Gmail read-only + drafts, Calendar read-only.
+        # Agno's Toolkit supports `exclude_tools=[...]` at the base class to
+        # strip tool functions before they reach the model. These lists
+        # mirror the method names registered inside the upstream classes.
+        from agno.tools.gmail import GmailTools  # type: ignore[import-not-found]
+        from agno.tools.googlecalendar import GoogleCalendarTools  # type: ignore[import-not-found]
 
-        tools.append(GmailTools(send_email=False, send_email_reply=False, list_labels=True))
-        tools.append(GoogleCalendarTools(allow_update=True))
+        tools.append(
+            GmailTools(
+                exclude_tools=["send_email", "send_email_reply"],
+            )
+        )
+        tools.append(
+            GoogleCalendarTools(
+                # allow_update=False keeps the OAuth scope read-only, so
+                # even if a tool slips through it will fail at API time.
+                allow_update=False,
+                exclude_tools=["create_event", "update_event", "delete_event"],
+            )
+        )
 
     return tools
 
