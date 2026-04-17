@@ -65,5 +65,8 @@ tmp
 # GitHubSource-owned local clone cache (spec §4.4)
 .scout-cache/
 
+# Live-eval run artifacts (regenerated every run)
+evals/results/
+
 # Optional: local PyPI creds (uncomment if you ever create it)
 # .pypirc
