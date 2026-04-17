@@ -93,9 +93,14 @@ db/
 └── migrations.py             # scout_compiled, scout_sources, workspace_id columns
 
 evals/
-├── __init__.py               # CATEGORIES (security, routing, ..., wiki_compile, manifest, isolation, drive_live, slack)
+├── __init__.py               # CATEGORIES (security, routing, ..., wiki_compile, manifest, isolation, drive_live, slack, github_live, s3_compile)
 ├── __main__.py / run.py
-└── cases/
+├── cases/                    # static cases
+└── live/                     # Docker-hosted harness (SSE + diagnostic + autofix)
+    ├── __main__.py           # python -m evals.live run [--case ID]
+    ├── cases.py              # EvalCase dataclass + case inventory
+    ├── client.py             # SSE POST /teams/scout/runs
+    └── runner.py             # assertions + evals/results/<case>.md diagnostic
 ```
 
 ## Commands
@@ -120,20 +125,30 @@ python context/load_context.py --recreate
 # Migrations (also run automatically on app startup)
 python -m db.migrations
 
-# Evaluations
+# Static evals (AccuracyEval / ReliabilityEval / AgentAsJudgeEval)
 python -m evals
 python -m evals --category wiki_compile
+
+# Live eval harness — hits the Docker-hosted API over SSE
+python -m evals.live run                     # all cases; env-missing SKIP
+python -m evals.live run --case greeting
+./scripts/eval_loop.sh gating_adversarial    # autonomous fix loop
+
+# Smoke tests
+python -m scout _smoke_gating                # assert Navigator can't read local:raw
+./scripts/validate.sh                        # ruff + mypy + smoke
 ```
 
-## Sources (Phase 1)
+## Sources
 
 | Source id | Kind | Mode | Notes |
 |---|---|---|---|
-| `local:raw` | LocalFolderSource(./context/raw) | compile-only | Invisible to Navigator |
+| `local:raw` | LocalFolderSource(./context/raw) | compile-only | Invisible to Navigator — gated by `manifest.can_call`, raises `PermissionError` on violation |
 | `local:wiki` | LocalFolderSource(./context/compiled) | live-read | The wiki Navigator reads |
-| `drive` | GoogleDriveSource(folder_ids=…) | live-read | Optional — needs Google + GOOGLE_DRIVE_FOLDER_IDS |
-
-Phase 1.5 will add S3, Slack, GitHub as additional `Source` implementations with no Scout core changes.
+| `drive` | GoogleDriveSource(folder_ids=…) | live-read | Optional — needs Google + `GOOGLE_DRIVE_FOLDER_IDS` |
+| `slack` | SlackSource(channel_allowlist=…) | live-read | Optional — needs `SLACK_TOKEN` |
+| `github` | GitHubSource(repos=…) | live-read | Optional — needs `GITHUB_REPOS` + `GITHUB_READ_TOKEN`. Clones under `./.scout-cache/repos/` |
+| `s3:<bucket>[/<prefix>]` | S3Source | compile-only | Optional — needs `S3_BUCKETS` + `AWS_*`. One instance per entry. |
 
 ## Two Knowledge Systems
 
@@ -191,27 +206,38 @@ All tool returns are passed through the redactor in `scout.tools.redactor` — s
 | `/context/reload` | POST | Re-index context files |
 | `/sync/pull` | POST | Pull remote context/ from GitHub |
 
+## Model
+
+Every agent, the Leader, the compile runner, and the evals judge run on
+`Claude(id="claude-opus-4-7")` via `agno.models.anthropic`. The literal
+sits at each call site — no `SCOUT_COMPILE_MODEL` / `COMPILE_MODEL_ID`
+indirection.
+
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENAI_API_KEY` | Yes | OpenAI API key |
-| `EXA_API_KEY` | No | Web search for Navigator + Linter |
-| `PARALLEL_API_KEY` | No | Enables Researcher agent |
-| `GOOGLE_CLIENT_ID` | No | Gmail + Calendar (all 3 required) |
-| `GOOGLE_CLIENT_SECRET` | No | Gmail + Calendar |
-| `GOOGLE_PROJECT_ID` | No | Gmail + Calendar |
-| `GOOGLE_DRIVE_FOLDER_IDS` | No | Comma-separated. Enables GoogleDriveSource. |
-| `SLACK_TOKEN` | No | Slack bot token |
-| `SLACK_SIGNING_SECRET` | No | Slack event verification |
+| `ANTHROPIC_API_KEY` | **Yes** | Claude Opus 4.7 — agents + Leader + Compiler + evals judge |
+| `OPENAI_API_KEY` | No | Only for `text-embedding-3-small` in the Knowledge path |
+| `EXA_API_KEY` | No | Web search for Navigator + Linter (tool loads regardless) |
+| `PARALLEL_API_KEY` | No | Enables the Researcher agent + full-content ingest_url |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Gmail + Calendar + Drive (all three required together) |
+| `GOOGLE_DRIVE_FOLDER_IDS` | No | Comma-separated — enables `GoogleDriveSource` |
+| `SLACK_TOKEN` | No | Enables Slack Interface + SlackTools + `SlackSource` |
+| `SLACK_SIGNING_SECRET` | No | Slack inbound event verification |
 | `SLACK_CHANNEL_ALLOWLIST` | No | Comma-separated channel IDs (empty = allow all) |
-| `GITHUB_ACCESS_TOKEN` | No | Git sync (both required) |
+| `GITHUB_REPOS` | No | Comma-separated `owner/repo` — enables `GitHubSource` |
+| `GITHUB_READ_TOKEN` | No | Read-only PAT for `GitHubSource` |
+| `S3_BUCKETS` | No | Comma-separated `bucket[:prefix]` — enables `S3Source` |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `S3_BUCKETS` is set |
+| `GITHUB_ACCESS_TOKEN` | No | Git sync (both required with `SCOUT_REPO_URL`) |
 | `SCOUT_REPO_URL` | No | Git sync repo URL |
 | `SCOUT_CONTEXT_DIR` | No | Context directory (default: `./context`) |
 | `SCOUT_RAW_DIR` | No | Override raw intake dir |
 | `SCOUT_COMPILED_DIR` | No | Override compiled wiki dir |
+| `SCOUT_VOICE_DIR` | No | Override voice-guide dir |
 | `SCOUT_WORKSPACE_ID` | No | Workspace scoping (default: `default`) |
-| `SCOUT_COMPILE_MODEL` | No | Model id for the compile runner (default: `gpt-5.4`) |
+| `SCOUT_API_HOST_PORT` | No | Host port the API publishes on (default: `8000`) |
 | `DOCUMENTS_DIR` | No | Documents directory (default: `./documents`) |
 | `DB_HOST/PORT/USER/PASS/DATABASE` | No | PostgreSQL config |
 | `RUNTIME_ENV` | No | `dev` for hot reload |

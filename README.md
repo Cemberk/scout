@@ -1,241 +1,333 @@
 # Scout
 
-Scout is an enterprise context agent. It ingests, organizes, and serves your company's knowledge base.
+Scout is an **enterprise context agent**. It navigates your company's knowledge graph through a uniform `Source` protocol: compile dumb stores (local folders, S3 buckets) into a curated wiki; live-read smart sources (Drive, Slack, GitHub) on demand.
 
-Feed it your docs. Policies, runbooks, architecture docs, meeting notes, reports. Scout organizes everything into two layers: a compiled wiki for knowledge depth (concepts, summaries, cross-references) and SQL tables for structured data (contacts, projects, decisions, teams). A learning loop compounds every interaction.
+Feed it your docs — policies, runbooks, architecture, meeting notes, reports. Scout organizes everything into two layers: a compiled wiki for text-heavy knowledge (concepts, summaries, cross-references) in `context/compiled/`, and a Postgres `scout_knowledge` index that acts as the metadata router across every source. A learning loop in `scout_learnings` compounds every interaction.
 
-Ask Scout a question, it navigates across sources to find the answer. Not semantic search over chunks. SQL for structured queries. The wiki index for knowledge routing. File structure for document retrieval. Each source queried on its own terms.
+Ask a question over Slack, the terminal, or the [AgentOS](https://os.agno.com) web UI. The Leader routes to one of five specialists (Navigator / Researcher / Compiler / Linter / Syncer), each wired to only the tools it needs. The Navigator never reads raw sources — that's the Compiler's job.
 
 ## Quick Start
 
 ```sh
-git clone https://github.com/agno-agi/scout.git && cd scout
-cp example.env .env  # Add OPENAI_API_KEY
+git clone https://github.com/agno-agi/scout && cd scout
+cp example.env .env              # add ANTHROPIC_API_KEY
 docker compose up -d --build
-docker compose exec scout-api python context/load_context.py
 ```
 
-Open [localhost:8000](http://localhost:8000) to chat with Scout.
+Confirm Scout is running:
+
+```sh
+curl -s http://localhost:8000/manifest | python -m json.tool | head -20
+```
+
+You should see `local:raw` + `local:wiki` with `status: connected`. That's a working Scout with nothing configured beyond the model key.
+
+### Connect to the Web UI
+
+1. Open [os.agno.com](https://os.agno.com) and login
+2. **Add OS → Local → `http://localhost:8000`**
+3. Click **Connect**
 
 ## How It Works
 
-Scout is a team of five specialist agents coordinated by a leader:
+Scout is a team of five specialists coordinated by a Leader:
 
 ```
-Scout (Leader)
-├── Navigator    — the workhorse: SQL, files, documents, wiki, email, calendar, web search
-├── Researcher   — gathers sources from the web, saves to raw/ with frontmatter
-├── Compiler     — reads raw sources, compiles structured wiki articles
-├── Linter       — runs health checks on the wiki, finds gaps and contradictions
-└── Syncer       — commits and pushes context/ to GitHub for durability
+Scout (Team Leader — coordinate mode)
+├── Navigator    — the workhorse: reads the compiled wiki + live sources,
+│                  handles SQL, files, email, calendar, web search
+├── Researcher   — gathers sources from the web, saves to context/raw/
+│                  (conditional on PARALLEL_API_KEY)
+├── Compiler     — iterates compile-on sources, writes Obsidian-compatible
+│                  markdown to context/compiled/
+├── Linter       — wiki health, source flap, user-edit conflicts, stale
+│                  articles, needs_split flags
+└── Syncer       — git push/pull for context/ (conditional on
+                   GITHUB_ACCESS_TOKEN + SCOUT_REPO_URL)
 ```
 
-**Navigator** handles everything users ask. SQL queries for structured data, file reads for documents, wiki lookups for compiled knowledge, web search for live information. It has full agentic memory — learns from every interaction.
+### The wiki-first rule
 
-**Researcher** gathers source material from the web using Parallel (search + extract) and saves it to `raw/` with YAML frontmatter. Conditional on `PARALLEL_API_KEY`.
+Not every source compiles. Compile only makes sense for stores where the raw form has no good query surface and there's no user edit path that would fight the compiled mirror. **Compile dumb stores. Live-read smart sources.**
 
-**Compiler** reads uncompiled raw documents and produces wiki articles — concept pages, source summaries, and a master index. Incremental: only processes new files, never rewrites the whole wiki.
+| Source | Behaviour | Why |
+|---|---|---|
+| `LocalFolderSource("./context/raw")` | **compile** → `context/compiled/` | Files have no query surface; wiki is where they become usable |
+| `LocalFolderSource("./context/compiled")` | **live-read**, auto-registered | The compile output — this is what Navigator reads |
+| `S3Source(bucket=...)` | **compile** → `context/compiled/` | Bucket is a dumb store |
+| `GoogleDriveSource(...)` | **live-read** | Drive search is excellent; compiling drifts, users can't edit back |
+| `SlackSource(...)` | **live-read** | Threads are the query surface. No meaningful place to "edit" a compiled summary. |
+| `GitHubSource(...)` | **live-read** | Grep + git history *is* the query surface. Compiling creates drift with no merge path. |
 
-**Linter** runs periodic health checks. Finds contradictions, stale articles, missing concepts, orphaned pages, thin articles, and duplicate coverage. Writes a lint report with suggested actions.
+Every source carries two flags: `compile=True` makes it visible to the Compiler; `live_read=True` makes it visible to the Navigator + Linter. The Manifest (rebuilt at startup and every 15 min) enforces both at tool-call time: a Navigator-role `source_read("local:raw", ...)` raises `PermissionError` by contract.
 
-**Syncer** commits and pushes `context/` to GitHub after file-creating workflows. Conditional on `GITHUB_ACCESS_TOKEN` + `SCOUT_REPO_URL`.
+### Execution loop
 
-## Knowledge Base Pipeline
+Every non-greeting interaction:
 
-```
-Ingest → raw/ (with frontmatter) → Compile → wiki/ (concepts + summaries + index) → Query → Learn
-```
-
-```
-context/
-├── about-us.md              # Company background
-├── preferences.md           # Response style, conventions
-├── voice/                   # Tone guides (email, slack, document)
-├── templates/               # Document scaffolds
-├── meetings/                # Saved meeting notes
-├── projects/                # Project briefs
-├── raw/                     # Ingested source material
-│   └── .manifest.json       # Tracks ingest/compile state
-└── wiki/                    # Compiled knowledge base
-    ├── index.md             # Master index (~5K tokens, fits in one read)
-    ├── concepts/            # One article per concept
-    ├── summaries/           # One summary per raw document
-    └── outputs/             # Filed query results
-```
-
-## Structured Data
-
-Scout owns SQL tables for structured data. Tables are created on demand from natural conversation:
-
-- "Save a note: met with Sarah from Acme, she's interested in a partnership" → `scout_notes` row, tagged `['sarah', 'acme', 'partnership']`
-- "Who owns the billing service?" → SQL query across `scout_teams` and `scout_projects`
-
-Schema conventions: `scout_` prefix, `user_id` scoping on every query, `TEXT[]` tags as the cross-table connector.
-
-## The Learning Loop
-
-Two knowledge systems power Scout's improvement:
-
-| System | Purpose | Prefixes |
-|--------|---------|----------|
-| **Knowledge** (the map) | Metadata routing — where things live | `File:`, `Schema:`, `Source:`, `Discovery:` |
-| **Learnings** (the compass) | Operational memory — what works | `Retrieval:`, `Pattern:`, `Correction:` |
-
-Knowledge tells Scout where to look. Learnings tell it how to look. Corrections always win.
-
-## Execution Loop
-
-Every interaction follows five steps:
-
-1. **Classify** — determine intent (capture, retrieve, connect, research, draft, etc.)
-2. **Recall** — search knowledge, learnings, wiki index, SQL tables, documents
-3. **Read** — pull from identified sources, summarize per source
-4. **Act** — execute tool calls, governance rules apply
-5. **Learn** — save discoveries, retrieval strategies, patterns
-
-**Example:** "What's our deployment process?"
-1. Classify: `document_search`
-2. Recall: search knowledge for `Discovery:` entries about deployment
-3. Read: navigate `documents/engineering-docs/runbooks/deployment.md`
-4. Act: return blue-green deployment process with source citation
-5. Learn: save `Discovery: deployment` → `engineering-docs/runbooks/deployment.md`
+1. **Classify** — intent + candidate sources from the Manifest.
+2. **Recall** — Manifest (free), `scout_knowledge` search, `scout_learnings` search, `context/compiled/index.md`.
+3. **Read** — dispatch via the `Source` protocol. Compile-backed content via `context/compiled/`; live sources via `list` / `read` / `find`.
+4. **Act** — synthesise; produce drafts only. No sends, no deletions outside `context/raw/`.
+5. **Learn** — write `Discovery:` (where the answer lived) and `Retrieval:` (what sequence worked).
 
 ## Integrations
 
+Scout boots with local sources + Exa on day one. Everything else activates when you add env.
+
 <details>
-<summary>Gmail + Google Calendar</summary>
+<summary><strong>Slack</strong> — receive @mentions + post to channels + search threads</summary>
 
-Requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_PROJECT_ID`. All three must be set.
+Full setup guide in [docs/SLACK_CONNECT.md](docs/SLACK_CONNECT.md). Three surfaces, all conditional:
 
-- Email: search, read, draft (sending disabled at code level)
-- Calendar: view, create, update events (external attendees require confirmation)
+- **Slack Interface** — inbound events. Requires `SLACK_TOKEN` + `SLACK_SIGNING_SECRET`.
+- **SlackTools** — Leader posts into channels. Requires `SLACK_TOKEN`.
+- **SlackSource** — live-read source for Navigator over threads (capabilities: `LIST`, `READ`, `METADATA`, `FIND_NATIVE`). Requires `SLACK_TOKEN`.
+
+Restrict which channels Scout responds to via `SLACK_CHANNEL_ALLOWLIST` (comma-separated channel IDs). Middleware in `app/main.py` drops events from any other channel.
+
+Each Slack thread maps to a session ID, so every thread gets its own context.
 
 </details>
 
 <details>
-<summary>Slack</summary>
+<summary><strong>Gmail + Google Calendar + Google Drive</strong></summary>
 
-Requires `SLACK_TOKEN` and `SLACK_SIGNING_SECRET`.
+Full setup in [docs/GOOGLE_AUTH.md](docs/GOOGLE_AUTH.md). One OAuth flow, three services:
 
-- Leader posts to Slack channels (scheduled tasks, user requests)
-- Thread-based sessions for continuity
+- **Gmail** — search, read threads, create drafts. Send is disabled at the code level (`exclude_tools=['send_email','send_email_reply']`).
+- **Calendar** — read-only in this build. View events, find available slots. `exclude_tools=['create_event','update_event','delete_event']` + `allow_update=False` on scope.
+- **GoogleDriveSource** — live-read source with capabilities `LIST`, `READ`, `METADATA`, `FIND_NATIVE` (Drive's `fullText contains`). Scoped to `GOOGLE_DRIVE_FOLDER_IDS`. Workspace docs (Docs / Sheets) export to markdown / CSV.
 
-</details>
-
-<details>
-<summary>Parallel (Enhanced Research)</summary>
-
-Requires `PARALLEL_API_KEY`. Enables the Researcher agent.
-
-- `parallel_search` for web search
-- `parallel_extract` for full content extraction
-- Auto-ingest URLs with content
+All three `GOOGLE_*` env vars must be set together.
 
 </details>
 
 <details>
-<summary>Exa (Web Search)</summary>
+<summary><strong>GitHub (code search)</strong> — live-read over cloned repos</summary>
 
-Set `EXA_API_KEY` for web search via Navigator and Linter. Works without Parallel for basic searches.
+`GitHubSource` clones repos into `.scout-cache/repos/<owner>-<repo>/` on first use, debounced fetches every 5 minutes. Capabilities: `LIST`, `READ`, `METADATA`, `FIND_LEXICAL` (ripgrep), `FIND_NATIVE` (REST `search/code` for ad-hoc public repos).
+
+```env
+GITHUB_REPOS=acme/api,acme/web
+GITHUB_READ_TOKEN=ghp_***
+```
+
+Keep `GITHUB_READ_TOKEN` separate from `GITHUB_ACCESS_TOKEN` — the latter is Scout's own context repo (see below).
 
 </details>
 
 <details>
-<summary>Git Sync</summary>
+<summary><strong>S3 buckets (compile-only)</strong></summary>
 
-Requires `GITHUB_ACCESS_TOKEN` and `SCOUT_REPO_URL`.
+Drop PDFs / docs into a bucket, Scout compiles them into the wiki on the next pass.
 
-- Syncer commits and pushes after file-creating workflows
-- Pull on startup + every 30 minutes
-- No volumes needed — git is the persistence layer
+```env
+S3_BUCKETS=acme-docs,acme-archive:reports/
+AWS_ACCESS_KEY_ID=AKIA***
+AWS_SECRET_ACCESS_KEY=***
+AWS_REGION=us-east-1
+```
+
+One `S3Source` instance per `bucket[:prefix]`. Compile-only (no live-read) — the Navigator sees compiled articles, not raw S3 objects. Objects over 25 MB skip text extraction and log `skipped-empty`.
 
 </details>
 
-## Scheduled Tasks
+<details>
+<summary><strong>Parallel web research</strong> — enables the Researcher agent</summary>
 
-All times US/Eastern.
+```env
+PARALLEL_API_KEY=***
+```
 
-| Task | Schedule | Description |
-|------|----------|-------------|
-| Context Refresh | Daily 8 AM | Re-index context files into knowledge |
-| Daily Briefing | Weekdays 8 AM | Calendar, emails, priorities |
-| Wiki Compile | Daily 9 AM | Process new raw sources into articles |
-| Inbox Digest | Weekdays 12 PM | Midday email digest |
-| Learning Summary | Monday 10 AM | Weekly learning system summary |
-| Weekly Review | Friday 5 PM | End-of-week review draft |
-| Wiki Lint | Sunday 8 AM | Wiki health check |
-| Sync Pull | Every 30 min | Pull remote context/ from GitHub |
+The Researcher agent is conditional on this key. Without it, Navigator + Linter still have web search via Exa.
 
-## Sample Documents
+</details>
 
-Scout ships with sample enterprise documents from Acme Corp for immediate exploration:
+<details>
+<summary><strong>Exa web search</strong> — default (free via MCP)</summary>
 
-| Directory | Contents |
-|-----------|----------|
-| `company-docs/policies/` | Employee handbook, security policy, data retention |
-| `company-docs/hr/` | Benefits guide, onboarding checklist |
-| `company-docs/planning/` | Q4 2024 OKRs, 2024 strategy |
-| `engineering-docs/runbooks/` | Deployment, incident response, on-call guide |
-| `engineering-docs/architecture/` | System overview, API design |
-| `data-exports/reports/` | Q4 2024 metrics |
+Available by default via the public MCP endpoint. Add a key for higher limits:
+
+```env
+EXA_API_KEY=***
+```
+
+</details>
+
+<details>
+<summary><strong>Git sync for context/</strong> — durable, portable, no volumes</summary>
+
+Both required together:
+
+```env
+GITHUB_ACCESS_TOKEN=ghp_***          # push on your context repo
+SCOUT_REPO_URL=https://github.com/your-org/scout-context.git
+```
+
+When configured, the Syncer agent gets wired in, `/sync/pull` + `POST` routes activate, and the `sync-pull` cron runs every 30 minutes.
+
+</details>
 
 ## Example Prompts
 
 ```
-# Retrieve
-What's our PTO policy?
-How do I deploy to production?
-What's the SLA for SEV1 incidents?
-
-# Capture
-Save a note: Met with the security team about the Q4 audit
-Add Sarah Chen to contacts — she's the VP of Engineering at Acme
-
-# Connect
-Prep me for my meeting with the infrastructure team — what do I need to know?
-
-# Ingest
-Ingest this article: https://example.com/article-on-context-agents
-
-# Compile
+What does our wiki say about PTO?
+Ingest this article: https://arxiv.org/abs/2312.10997
 Compile any new sources into the wiki
-
-# Lint
-Run a health check on the wiki
-
-# Draft
-Draft a Slack message about the API migration status
-Draft an email to the engineering leads about the architecture review
+Lint the wiki — find stale articles and broken backlinks
+Push the latest context changes to git
+Draft an email to alex@acme.com about the Q2 roadmap
+Find the JWT middleware in our acme/api repo
+What's in the engineering OKRs doc on Drive?
 ```
 
-## Deploy to Railway
+## Scheduled Tasks
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/scout)
+All nine run on the agno scheduler:
+
+| Task | Schedule | Endpoint |
+|------|----------|----------|
+| Context Refresh | Daily 8 AM | `/context/reload` |
+| Daily Briefing | Weekdays 8 AM | `/teams/scout/runs` |
+| Wiki Compile | Every 10 min | `/compile/run` |
+| Source Health Check | Every 15 min | `/manifest/reload` |
+| Inbox Digest | Weekdays 12 PM | `/teams/scout/runs` |
+| Learning Summary | Monday 10 AM | `/teams/scout/runs` |
+| Weekly Review | Friday 5 PM | `/teams/scout/runs` |
+| Wiki Lint | Sunday 8 AM | `/wiki/lint` |
+| Sync Pull | Every 30 min | `/sync/pull` (only when git sync is configured) |
+
+## Architecture
+
+```
+AgentOS (app/main.py)  [scheduler=True, tracing=True, Claude Opus 4.7]
+ ├── FastAPI / Uvicorn
+ ├── Slack Interface (optional) + channel-allowlist middleware
+ ├── Custom router (scout-specific endpoints)
+ └── Scout Team (scout/team.py, coordinate mode)
+     ├─ Navigator   (scout/agents/navigator.py)
+     │  ├─ SQLTools         → PostgreSQL (scout_* tables)
+     │  ├─ FileTools        → context/ + documents/
+     │  ├─ MCPTools         → Exa web search
+     │  ├─ GmailTools       → Gmail (drafts only) — conditional
+     │  ├─ CalendarTools    → Calendar (read only) — conditional
+     │  ├─ source_list / source_read / source_find  [manifest-gated]
+     │  ├─ read_manifest
+     │  └─ update_knowledge
+     ├─ Researcher  (scout/agents/researcher.py) [conditional]
+     │  ├─ ParallelTools, FileTools on context/raw/
+     │  ├─ ingest_url, ingest_text  → context/raw/<slug>-<short-sha>.md
+     │  └─ read_manifest, update_knowledge, source_*
+     ├─ Compiler    (scout/agents/compiler.py)
+     │  ├─ FileTools (context, no delete)
+     │  ├─ list_compile_sources / compile_one / compile_one_source
+     │  ├─ list_compile_records
+     │  └─ source_*  [scoped to compile=True sources only]
+     ├─ Linter      (scout/agents/linter.py)
+     │  ├─ FileTools (compiled + context), MCPTools (Exa)
+     │  ├─ source_*  [live-read only]
+     │  └─ update_knowledge
+     └─ Syncer      (scout/agents/syncer.py) [conditional]
+        └─ sync_push, sync_pull, sync_status
+
+     Leader tools: SlackTools (post to channels) [conditional]
+     Knowledge:    scout_knowledge (metadata routing)
+     Learnings:    scout_learnings (per-user retrieval patterns)
+     Manifest:     scout_sources (mirrored in-memory + Postgres)
+     Compile state: scout_compiled (source_hash + compiler_output_hash + needs_split)
+```
+
+### Sources
+
+| Source | Mode | Enabled by |
+|---|---|---|
+| `local:raw` — LocalFolderSource(`context/raw`) | compile-only | Always |
+| `local:wiki` — LocalFolderSource(`context/compiled`) | live-read | Always |
+| `drive` — GoogleDriveSource | live-read | `GOOGLE_DRIVE_FOLDER_IDS` + Google OAuth |
+| `slack` — SlackSource | live-read | `SLACK_TOKEN` |
+| `github` — GitHubSource | live-read | `GITHUB_REPOS` + `GITHUB_READ_TOKEN` |
+| `s3:<bucket>[/<prefix>]` — S3Source | compile-only | `S3_BUCKETS` + `AWS_*` |
+
+## CLI
 
 ```sh
-railway up
-railway run python context/load_context.py
+python -m scout                       # interactive chat
+python -m scout sources               # list registered sources + capabilities
+python -m scout manifest              # print the live manifest
+python -m scout compile               # compile every compile-on source (skips unchanged)
+python -m scout compile --source local:raw --entry handbook.pdf
+python -m scout compile --force       # re-compile everything
+python -m scout _smoke_gating         # assert Navigator can't read local:raw
 ```
+
+## API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/teams/scout/runs` | POST | Run the Scout team (SSE streaming) |
+| `/manifest` | GET | Current manifest |
+| `/manifest/reload` | POST | Rebuild manifest from sources |
+| `/sources/{id}/health` | GET | Per-source health ping |
+| `/compile/run` | POST | Run compile pipeline (no body / `{source_id}` / `{source_id, entry_id}` / `{force: true}`) |
+| `/wiki/compile` | POST | Legacy alias for `/compile/run` |
+| `/wiki/lint` | POST | Trigger the Linter agent |
+| `/wiki/ingest` | POST | URL or text → `context/raw/` |
+| `/context/reload` | POST | Re-index context files into knowledge |
+| `/sync/pull` | POST | Pull remote `context/` from GitHub |
+
+## Live Eval Harness
+
+A Docker-hosted test harness is wired into `evals/live/`:
+
+```sh
+python -m evals.live run                  # all cases; env-missing ones SKIP
+python -m evals.live run --case greeting  # one case
+./scripts/eval_loop.sh gating_adversarial # autonomous fix loop (up to 5 attempts)
+```
+
+Each case declares its prompt, expected agent, required/forbidden tools, and a single `target_file`. On FAIL the runner writes a rich diagnostic to `evals/results/<case>.md` (failures + member responses + tool calls + docker logs + target file verbatim + directive to Claude Code) so `scripts/eval_loop.sh` can hand it off for autonomous repair.
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `OPENAI_API_KEY` | Yes | OpenAI API key |
-| `EXA_API_KEY` | No | Web search for Navigator + Linter |
-| `PARALLEL_API_KEY` | No | Enables Researcher agent |
-| `GOOGLE_CLIENT_ID` | No | Gmail + Calendar (all 3 required) |
-| `GOOGLE_CLIENT_SECRET` | No | Gmail + Calendar |
-| `GOOGLE_PROJECT_ID` | No | Gmail + Calendar |
-| `SLACK_TOKEN` | No | Slack bot token |
-| `SLACK_SIGNING_SECRET` | No | Slack event verification |
-| `GITHUB_ACCESS_TOKEN` | No | Git sync (both required) |
-| `SCOUT_REPO_URL` | No | Git sync repo URL |
-| `SCOUT_CONTEXT_DIR` | No | Context directory (default: `./context`) |
-| `DOCUMENTS_DIR` | No | Documents directory (default: `./documents`) |
-| `DB_HOST` | No | Database host (default: localhost) |
-| `DB_PORT` | No | Database port (default: 5432) |
-| `DB_USER` | No | Database user (default: ai) |
-| `DB_PASS` | No | Database password (default: ai) |
-| `DB_DATABASE` | No | Database name (default: ai) |
-| `RUNTIME_ENV` | No | `dev` for hot reload, `prd` for RBAC |
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `ANTHROPIC_API_KEY` | **Yes** | — | Claude Opus 4.7 — every agent, Leader, compile runner, eval judge |
+| `OPENAI_API_KEY` | No | — | Only for `text-embedding-3-small` in the Knowledge PgVector path |
+| `EXA_API_KEY` | No | — | Exa web search (Navigator + Linter); tool loads regardless |
+| `PARALLEL_API_KEY` | No | — | Enables the Researcher agent + full-content `ingest_url` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | — | Gmail + Calendar + Drive (all three required together) |
+| `GOOGLE_DRIVE_FOLDER_IDS` | No | — | Comma-separated folder IDs — enables `GoogleDriveSource` |
+| `SLACK_TOKEN` | No | — | Slack bot token — enables Interface + SlackTools + SlackSource |
+| `SLACK_SIGNING_SECRET` | No | — | Required alongside `SLACK_TOKEN` for inbound events |
+| `SLACK_CHANNEL_ALLOWLIST` | No | all | Comma-separated channel IDs |
+| `GITHUB_REPOS` | No | — | Comma-separated `owner/repo` — enables `GitHubSource` |
+| `GITHUB_READ_TOKEN` | No | — | Read-only PAT for `GitHubSource` |
+| `S3_BUCKETS` | No | — | Comma-separated `bucket[:prefix]` — enables `S3Source` |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | — | Required when `S3_BUCKETS` is set |
+| `GITHUB_ACCESS_TOKEN` / `SCOUT_REPO_URL` | No | — | Git sync for `context/` (both required together) |
+| `SCOUT_WORKSPACE_ID` | No | `default` | Workspace scoping (multi-workspace lands later) |
+| `SCOUT_API_HOST_PORT` | No | `8000` | Host port the API publishes on |
+| `SCOUT_CONTEXT_DIR` / `SCOUT_RAW_DIR` / `SCOUT_COMPILED_DIR` / `SCOUT_VOICE_DIR` | No | — | Override context paths |
+| `DOCUMENTS_DIR` | No | `./documents` | Enterprise documents corpus |
+| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` / `DB_DATABASE` | No | compose defaults | Postgres |
+| `RUNTIME_ENV` | No | — | `dev` for hot reload |
+
+## Troubleshooting
+
+**Navigator answers from `context/raw/` instead of `context/compiled/`**: it shouldn't — `source_read("local:raw", ...)` raises `PermissionError` for any non-Compiler role. Re-run `python -m scout _smoke_gating` — if that PASSes and the Navigator is still leaking, check the diagnostic from `evals/live/`.
+
+**Google token expired**: Google's "Testing" mode expires tokens every 7 days. Re-run `python scripts/google_auth.py` to re-authorize.
+
+**Docker port collision on 5432 / 8000**: set `SCOUT_API_HOST_PORT` in `.env` (or remove the `ports:` entry from `scout-db` if you already have a host Postgres).
+
+**Manifest shows sources `unconfigured`**: the source's env is missing. Check `example.env` for the required set.
+
+**Live eval errors with "Incorrect API key"**: `ANTHROPIC_API_KEY` in `.env` is invalid or rotated. Fix it and `docker compose restart scout-api`.
+
+## Links
+
+- [Agno Docs](https://docs.agno.com)
+- [AgentOS Docs](https://docs.agno.com/agent-os/introduction)
+- Spec: `tmp/spec.md`
+- Pre-build diff: `tmp/spec-diff.md`
