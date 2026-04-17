@@ -20,11 +20,16 @@ from __future__ import annotations
 from functools import lru_cache
 
 from scout.config import (
+    AWS_ACCESS_KEY_ID,
+    AWS_REGION,
+    AWS_SECRET_ACCESS_KEY,
     DRIVE_SOURCE_ENABLED,
     GITHUB_READ_TOKEN,
     GITHUB_REPOS,
     GITHUB_SOURCE_ENABLED,
     GOOGLE_DRIVE_FOLDER_IDS,
+    S3_BUCKETS,
+    S3_SOURCE_ENABLED,
     SCOUT_COMPILED_DIR,
     SCOUT_RAW_DIR,
     SLACK_CHANNEL_ALLOWLIST,
@@ -35,6 +40,7 @@ from scout.sources.base import Source
 from scout.sources.drive import GoogleDriveSource
 from scout.sources.github import GitHubSource
 from scout.sources.local_folder import LocalFolderSource
+from scout.sources.s3 import S3Source, parse_bucket_spec
 from scout.sources.slack import SlackSource
 
 
@@ -95,6 +101,23 @@ def get_sources() -> tuple[Source, ...]:
             )
         )
 
+    if S3_SOURCE_ENABLED:
+        for spec in S3_BUCKETS:
+            bucket, prefix = parse_bucket_spec(spec)
+            if not bucket:
+                continue
+            sources.append(
+                S3Source(
+                    bucket=bucket,
+                    prefix=prefix,
+                    region=AWS_REGION,
+                    aws_access_key_id=AWS_ACCESS_KEY_ID,
+                    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+                    compile=True,
+                    live_read=False,
+                )
+            )
+
     return tuple(sources)
 
 
@@ -114,8 +137,10 @@ __all__ = [
     "GitHubSource",
     "GoogleDriveSource",
     "LocalFolderSource",
+    "S3Source",
     "SlackSource",
     "get_source",
     "get_sources",
+    "parse_bucket_spec",
     "reload_sources",
 ]

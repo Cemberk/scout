@@ -10,6 +10,7 @@ authors = [{ name = "Agno", email = "hello@agno.com" }]
 dependencies = [
   "agno",
   "beautifulsoup4",
+  "boto3",
   "fastapi[standard]",
   "google-api-python-client",
   "google-auth",
@@ -24,6 +25,7 @@ dependencies = [
   "pypdf",
   "python-docx",
   "pyyaml",
+  "slack_sdk",
   "sqlalchemy",
 ]
 
@@ -66,6 +68,8 @@ module = [
   "pypdf.*",
   "docx.*",
   "bs4.*",
+  "boto3.*",
+  "botocore.*",
 ]
 ignore_missing_imports = true
 
