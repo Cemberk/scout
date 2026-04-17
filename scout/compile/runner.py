@@ -33,7 +33,6 @@ from agno.models.openai import OpenAIResponses
 from scout.compile_state import (
     CompileRecord,
     get_record,
-    list_records_for_source,
     upsert_record,
 )
 from scout.config import COMPILE_MODEL_ID, SCOUT_COMPILED_DIR, SCOUT_VOICE_DIR, WORKSPACE_ID

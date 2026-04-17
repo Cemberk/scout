@@ -27,14 +27,14 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from threading import Lock
 
-logger = logging.getLogger(__name__)
-
 from sqlalchemy import Engine, text
 
 from db.session import SCOUT_SCHEMA, get_sql_engine
 from scout.config import WORKSPACE_ID
 from scout.sources import get_sources, reload_sources
 from scout.sources.base import HealthState, Source
+
+logger = logging.getLogger(__name__)
 
 _TABLE = f"{SCOUT_SCHEMA}.scout_sources"
 _lock = Lock()

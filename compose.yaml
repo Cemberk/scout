@@ -23,7 +23,7 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "${SCOUT_API_HOST_PORT:-8000}:8000"
     volumes:
       - .:/app
       - ./context:/app/context
@@ -41,13 +41,29 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       EXA_API_KEY: ${EXA_API_KEY:-}
       PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
+      # Slack
       SLACK_TOKEN: ${SLACK_TOKEN:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+      SLACK_CHANNEL_ALLOWLIST: ${SLACK_CHANNEL_ALLOWLIST:-}
+      # Google — Gmail + Calendar + Drive
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID:-}
+      GOOGLE_DRIVE_FOLDER_IDS: ${GOOGLE_DRIVE_FOLDER_IDS:-}
+      # GitHubSource (live-read) — separate from the context-repo token below
+      GITHUB_REPOS: ${GITHUB_REPOS:-}
+      GITHUB_READ_TOKEN: ${GITHUB_READ_TOKEN:-}
+      # S3Source (compile-only)
+      S3_BUCKETS: ${S3_BUCKETS:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${AWS_REGION:-}
+      # Git sync for context/
       GITHUB_ACCESS_TOKEN: ${GITHUB_ACCESS_TOKEN:-}
       SCOUT_REPO_URL: ${SCOUT_REPO_URL:-}
+      # Internals
+      SCOUT_WORKSPACE_ID: ${SCOUT_WORKSPACE_ID:-default}
+      SCOUT_COMPILE_MODEL: ${SCOUT_COMPILE_MODEL:-gpt-5.4}
       SCOUT_CONTEXT_DIR: /app/context
       DOCUMENTS_DIR: /documents
     depends_on:

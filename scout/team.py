@@ -170,8 +170,6 @@ scout = Team(
     ),
     add_learnings_to_context=True,
     enable_agentic_memory=True,
-    search_past_sessions=True,
-    num_past_sessions_to_search=10,
     add_datetime_to_context=True,
     add_history_to_context=True,
     read_chat_history=True,
