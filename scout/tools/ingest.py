@@ -1,11 +1,29 @@
-"""Ingest tools — fetch URLs and save text to raw/ with frontmatter."""
+"""Ingest tools — fetch URLs and save text to raw/ with frontmatter.
 
+Spec §5a filename convention:
+
+    context/raw/<slug>-<short-content-sha>.md
+
+where `short-content-sha = sha256(body)[:8]`. Idempotency comes from the
+hash: the same URL ingested on two different days yields the same
+`content_sha` and is skipped as a duplicate. No date in the filename —
+date-in-filename was what produced the "same source_hash, two raw files,
+one orphan compiled article" drift in the prior build.
+
+We still maintain `context/raw/.manifest.json` as extra bookkeeping;
+it is not load-bearing for dedup.
+"""
+
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from agno.tools import tool
+
+_SHORT_HASH_LEN = 8
 
 
 def _slugify(text: str) -> str:
@@ -14,7 +32,30 @@ def _slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[\s_]+", "-", text)
     text = re.sub(r"-+", "-", text)
-    return text[:80].strip("-")
+    return text[:60].strip("-") or "untitled"
+
+
+def _slug_from_url(url: str) -> str:
+    """Derive a slug from the URL's final path segment."""
+    parsed = urlparse(url)
+    segment = (parsed.path or "").rsplit("/", 1)[-1] or parsed.netloc
+    stem = segment.split("?")[0].rsplit(".", 1)[0]
+    return _slugify(stem)
+
+
+def _short_content_sha(body: str) -> str:
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:_SHORT_HASH_LEN]
+
+
+def _find_duplicate(raw_dir: Path, short: str) -> Path | None:
+    """Return an existing raw file with this short-content-sha, if any.
+
+    Scoped globally across `context/raw/` so the same body keyed under
+    different slugs still dedups.
+    """
+    for candidate in raw_dir.rglob(f"*-{short}.md"):
+        return candidate
+    return None
 
 
 def _read_manifest(raw_dir: Path) -> list[dict]:
@@ -29,14 +70,21 @@ def _write_manifest(raw_dir: Path, manifest: list[dict]) -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
 
-def _build_frontmatter(title: str, source: str, tags: list[str], doc_type: str) -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+def _build_frontmatter(
+    title: str,
+    source: str,
+    tags: list[str],
+    doc_type: str,
+    *,
+    fetched_at: str | None = None,
+) -> str:
+    now = fetched_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     tag_str = ", ".join(tags) if tags else ""
     return (
         f"---\n"
         f'title: "{title}"\n'
         f"source: {source}\n"
-        f"ingested: {now}\n"
+        f"fetched_at: {now}\n"
         f"tags: [{tag_str}]\n"
         f"type: {doc_type}\n"
         f"compiled: false\n"
@@ -44,18 +92,33 @@ def _build_frontmatter(title: str, source: str, tags: list[str], doc_type: str) 
     )
 
 
+def _record_ingest(raw_dir: Path, filename: str, title: str, source: str) -> None:
+    manifest = _read_manifest(raw_dir)
+    manifest.append(
+        {
+            "file": filename,
+            "title": title,
+            "source": source,
+            "ingested": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "compiled": False,
+        }
+    )
+    _write_manifest(raw_dir, manifest)
+
+
 def _do_ingest_url(
-    raw_dir: Path, url: str, title: str, tags: list[str] | None = None, doc_type: str = "article"
-) -> str:
-    """Core ingest-URL logic (callable directly and via @tool wrapper)."""
+    raw_dir: Path,
+    url: str,
+    title: str | None = None,
+    tags: list[str] | None = None,
+    doc_type: str = "article",
+) -> dict:
+    """Core ingest-URL logic. Spec §5a idempotent-by-content-hash."""
     from scout.config import PARALLEL_API_KEY
 
-    slug = _slugify(title)
-    filename = f"{slug}.md"
-    file_path = raw_dir / filename
-    frontmatter = _build_frontmatter(title, url, tags or [], doc_type)
+    raw_dir.mkdir(parents=True, exist_ok=True)
 
-    # Try to fetch content via Parallel
+    # Fetch/extract first so we can hash the body.
     extracted = ""
     if PARALLEL_API_KEY:
         try:
@@ -69,28 +132,30 @@ def _do_ingest_url(
         except Exception as e:
             extracted = f"*(Content extraction failed: {e}. Stub saved — fetch manually.)*"
 
-    if extracted and not extracted.startswith("*(Content extraction failed"):
-        file_path.write_text(frontmatter + extracted + "\n")
-        status = f"Ingested with content: {filename} ({len(extracted)} chars)"
-    else:
-        stub = extracted or f"Source: {url}\n\n*(Content pending — configure PARALLEL_API_KEY or use ingest_text.)*"
-        file_path.write_text(frontmatter + stub + "\n")
-        status = f"Ingested stub: {filename}" + (" (extraction failed)" if extracted else "")
+    body = extracted or f"Source: {url}\n\n*(Content pending — configure PARALLEL_API_KEY or use ingest_text.)*"
+    display_title = title or _slug_from_url(url).replace("-", " ").title() or url
+    slug = _slugify(title) if title else _slug_from_url(url)
+    short = _short_content_sha(body)
 
-    # Update manifest
-    manifest = _read_manifest(raw_dir)
-    manifest.append(
-        {
-            "file": filename,
-            "title": title,
-            "source": url,
-            "ingested": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "compiled": False,
+    duplicate = _find_duplicate(raw_dir, short)
+    if duplicate is not None:
+        return {
+            "status": "duplicate",
+            "path": str(duplicate.relative_to(raw_dir)),
+            "content_sha": short,
         }
-    )
-    _write_manifest(raw_dir, manifest)
 
-    return status
+    filename = f"{slug}-{short}.md"
+    file_path = raw_dir / filename
+    frontmatter = _build_frontmatter(display_title, url, tags or [], doc_type)
+    file_path.write_text(frontmatter + body + "\n")
+    _record_ingest(raw_dir, filename, display_title, url)
+    return {
+        "status": "ingested",
+        "path": str(file_path.relative_to(raw_dir)),
+        "content_sha": short,
+        "chars": len(body),
+    }
 
 
 def _do_ingest_text(
@@ -100,29 +165,32 @@ def _do_ingest_text(
     source: str = "user",
     tags: list[str] | None = None,
     doc_type: str = "notes",
-) -> str:
-    """Core ingest-text logic (callable directly and via @tool wrapper)."""
+) -> dict:
+    """Core ingest-text logic. Spec §5a idempotent-by-content-hash."""
+    if not title:
+        return {"status": "error", "reason": "title required for ingest_text"}
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    body = content or ""
     slug = _slugify(title)
-    filename = f"{slug}.md"
-    file_path = raw_dir / filename
-
-    frontmatter = _build_frontmatter(title, source, tags or [], doc_type)
-    file_path.write_text(frontmatter + content + "\n")
-
-    # Update manifest
-    manifest = _read_manifest(raw_dir)
-    manifest.append(
-        {
-            "file": filename,
-            "title": title,
-            "source": source,
-            "ingested": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "compiled": False,
+    short = _short_content_sha(body)
+    duplicate = _find_duplicate(raw_dir, short)
+    if duplicate is not None:
+        return {
+            "status": "duplicate",
+            "path": str(duplicate.relative_to(raw_dir)),
+            "content_sha": short,
         }
-    )
-    _write_manifest(raw_dir, manifest)
-
-    return f"Ingested: {filename} ({len(content)} chars)"
+    filename = f"{slug}-{short}.md"
+    file_path = raw_dir / filename
+    frontmatter = _build_frontmatter(title, source, tags or [], doc_type)
+    file_path.write_text(frontmatter + body + "\n")
+    _record_ingest(raw_dir, filename, title, source)
+    return {
+        "status": "ingested",
+        "path": str(file_path.relative_to(raw_dir)),
+        "content_sha": short,
+        "chars": len(body),
+    }
 
 
 def create_ingest_tools(raw_dir: Path):
@@ -136,45 +204,50 @@ def create_ingest_tools(raw_dir: Path):
     """
 
     @tool
-    def ingest_url(url: str, title: str, tags: list[str] | None = None, doc_type: str = "article") -> str:
-        """Ingest a URL into the knowledge base raw/ directory.
+    def ingest_url(
+        url: str, title: str | None = None, tags: list[str] | None = None, doc_type: str = "article"
+    ) -> str:
+        """Ingest a URL into context/raw/ as `<slug>-<short-content-sha>.md`.
 
-        Fetches page content via Parallel (if configured) and saves as a
-        markdown file with YAML frontmatter in raw/. Falls back to
-        a stub if Parallel is not configured or extraction fails.
+        Fetches page content via Parallel (if configured) and saves it with
+        YAML frontmatter. Idempotent by content hash — the same body, ingested
+        twice, returns `duplicate` and leaves the original untouched.
 
         Args:
             url: The source URL.
-            title: A descriptive title for the document.
+            title: Optional title; if omitted, slug is derived from the URL.
             tags: Optional list of topic tags (e.g. ["rag", "retrieval"]).
             doc_type: Document type: paper, article, repo, notes, transcript, image.
 
         Returns:
-            Confirmation with the file path and content status.
+            JSON string: `{"status": "ingested"|"duplicate", "path": ...}`.
         """
-        return _do_ingest_url(raw_dir, url, title, tags, doc_type)
+        return json.dumps(_do_ingest_url(raw_dir, url, title, tags, doc_type))
 
     @tool
     def ingest_text(
-        title: str, content: str, source: str = "user", tags: list[str] | None = None, doc_type: str = "notes"
+        title: str,
+        content: str,
+        source: str = "user",
+        tags: list[str] | None = None,
+        doc_type: str = "notes",
     ) -> str:
-        """Ingest text content into the knowledge base raw/ directory.
+        """Ingest text into context/raw/ as `<slug>-<short-content-sha>.md`.
 
-        Saves text as a markdown file with YAML frontmatter in raw/.
-        Use this for clipboard content, meeting notes, manually provided text,
-        or content fetched from web research.
+        Idempotent by content hash — same `content` ingested twice returns
+        `duplicate`.
 
         Args:
-            title: A descriptive title for the document.
-            content: The markdown content to save.
-            source: Where the content came from (URL, "user", "clipboard", etc.).
-            tags: Optional list of topic tags.
-            doc_type: Document type: paper, article, repo, notes, transcript, image.
+            title: Required title (drives the slug).
+            content: The markdown body.
+            source: Where the content came from ("user", URL, etc.).
+            tags: Optional topic tags.
+            doc_type: paper | article | repo | notes | transcript | image.
 
         Returns:
-            Confirmation with the file path.
+            JSON string: `{"status": "ingested"|"duplicate"|"error", ...}`.
         """
-        return _do_ingest_text(raw_dir, title, content, source, tags, doc_type)
+        return json.dumps(_do_ingest_text(raw_dir, title, content, source, tags, doc_type))
 
     @tool
     def read_manifest() -> str:

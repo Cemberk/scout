@@ -161,7 +161,10 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
                 doc_type=body.doc_type,
             )
 
-        return {"status": "ingested", "result": result}
+        # _do_ingest_* now return {"status": "ingested"|"duplicate"|"error", ...}
+        # per spec §5a. Surface both the raw result and the top-level status.
+        status = result.get("status", "ingested") if isinstance(result, dict) else "ingested"
+        return {"status": status, "result": result}
 
     # ------------------------------------------------------------------
     # Git sync
