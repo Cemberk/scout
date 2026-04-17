@@ -10,7 +10,7 @@ context/compiled/lint-report.md.
 """
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIResponses
+from agno.models.anthropic import Claude
 
 from scout.agents.settings import agent_db, scout_knowledge
 from scout.instructions import build_linter_instructions
@@ -89,7 +89,7 @@ linter = Agent(
     id="linter",
     name="Linter",
     role="Audits the compiled wiki and source health; writes a lint report",
-    model=OpenAIResponses(id="gpt-5.4"),
+    model=Claude(id="claude-opus-4-7"),
     db=agent_db,
     instructions=build_linter_instructions(LINTER_INSTRUCTIONS),
     knowledge=scout_knowledge,

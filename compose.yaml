@@ -38,7 +38,8 @@ services:
       DB_DATABASE: ${DB_DATABASE:-ai}
       WAIT_FOR_DB: "True"
       PRINT_ENV_ON_LOAD: "True"
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       EXA_API_KEY: ${EXA_API_KEY:-}
       PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
       # Slack
@@ -63,7 +64,6 @@ services:
       SCOUT_REPO_URL: ${SCOUT_REPO_URL:-}
       # Internals
       SCOUT_WORKSPACE_ID: ${SCOUT_WORKSPACE_ID:-default}
-      SCOUT_COMPILE_MODEL: ${SCOUT_COMPILE_MODEL:-gpt-5.4}
       SCOUT_CONTEXT_DIR: /app/context
       DOCUMENTS_DIR: /documents
     depends_on:

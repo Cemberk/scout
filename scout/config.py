@@ -74,8 +74,6 @@ S3_SOURCE_ENABLED = bool(
     S3_BUCKETS and AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and AWS_REGION
 )
 
-# Compile model — same as agents in Phase 1; can be split later
-COMPILE_MODEL_ID = getenv("SCOUT_COMPILE_MODEL", "gpt-5.4")
 
 # Re-export for convenience
 __all__ = [
@@ -86,7 +84,6 @@ __all__ = [
     "CONTEXT_DIR",
     "CONTEXT_RAW_DIR",
     "CONTEXT_VOICE_DIR",
-    "COMPILE_MODEL_ID",
     "DOCUMENTS_DIR",
     "DRIVE_SOURCE_ENABLED",
     "EXA_API_KEY",

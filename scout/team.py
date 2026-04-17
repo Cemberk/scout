@@ -18,7 +18,7 @@ Test:
 
 from agno.agent import Agent
 from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
-from agno.models.openai import OpenAIResponses
+from agno.models.anthropic import Claude
 from agno.team import Team, TeamMode
 
 from scout.agents import compiler, linter, navigator, researcher, syncer
@@ -159,7 +159,7 @@ scout = Team(
     id="scout",
     name="Scout",
     mode=TeamMode.coordinate,
-    model=OpenAIResponses(id="gpt-5.4"),
+    model=Claude(id="claude-opus-4-7"),
     members=members,
     db=agent_db,
     instructions=instructions,

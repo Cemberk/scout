@@ -11,7 +11,7 @@ specific articles. Falls back to raw/ and live sources.
 
 from agno.agent import Agent
 from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
-from agno.models.openai import OpenAIResponses
+from agno.models.anthropic import Claude
 
 from scout.agents.settings import agent_db, scout_knowledge, scout_learnings
 from scout.instructions import build_navigator_instructions
@@ -21,7 +21,7 @@ navigator = Agent(
     id="navigator",
     name="Navigator",
     role="Primary agent for user interaction, knowledge queries, email, calendar, SQL, enterprise documents, and wiki Q&A",
-    model=OpenAIResponses(id="gpt-5.4"),
+    model=Claude(id="claude-opus-4-7"),
     db=agent_db,
     instructions=build_navigator_instructions(),
     knowledge=scout_knowledge,
