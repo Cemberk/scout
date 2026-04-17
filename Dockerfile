@@ -1,42 +1,61 @@
+# ===========================================================================
+# Scout - Enterprise Context Agent
+# ===========================================================================
+
 FROM agnohq/python:3.12
 
 # ---------------------------------------------------------------------------
-# Environment
+# System dependencies
 # ---------------------------------------------------------------------------
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git \
+        git-lfs \
+        openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
-# Create non-root user
+# Git configuration (safe defaults for agent use)
 # ---------------------------------------------------------------------------
-RUN groupadd -g 61000 app \
-    && useradd -g 61000 -u 61000 -ms /bin/bash app
+RUN git config --system init.defaultBranch main \
+    && git config --system user.name "Scout" \
+    && git config --system user.email "scout@agno.com" \
+    && git config --system advice.detachedHead false \
+    && git config --system --add safe.directory '*'
+
+# ---------------------------------------------------------------------------
+# GitHub token configuration
+# ---------------------------------------------------------------------------
+# The GITHUB_ACCESS_TOKEN env var is used for cloning private repos and GitHub API.
+# Git credential helper stores it in memory (never written to disk).
+# ---------------------------------------------------------------------------
+RUN printf '%s\n' \
+        '#!/bin/bash' \
+        'if [ -n "$GITHUB_ACCESS_TOKEN" ]; then' \
+        '    echo "protocol=https"' \
+        '    echo "host=github.com"' \
+        '    echo "username=x-access-token"' \
+        '    echo "password=$GITHUB_ACCESS_TOKEN"' \
+        'fi' \
+        > /usr/local/bin/git-credential-scout \
+    && chmod +x /usr/local/bin/git-credential-scout \
+    && git config --system credential.helper '/usr/local/bin/git-credential-scout'
 
 # ---------------------------------------------------------------------------
 # Application code
 # ---------------------------------------------------------------------------
 WORKDIR /app
-
 COPY requirements.txt ./
 RUN uv pip sync requirements.txt --system
-
-COPY --chown=app:app . .
-
-# ---------------------------------------------------------------------------
-# Document seeding: copy sample docs so /documents can be seeded on first run
-# ---------------------------------------------------------------------------
-RUN mkdir -p /app/documents-seed && cp -r /app/documents/* /app/documents-seed/ 2>/dev/null || true
-RUN mkdir -p /documents && chown app:app /documents
+COPY . .
+ENV PYTHONPATH=/app
 
 # ---------------------------------------------------------------------------
 # Entrypoint
 # ---------------------------------------------------------------------------
 RUN chmod +x /app/scripts/entrypoint.sh
-
-USER app
-
-EXPOSE 8000
-
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-CMD ["chill"]
+
+# ---------------------------------------------------------------------------
+# Default command (overridden by compose)
+# ---------------------------------------------------------------------------
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

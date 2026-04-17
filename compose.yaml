@@ -26,6 +26,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - ./context:/app/context
       - ./documents:/documents
     environment:
       RUNTIME_ENV: dev
@@ -39,6 +40,15 @@ services:
       PRINT_ENV_ON_LOAD: "True"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       EXA_API_KEY: ${EXA_API_KEY:-}
+      PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
+      SLACK_TOKEN: ${SLACK_TOKEN:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID:-}
+      GITHUB_ACCESS_TOKEN: ${GITHUB_ACCESS_TOKEN:-}
+      SCOUT_REPO_URL: ${SCOUT_REPO_URL:-}
+      SCOUT_CONTEXT_DIR: /app/context
       DOCUMENTS_DIR: /documents
     depends_on:
       - scout-db

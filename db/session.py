@@ -1,18 +1,35 @@
 """
 Database Session
-================
+----------------
 
-PostgreSQL database connection for AgentOS.
+PostgreSQL database connection for Scout.
 """
 
 from agno.db.postgres import PostgresDb
 from agno.knowledge import Knowledge
 from agno.knowledge.embedder.openai import OpenAIEmbedder
 from agno.vectordb.pgvector import PgVector, SearchType
+from sqlalchemy import Engine, create_engine, text
 
 from db.url import db_url
 
 DB_ID = "scout-db"
+
+# PostgreSQL schema for user data tables (scout_contacts, scout_teams, etc.)
+# Agno framework tables (sessions, knowledge vectors) stay in the default "ai" schema
+SCOUT_SCHEMA = "scout"
+
+
+def get_sql_engine() -> Engine:
+    bootstrap = create_engine(db_url)
+    with bootstrap.connect() as conn:
+        conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCOUT_SCHEMA}"))
+        conn.commit()
+    bootstrap.dispose()
+    return create_engine(
+        db_url,
+        connect_args={"options": f"-c search_path={SCOUT_SCHEMA},public"},
+    )
 
 
 def get_postgres_db(contents_table: str | None = None) -> PostgresDb:

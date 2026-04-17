@@ -1,7 +1,7 @@
 [project]
 name = "scout"
-version = "1.0.0"
-description = "An enterprise knowledge agent with Claude Code-like capabilities"
+version = "2.0.0"
+description = "An enterprise context agent that navigates your company's knowledge graph"
 requires-python = ">=3.12,<4"
 readme = "README.md"
 license-files = ["LICENSE"]
@@ -9,7 +9,10 @@ authors = [{ name = "Agno", email = "hello@agno.com" }]
 
 dependencies = [
   "agno",
+  "beautifulsoup4",
   "fastapi[standard]",
+  "google-api-python-client",
+  "google-auth",
   "httpx",
   "mcp",
   "openai",
@@ -18,18 +21,21 @@ dependencies = [
   "opentelemetry-sdk",
   "pgvector",
   "psycopg[binary]",
+  "pypdf",
+  "python-docx",
+  "pyyaml",
   "sqlalchemy",
 ]
 
 [project.optional-dependencies]
-dev = ["mypy", "ruff"]
+dev = ["mypy", "ruff", "types-PyYAML"]
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["scout*", "db*", "app*"]
+include = ["scout*", "scout.sources*", "scout.compile*", "db*", "app*", "evals*", "context*"]
 
 [tool.ruff]
 line-length = 120
@@ -46,7 +52,21 @@ plugins = ["pydantic.mypy"]
 exclude = [".venv*"]
 
 [[tool.mypy.overrides]]
-module = ["pgvector.*", "setuptools.*", "agno.*", "httpx.*", "mcp.*"]
+module = [
+  "pgvector.*",
+  "setuptools.*",
+  "agno.*",
+  "httpx.*",
+  "mcp.*",
+  "parallel.*",
+  "google.*",
+  "googleapiclient.*",
+  "slack_sdk.*",
+  "yaml.*",
+  "pypdf.*",
+  "docx.*",
+  "bs4.*",
+]
 ignore_missing_imports = true
 
 [tool.uv.pip]

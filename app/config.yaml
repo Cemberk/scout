@@ -1,6 +1,6 @@
 chat:
   quick_prompts:
     scout:
-      - "Tell me about yourself"
+      - "What can you do?"
       - "What's our PTO policy?"
       - "How do I deploy to production?"

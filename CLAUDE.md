@@ -2,162 +2,242 @@
 
 ## Project Overview
 
-Scout is an **enterprise knowledge agent** with Claude Code-like capabilities. It finds information across a local documents directory — and learns from every interaction.
+Scout v3 is an **enterprise context agent** — a team of specialists that navigates your company's knowledge graph through a uniform `Source` protocol. The wiki is the map: dumb stores compile into a curated, navigable, user-editable artifact; smart sources are queried live.
 
-- **Awareness** — Knows what sources exist and what they contain
-- **Search** — Grep-like search across file contents, not just names
-- **Read** — Full documents with context, never chunks
-- **Learn** — Builds knowledge over time
+## Architecture
+
+```
+Scout (Team Leader — coordinate mode)
+├── Navigator    — primary user-facing agent. Reads compiled/ + live sources via Source dispatch.
+├── Researcher   — Parallel web search + ingest into context/raw/ (conditional on PARALLEL_API_KEY)
+├── Compiler     — iterates compile-on sources, writes Obsidian-compat markdown to context/compiled/
+├── Linter       — wiki health, source flap, user-edit conflicts, stale articles
+├── Syncer       — git push/pull for context/ (conditional on GITHUB_ACCESS_TOKEN)
+└── [leader responds directly for greetings/simple questions]
+```
+
+## The wiki-first rule
+
+The Compiler turns raw inputs into clean wiki articles. The Navigator reads the wiki, never the raw inputs directly. Two flags on every Source enforce this at the code level:
+- `compile=True` → Compiler iterates this source, writes to `context/compiled/`
+- `live_read=True` → Navigator can query this source directly
+
+`context/raw/` is `compile=True, live_read=False` and is invisible to the Navigator. Drive is `compile=False, live_read=True`. The Manifest enforces tool-registration boundaries by role.
 
 ## Structure
 
 ```
 scout/
-├── __init__.py               # Exports: scout, scout_knowledge, scout_learnings
-├── __main__.py               # CLI entry (python -m scout)
-├── agent.py                  # Scout agent definition
-├── paths.py                  # Path resolution (DOCUMENTS_DIR, knowledge dirs)
-├── context/
-│   ├── source_registry.py    # Source metadata for system prompt
-│   └── intent_routing.py     # Intent-to-location routing
-├── tools/
-│   ├── awareness.py          # list_sources, get_metadata
-│   ├── search.py             # search_content (grep-like)
-│   └── save_discovery.py     # Save successful discoveries
-├── evals/
-│   ├── test_cases.py         # Test cases with expected strings
-│   ├── grader.py             # LLM-based response grading
-│   └── run_evals.py          # Evaluation runner with rich output
-├── knowledge/
-│   ├── sources/files.json    # Source registry metadata
-│   ├── routing/intents.json  # Intent routing rules
-│   └── patterns/common_patterns.md
-└── scripts/
-    └── load_knowledge.py     # Load knowledge into vector DB
+├── __init__.py               # Exports: scout (Team)
+├── __main__.py               # CLI: chat | compile | manifest | sources
+├── team.py                   # Scout team definition (leader + members)
+├── config.py                 # Env vars and feature flags
+├── paths.py                  # CONTEXT_*, DOCUMENTS_DIR
+├── instructions.py           # Instruction assembly
+├── manifest.py               # Runtime capability registry
+├── compile_state.py          # Postgres-backed compile state (replaces .state.json)
+├── sources/
+│   ├── base.py               # Source protocol + Entry/Content/Meta/Hit/HealthStatus
+│   ├── local_folder.py       # LocalFolderSource (compile or live-read)
+│   ├── drive.py              # GoogleDriveSource (live-read)
+│   └── __init__.py           # build_sources() / get_sources() / reload_sources()
+├── compile/
+│   ├── runner.py             # The compile pipeline. Heart of v3.
+│   └── __init__.py
+├── agents/
+│   ├── settings.py           # Shared DB, knowledge bases
+│   ├── navigator.py          # Source-dispatch + SQL + Gmail/Calendar
+│   ├── researcher.py         # Parallel + ingest_url/text → context/raw/
+│   ├── compiler.py           # Drives compile.runner
+│   ├── linter.py             # Wiki health checks
+│   └── syncer.py             # Git commit + push
+└── tools/
+    ├── build.py              # Tool assembly per agent role
+    ├── manifest_tools.py     # read_manifest
+    ├── sources.py            # list_sources / source_list / source_find / source_read
+    ├── compile_tools.py      # list_compile_sources / compile_one / compile_one_source / ...
+    ├── knowledge.py          # update_knowledge
+    ├── ingest.py             # ingest_url / ingest_text (Researcher)
+    ├── git.py                # Git sync tools (Syncer)
+    └── redactor.py           # Secret-stripping middleware
 
-documents/                    # Enterprise documents (sample data)
-├── company-docs/             # Policies, HR, planning
-├── engineering-docs/         # Runbooks, architecture
-└── data-exports/             # Reports, metrics
+context/
+├── about-us.md
+├── preferences.md
+├── voice/
+│   ├── email.md
+│   ├── slack-message.md
+│   ├── document.md
+│   └── wiki-article.md       # Voice guide for the Compiler
+├── templates/
+├── meetings/
+├── projects/
+├── raw/                      # User-writable intake. Compile-only. Navigator-invisible.
+└── compiled/                 # Obsidian-compatible vault. Live-read.
+    ├── articles/             # <slug>-<short-hash>.md
+    ├── concepts/
+    ├── summaries/
+    ├── outputs/
+    └── index.md              # Auto-regenerated after each compile pass
+
+documents/                    # Read-only enterprise document corpus
 
 app/
-├── main.py                   # API entry point (AgentOS)
-└── config.yaml               # Agent configuration
+├── main.py                   # AgentOS entry (lifespan: migrations + manifest + schedules)
+├── router.py                 # /manifest, /compile/run, /sources/{id}/health, /wiki/*, /sync/pull
+└── config.yaml
 
 db/
-├── session.py                # get_postgres_db(), create_knowledge()
-└── url.py                    # Database URL builder
+├── session.py                # get_postgres_db / create_knowledge / get_sql_engine
+├── url.py                    # DB URL builder
+└── migrations.py             # scout_compiled, scout_sources, workspace_id columns
+
+evals/
+├── __init__.py               # CATEGORIES (security, routing, ..., wiki_compile, manifest, isolation, drive_live, slack)
+├── __main__.py / run.py
+└── cases/
 ```
 
 ## Commands
 
 ```bash
 ./scripts/venv_setup.sh && source .venv/bin/activate
-./scripts/format.sh      # Format code
-./scripts/validate.sh    # Lint + type check
-python -m scout          # CLI mode
+./scripts/format.sh                   # Format code
+./scripts/validate.sh                 # Lint + type check
 
-# Knowledge
-python -m scout.scripts.load_knowledge              # Load knowledge into vector DB
-python -m scout.scripts.load_knowledge --recreate    # Drop & reload
+# CLI
+python -m scout                       # Chat
+python -m scout sources               # List registered sources + capabilities
+python -m scout manifest              # Print the live manifest
+python -m scout compile               # Compile every compile-on source (skips unchanged)
+python -m scout compile --source local:raw --entry handbook.pdf
+python -m scout compile --force       # Re-compile everything
+
+# Context
+python context/load_context.py
+python context/load_context.py --recreate
+
+# Migrations (also run automatically on app startup)
+python -m db.migrations
 
 # Evaluations
-python -m scout.evals.run_evals                     # String matching (default)
-python -m scout.evals.run_evals --category policy   # Filter by category
-python -m scout.evals.run_evals --llm-grader        # LLM-based grading
-python -m scout.evals.run_evals --verbose           # Show responses on failure
-python -m scout.evals.run_evals --check-sources      # Source citation affects pass/fail
-python -m scout.evals.run_evals -g -s -v             # All modes combined
+python -m evals
+python -m evals --category wiki_compile
 ```
+
+## Sources (Phase 1)
+
+| Source id | Kind | Mode | Notes |
+|---|---|---|---|
+| `local:raw` | LocalFolderSource(./context/raw) | compile-only | Invisible to Navigator |
+| `local:wiki` | LocalFolderSource(./context/compiled) | live-read | The wiki Navigator reads |
+| `drive` | GoogleDriveSource(folder_ids=…) | live-read | Optional — needs Google + GOOGLE_DRIVE_FOLDER_IDS |
+
+Phase 1.5 will add S3, Slack, GitHub as additional `Source` implementations with no Scout core changes.
 
 ## Two Knowledge Systems
 
-| System | What It Stores | How It Evolves |
-|--------|---------------|----------------|
-| **Knowledge** | Source registry, intent routing, known patterns | Curated by you + Scout |
-| **Learnings** | Decision traces: what worked, what didn't, why | Managed by Learning Machine |
+| System | What It Stores | Prefixes |
+|--------|---------------|----------|
+| `scout_knowledge` | Metadata routing: where things live | `Wiki:`, `File:`, `Schema:`, `Source:`, `Discovery:`, `Code:` |
+| `scout_learnings` | Per-user operational memory | `Retrieval:`, `Pattern:`, `Correction:` |
 
-## The Learning Loop
+Both tables carry a `workspace_id` column (Phase 1 default = `'default'`).
+
+## Execution Loop
 
 ```
-User Question
-     ↓
-Search Knowledge + Learnings (Do I already know where this is?)
-     ↓
-Navigate: list_sources → get_metadata → search → read
-     ↓
-Found? → Return answer, save discovery if surprising
-Not found? → Try fallback paths, save negative knowledge
+User Question → Classify → Recall (Manifest+Knowledge+Learnings) → Read (Sources) → Act → Learn
 ```
 
-## Tools
+## Tools by Agent
 
-| Tool | Source | Purpose |
-|------|--------|---------|
-| `FileTools` | agno built-in | Read/list files in documents directory |
-| `search_content` | scout/tools/search.py | Grep-like content search across files |
-| `list_sources` | scout/tools/awareness.py | List available sources with details |
-| `get_metadata` | scout/tools/awareness.py | Get file/directory metadata |
-| `save_intent_discovery` | scout/tools/save_discovery.py | Save findings to knowledge base |
-| `MCPTools` (Exa) | Optional (EXA_API_KEY) | Web search fallback |
+| Agent | Tools |
+|-------|-------|
+| Navigator | SQLTools, FileTools (context + documents), MCPTools (Exa), GmailTools, CalendarTools, update_knowledge, read_manifest, source_* |
+| Researcher | FileTools, ParallelTools, update_knowledge, ingest_url, ingest_text, read_manifest, source_* |
+| Compiler | FileTools (context), update_knowledge, read_manifest, source_* (compile-only), compile_* |
+| Linter | FileTools (compiled+context), MCPTools (Exa), update_knowledge, read_manifest, source_* (live-read) |
+| Syncer | sync_push, sync_pull, sync_status |
 
-## Key Files to Reference
+All tool returns are passed through the redactor in `scout.tools.redactor` — secret-shaped strings are stripped before they reach the model.
 
-- `scout/agent.py` — Agent configuration and instructions
-- `scout/paths.py` — Path resolution for documents and knowledge
-- `scout/tools/search.py` — Content search implementation
-- `scout/context/source_registry.py` — Context loading pattern
-- `scout/knowledge/sources/files.json` — Source registry metadata
-- `scout/knowledge/routing/intents.json` — Intent routing rules
+## Scheduled Tasks
+
+| Task | Schedule | Endpoint |
+|------|----------|----------|
+| Context Refresh | Daily 8 AM | `/context/reload` |
+| Daily Briefing | Weekdays 8 AM | `/teams/scout/runs` |
+| **Wiki Compile** | **Every 10 min** | `/compile/run` |
+| **Source Health Check** | **Every 15 min** | `/manifest/reload` |
+| Inbox Digest | Weekdays 12 PM | `/teams/scout/runs` |
+| Learning Summary | Monday 10 AM | `/teams/scout/runs` |
+| Weekly Review | Friday 5 PM | `/teams/scout/runs` |
+| Wiki Lint | Sunday 8 AM | `/wiki/lint` |
+| Sync Pull | Every 30 min | `/sync/pull` |
+
+## API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/teams/scout/runs` | POST | Run the Scout team |
+| `/manifest` | GET | Current manifest |
+| `/manifest/reload` | POST | Rebuild manifest from sources |
+| `/sources/{id}/health` | GET | Per-source health ping |
+| `/compile/run` | POST | Run compile pipeline (no body / source_id / source_id+entry_id) |
+| `/wiki/compile` | POST | Legacy alias for /compile/run |
+| `/wiki/lint` | POST | Trigger Linter agent |
+| `/wiki/ingest` | POST | Ingest URL or text into context/raw/ |
+| `/context/reload` | POST | Re-index context files |
+| `/sync/pull` | POST | Pull remote context/ from GitHub |
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | Yes | OpenAI API key |
-| `EXA_API_KEY` | No | Exa for web research |
-| `DOCUMENTS_DIR` | No | Documents directory (default: `./documents`, `/documents` in Docker) |
-| `DB_HOST` | No | Database host (default: localhost) |
-| `DB_PORT` | No | Database port (default: 5432) |
-| `DB_USER` | No | Database user (default: ai) |
-| `DB_PASS` | No | Database password (default: ai) |
-| `DB_DATABASE` | No | Database name (default: ai) |
+| `EXA_API_KEY` | No | Web search for Navigator + Linter |
+| `PARALLEL_API_KEY` | No | Enables Researcher agent |
+| `GOOGLE_CLIENT_ID` | No | Gmail + Calendar (all 3 required) |
+| `GOOGLE_CLIENT_SECRET` | No | Gmail + Calendar |
+| `GOOGLE_PROJECT_ID` | No | Gmail + Calendar |
+| `GOOGLE_DRIVE_FOLDER_IDS` | No | Comma-separated. Enables GoogleDriveSource. |
+| `SLACK_TOKEN` | No | Slack bot token |
+| `SLACK_SIGNING_SECRET` | No | Slack event verification |
+| `SLACK_CHANNEL_ALLOWLIST` | No | Comma-separated channel IDs (empty = allow all) |
+| `GITHUB_ACCESS_TOKEN` | No | Git sync (both required) |
+| `SCOUT_REPO_URL` | No | Git sync repo URL |
+| `SCOUT_CONTEXT_DIR` | No | Context directory (default: `./context`) |
+| `SCOUT_RAW_DIR` | No | Override raw intake dir |
+| `SCOUT_COMPILED_DIR` | No | Override compiled wiki dir |
+| `SCOUT_WORKSPACE_ID` | No | Workspace scoping (default: `default`) |
+| `SCOUT_COMPILE_MODEL` | No | Model id for the compile runner (default: `gpt-5.4`) |
+| `DOCUMENTS_DIR` | No | Documents directory (default: `./documents`) |
+| `DB_HOST/PORT/USER/PASS/DATABASE` | No | PostgreSQL config |
+| `RUNTIME_ENV` | No | `dev` for hot reload |
 
 ## Conventions
 
-### Agent Pattern
+### Source
 
-```python
-from agno.agent import Agent
-from agno.models.openai import OpenAIResponses
-from db import get_postgres_db
-
-agent_db = get_postgres_db()
-
-my_agent = Agent(
-    id="my-agent",
-    name="My Agent",
-    model=OpenAIResponses(id="gpt-5.2"),
-    db=agent_db,
-    instructions="...",
-    add_datetime_to_context=True,
-    add_history_to_context=True,
-    read_chat_history=True,
-    num_history_runs=5,
-    markdown=True,
-)
-```
+Every external store is a `Source`. Implementations live in `scout/sources/`. Capabilities (`LIST`, `READ`, `METADATA`, `FIND_LEXICAL`, `FIND_NATIVE`, `FIND_SEMANTIC`) are declared per source so callers can dispatch correctly.
 
 ### Database
 
 - Use `get_postgres_db()` from `db` module
 - Use `create_knowledge()` for Knowledge bases with PgVector hybrid search
+- Use `get_sql_engine()` for SQL tools with `scout` schema
 - Knowledge bases use `text-embedding-3-small` embedder
+- `db/migrations.py` runs at startup; safe to rerun
 
 ### Imports
 
 ```python
-from db import db_url, get_postgres_db, create_knowledge
-from scout import scout, scout_knowledge, scout_learnings
-from scout.paths import DOCUMENTS_DIR
+from db import db_url, get_postgres_db, create_knowledge, get_sql_engine, SCOUT_SCHEMA
+from scout import scout
+from scout.agents.settings import scout_knowledge, scout_learnings
+from scout.config import SCOUT_CONTEXT_DIR, SCOUT_RAW_DIR, SCOUT_COMPILED_DIR, WORKSPACE_ID
+from scout.sources import get_sources, get_source
+from scout.manifest import get_manifest, reload_manifest
+from scout.compile import compile_all, compile_source, compile_entry
 ```

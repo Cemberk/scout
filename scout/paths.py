@@ -1,20 +1,10 @@
-"""Path constants."""
-
 from os import getenv
 from pathlib import Path
 
-# Document directory resolution:
-#   1. DOCUMENTS_DIR environment variable
-#   2. ./documents fallback (local development)
-_env_dir = getenv("DOCUMENTS_DIR")
-if _env_dir:
-    DOCUMENTS_DIR = Path(_env_dir)
-else:
-    DOCUMENTS_DIR = Path(__file__).resolve().parent.parent / "documents"
+CONTEXT_DIR = Path(__file__).parent.parent / "context"
+DOCUMENTS_DIR = Path(getenv("DOCUMENTS_DIR", str(Path(__file__).parent.parent / "documents")))
 
-# Scout package paths
-SCOUT_DIR = Path(__file__).parent
-KNOWLEDGE_DIR = SCOUT_DIR / "knowledge"
-SOURCES_DIR = KNOWLEDGE_DIR / "sources"
-ROUTING_DIR = KNOWLEDGE_DIR / "routing"
-PATTERNS_DIR = KNOWLEDGE_DIR / "patterns"
+# v3 layout — raw is user-writable intake, compiled is the agent-writable wiki
+CONTEXT_RAW_DIR = CONTEXT_DIR / "raw"
+CONTEXT_COMPILED_DIR = CONTEXT_DIR / "compiled"
+CONTEXT_VOICE_DIR = CONTEXT_DIR / "voice"
