@@ -21,6 +21,9 @@ from functools import lru_cache
 
 from scout.config import (
     DRIVE_SOURCE_ENABLED,
+    GITHUB_READ_TOKEN,
+    GITHUB_REPOS,
+    GITHUB_SOURCE_ENABLED,
     GOOGLE_DRIVE_FOLDER_IDS,
     SCOUT_COMPILED_DIR,
     SCOUT_RAW_DIR,
@@ -30,6 +33,7 @@ from scout.config import (
 )
 from scout.sources.base import Source
 from scout.sources.drive import GoogleDriveSource
+from scout.sources.github import GitHubSource
 from scout.sources.local_folder import LocalFolderSource
 from scout.sources.slack import SlackSource
 
@@ -79,6 +83,18 @@ def get_sources() -> tuple[Source, ...]:
             )
         )
 
+    if GITHUB_SOURCE_ENABLED:
+        sources.append(
+            GitHubSource(
+                repos=GITHUB_REPOS,
+                token=GITHUB_READ_TOKEN,
+                id="github",
+                name="GitHub",
+                compile=False,
+                live_read=True,
+            )
+        )
+
     return tuple(sources)
 
 
@@ -95,6 +111,7 @@ def get_source(source_id: str) -> Source | None:
 
 
 __all__ = [
+    "GitHubSource",
     "GoogleDriveSource",
     "LocalFolderSource",
     "SlackSource",

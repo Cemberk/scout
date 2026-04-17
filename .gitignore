@@ -62,5 +62,8 @@ tmp
 .claude
 .conductor
 
+# GitHubSource-owned local clone cache (spec §4.4)
+.scout-cache/
+
 # Optional: local PyPI creds (uncomment if you ever create it)
 # .pypirc
