@@ -26,18 +26,25 @@ DDL = [
     f"CREATE SCHEMA IF NOT EXISTS {SCOUT_SCHEMA}",
     f"""
     CREATE TABLE IF NOT EXISTS {SCOUT_SCHEMA}.scout_compiled (
-        id              SERIAL PRIMARY KEY,
-        source_id       TEXT NOT NULL,
-        entry_id        TEXT NOT NULL,
-        source_hash     TEXT NOT NULL,
-        wiki_path       TEXT NOT NULL,
-        compiled_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        compiled_by     TEXT NOT NULL DEFAULT 'scout-compiler-v3',
-        user_edited     BOOLEAN NOT NULL DEFAULT FALSE,
-        workspace_id    TEXT NOT NULL DEFAULT 'default',
+        id                      SERIAL PRIMARY KEY,
+        source_id               TEXT NOT NULL,
+        entry_id                TEXT NOT NULL,
+        source_hash             TEXT NOT NULL,
+        compiler_output_hash    TEXT NOT NULL DEFAULT '',
+        wiki_path               TEXT NOT NULL,
+        compiled_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        compiled_by             TEXT NOT NULL DEFAULT 'scout-compiler-v3',
+        user_edited             BOOLEAN NOT NULL DEFAULT FALSE,
+        needs_split             BOOLEAN NOT NULL DEFAULT FALSE,
+        workspace_id            TEXT NOT NULL DEFAULT 'default',
         UNIQUE (source_id, entry_id, workspace_id)
     )
     """,
+    # Backfill for pre-spec installs.
+    f"ALTER TABLE {SCOUT_SCHEMA}.scout_compiled "
+    f"ADD COLUMN IF NOT EXISTS compiler_output_hash TEXT NOT NULL DEFAULT ''",
+    f"ALTER TABLE {SCOUT_SCHEMA}.scout_compiled "
+    f"ADD COLUMN IF NOT EXISTS needs_split BOOLEAN NOT NULL DEFAULT FALSE",
     f"""
     CREATE INDEX IF NOT EXISTS idx_scout_compiled_lookup
         ON {SCOUT_SCHEMA}.scout_compiled (source_id, entry_id)

@@ -40,6 +40,13 @@ class CompileRecord:
     compiled_at: str
     compiled_by: str
     user_edited: bool
+    # Second user-edit-protection signal: sha256 of the full article file
+    # the Compiler last wrote. If disk hash != this, the file has been
+    # touched since compile — we write a sibling rather than overwrite.
+    compiler_output_hash: str = ""
+    # Set by the runner when raw content exceeds the §5 size threshold.
+    # Linter surfaces these for the out-of-scope split work.
+    needs_split: bool = False
     workspace_id: str = WORKSPACE_ID
 
 
@@ -47,8 +54,9 @@ def get_record(source_id: str, entry_id: str, workspace_id: str = WORKSPACE_ID) 
     with _engine_for_state().connect() as conn:
         row = conn.execute(
             text(
-                f"""SELECT source_id, entry_id, source_hash, wiki_path, compiled_at,
-                          compiled_by, user_edited, workspace_id
+                f"""SELECT source_id, entry_id, source_hash, compiler_output_hash,
+                          wiki_path, compiled_at, compiled_by, user_edited,
+                          needs_split, workspace_id
                    FROM {_TABLE}
                    WHERE source_id = :sid AND entry_id = :eid AND workspace_id = :wid"""
             ),
@@ -60,11 +68,13 @@ def get_record(source_id: str, entry_id: str, workspace_id: str = WORKSPACE_ID) 
         source_id=row[0],
         entry_id=row[1],
         source_hash=row[2],
-        wiki_path=row[3],
-        compiled_at=row[4].isoformat() if row[4] else "",
-        compiled_by=row[5],
-        user_edited=bool(row[6]),
-        workspace_id=row[7],
+        compiler_output_hash=row[3] or "",
+        wiki_path=row[4],
+        compiled_at=row[5].isoformat() if row[5] else "",
+        compiled_by=row[6],
+        user_edited=bool(row[7]),
+        needs_split=bool(row[8]),
+        workspace_id=row[9],
     )
 
 
@@ -73,23 +83,29 @@ def upsert_record(record: CompileRecord) -> None:
         conn.execute(
             text(
                 f"""INSERT INTO {_TABLE}
-                       (source_id, entry_id, source_hash, wiki_path,
-                        compiled_at, compiled_by, user_edited, workspace_id)
-                   VALUES (:sid, :eid, :hash, :wpath, NOW(), :by, :edited, :wid)
+                       (source_id, entry_id, source_hash, compiler_output_hash,
+                        wiki_path, compiled_at, compiled_by, user_edited,
+                        needs_split, workspace_id)
+                   VALUES (:sid, :eid, :hash, :ohash, :wpath, NOW(), :by,
+                           :edited, :split, :wid)
                    ON CONFLICT (source_id, entry_id, workspace_id) DO UPDATE
-                       SET source_hash = EXCLUDED.source_hash,
-                           wiki_path   = EXCLUDED.wiki_path,
-                           compiled_at = EXCLUDED.compiled_at,
-                           compiled_by = EXCLUDED.compiled_by,
-                           user_edited = EXCLUDED.user_edited"""
+                       SET source_hash          = EXCLUDED.source_hash,
+                           compiler_output_hash = EXCLUDED.compiler_output_hash,
+                           wiki_path            = EXCLUDED.wiki_path,
+                           compiled_at          = EXCLUDED.compiled_at,
+                           compiled_by          = EXCLUDED.compiled_by,
+                           user_edited          = EXCLUDED.user_edited,
+                           needs_split          = EXCLUDED.needs_split"""
             ),
             {
                 "sid": record.source_id,
                 "eid": record.entry_id,
                 "hash": record.source_hash,
+                "ohash": record.compiler_output_hash,
                 "wpath": record.wiki_path,
                 "by": record.compiled_by,
                 "edited": record.user_edited,
+                "split": record.needs_split,
                 "wid": record.workspace_id,
             },
         )
@@ -99,8 +115,9 @@ def list_records_for_source(source_id: str, workspace_id: str = WORKSPACE_ID) ->
     with _engine_for_state().connect() as conn:
         rows = conn.execute(
             text(
-                f"""SELECT source_id, entry_id, source_hash, wiki_path, compiled_at,
-                          compiled_by, user_edited, workspace_id
+                f"""SELECT source_id, entry_id, source_hash, compiler_output_hash,
+                          wiki_path, compiled_at, compiled_by, user_edited,
+                          needs_split, workspace_id
                    FROM {_TABLE}
                    WHERE source_id = :sid AND workspace_id = :wid"""
             ),
@@ -111,11 +128,13 @@ def list_records_for_source(source_id: str, workspace_id: str = WORKSPACE_ID) ->
             source_id=r[0],
             entry_id=r[1],
             source_hash=r[2],
-            wiki_path=r[3],
-            compiled_at=r[4].isoformat() if r[4] else "",
-            compiled_by=r[5],
-            user_edited=bool(r[6]),
-            workspace_id=r[7],
+            compiler_output_hash=r[3] or "",
+            wiki_path=r[4],
+            compiled_at=r[5].isoformat() if r[5] else "",
+            compiled_by=r[6],
+            user_edited=bool(r[7]),
+            needs_split=bool(r[8]),
+            workspace_id=r[9],
         )
         for r in rows
     ]
