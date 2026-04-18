@@ -16,7 +16,8 @@ Repos are refreshed with `git fetch --depth=1` opportunistically, debounced.
 - `find(kind=NATIVE)` → GitHub REST `search/code`. Used for ad-hoc
   public repos not in the configured list.
 - `health` → `gh api /rate_limit` via httpx. `UNCONFIGURED` if no
-  `GITHUB_READ_TOKEN`.
+  `GITHUB_REPOS` — token is optional (public repos work anonymously
+  at a lower rate ceiling; REST `search/code` stays off without it).
 - capabilities: LIST, READ, METADATA, FIND_LEXICAL, FIND_NATIVE.
 
 Read-only everywhere — no push, no PR tools exposed.
@@ -221,16 +222,15 @@ class GitHubSource:
     def health(self) -> HealthStatus:
         if not self.repos:
             return HealthStatus(HealthState.UNCONFIGURED, "GITHUB_REPOS not set")
-        if not self.token:
-            return HealthStatus(HealthState.UNCONFIGURED, "GITHUB_READ_TOKEN not set")
         try:
             import httpx  # type: ignore[import-not-found]
         except ImportError:
             return HealthStatus(HealthState.UNCONFIGURED, "httpx not installed")
+        headers = {"Authorization": f"Bearer {self.token}"} if self.token else {}
         try:
             resp = httpx.get(
                 "https://api.github.com/rate_limit",
-                headers={"Authorization": f"Bearer {self.token}"},
+                headers=headers,
                 timeout=10.0,
             )
         except Exception as e:
@@ -239,7 +239,8 @@ class GitHubSource:
             return HealthStatus(HealthState.DEGRADED, f"status {resp.status_code}")
         data = resp.json().get("resources", {}).get("core", {})
         remaining = data.get("remaining", "?")
-        return HealthStatus(HealthState.CONNECTED, f"{len(self.repos)} repo(s), rate={remaining}")
+        mode = "authed" if self.token else "anon"
+        return HealthStatus(HealthState.CONNECTED, f"{len(self.repos)} repo(s), {mode}, rate={remaining}")
 
     def capabilities(self) -> set[Capability]:
         return {

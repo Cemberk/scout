@@ -50,13 +50,14 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     _run_migrations()
     _build_initial_manifest()
     _register_schedules()
+    _kick_initial_compile()
     yield
 
 
 # ---------------------------------------------------------------------------
 # Create AgentOS
 # ---------------------------------------------------------------------------
-agents: list = [a for a in [navigator, researcher, compiler] if a is not None]
+agents: list = [navigator, researcher, compiler]
 
 agent_os = AgentOS(
     name="Scout",
@@ -153,6 +154,36 @@ def _build_initial_manifest() -> None:
         print(f"[scout] Manifest build failed: {e}")
 
 
+def _kick_initial_compile() -> None:
+    """Fire a one-shot compile in a background thread at startup.
+
+    The hourly `wiki-compile` cron only runs on the hour, so a user who
+    does `docker compose up` at 10:05 would otherwise wait until 11:00
+    for the first wiki to appear. We run one compile pass immediately
+    in a daemon thread so the wiki is populated within ~30 seconds of
+    boot — Demo 3 ("give Scout your context") then works without
+    anyone having to run `docker exec ... compile` by hand.
+
+    Daemon thread so a slow compile doesn't block shutdown. We swallow
+    exceptions; if OPENAI_API_KEY is bad, the hourly cron surfaces the
+    failure on its own schedule.
+    """
+    import threading
+
+    def _run() -> None:
+        try:
+            from scout.agents.settings import scout_knowledge
+            from scout.compile import compile_all
+
+            results = compile_all(knowledge=scout_knowledge)
+            counts = {sid: len(r) for sid, r in results.items()}
+            print(f"[scout] Initial compile: {counts}")
+        except Exception as e:
+            print(f"[scout] Initial compile failed: {e}")
+
+    threading.Thread(target=_run, name="scout-initial-compile", daemon=True).start()
+
+
 def _register_schedules() -> None:
     """Register all scheduled tasks (idempotent — safe to run on every startup)."""
     from agno.scheduler import ScheduleManager
@@ -178,16 +209,18 @@ def _register_schedules() -> None:
         if_exists="update",
     )
 
-    # Every 10 min: hits /compile/run directly (no team round-trip). The
+    # Hourly: hits /compile/run directly (no team round-trip). The
     # Compiler runs lint checks as part of each full compile pass, so there
-    # is no separate wiki-lint schedule.
+    # is no separate wiki-lint schedule. Users can always run
+    # `docker exec -it scout-api python -m scout compile` for an
+    # immediate recompile.
     mgr.create(
         name="wiki-compile",
-        cron="*/10 * * * *",
+        cron="0 * * * *",
         endpoint="/compile/run",
         payload={"force": False},
         timezone="UTC",
-        description="Iterate compile-on sources every 10 minutes (includes lint pass)",
+        description="Iterate compile-on sources every hour (includes lint pass)",
         if_exists="update",
     )
 

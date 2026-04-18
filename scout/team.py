@@ -6,8 +6,9 @@ Three specialists coordinated by a Leader:
 
 - Navigator:  reads the wiki + live sources, handles SQL, files, email,
               calendar, web search
-- Researcher: gathers sources from the web, ingests to raw/ (conditional
-              on PARALLEL_API_KEY)
+- Researcher: gathers sources from the web, ingests to raw/. Uses
+              Parallel if PARALLEL_API_KEY is set, otherwise Exa's
+              keyless MCP endpoint — always present.
 - Compiler:   reads raw/, compiles wiki articles, runs lint checks
               (broken backlinks, stale articles, needs_split, user-edit
               conflicts) at the end of every compile pass
@@ -104,15 +105,6 @@ include a summary of your behavior in a code block.
    response for the user.\
 """
 
-RESEARCHER_DISABLED_INSTRUCTIONS = """
-
-## Web Research — Researcher Not Configured
-
-Navigator has `parallel_search` + `parallel_extract` via ParallelTools.
-For dedicated ingest-into-raw/ workflows, set `PARALLEL_API_KEY` and
-restart — the Researcher agent activates automatically.\
-"""
-
 SLACK_LEADER_INSTRUCTIONS = """
 
 ## Slack
@@ -142,8 +134,6 @@ if SLACK_TOKEN:
     instructions += SLACK_LEADER_INSTRUCTIONS
 else:
     instructions += SLACK_DISABLED_LEADER_INSTRUCTIONS
-if not researcher:
-    instructions += RESEARCHER_DISABLED_INSTRUCTIONS
 
 # Prefix the rendered manifest so the Leader sees ground truth on what
 # sources are reachable before it routes.
@@ -152,7 +142,7 @@ instructions = build_leader_instructions(instructions)
 # ---------------------------------------------------------------------------
 # Members
 # ---------------------------------------------------------------------------
-members: list[Agent | Team] = [m for m in [navigator, researcher, compiler] if m is not None]
+members: list[Agent | Team] = [navigator, researcher, compiler]
 
 # ---------------------------------------------------------------------------
 # Create Team

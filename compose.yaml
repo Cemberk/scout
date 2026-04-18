@@ -38,7 +38,9 @@ services:
       WAIT_FOR_DB: "True"
       PRINT_ENV_ON_LOAD: "True"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Web research — Parallel (premium) or Exa MCP (keyless fallback)
       PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
+      EXA_API_KEY: ${EXA_API_KEY:-}
       # Slack
       SLACK_TOKEN: ${SLACK_TOKEN:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
@@ -47,8 +49,8 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID:-}
       GOOGLE_DRIVE_FOLDER_IDS: ${GOOGLE_DRIVE_FOLDER_IDS:-}
-      # GitHubSource (live-read code search)
-      GITHUB_REPOS: ${GITHUB_REPOS:-}
+      # GitHubSource — default to agno-agi/scout for out-of-the-box demo
+      GITHUB_REPOS: ${GITHUB_REPOS:-agno-agi/scout}
       GITHUB_READ_TOKEN: ${GITHUB_READ_TOKEN:-}
       # S3Source (compile-only)
       S3_BUCKETS: ${S3_BUCKETS:-}

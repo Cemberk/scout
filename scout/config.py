@@ -11,7 +11,17 @@ from scout.paths import (
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
+# Web research — Parallel is the premium backend, Exa MCP is the keyless
+# fallback (no signup required). We always have one of the two, so the
+# Researcher agent can always be instantiated and Demo 1 ("ask Scout
+# about anything") works with only OPENAI_API_KEY set.
 PARALLEL_API_KEY = getenv("PARALLEL_API_KEY", "")
+EXA_API_KEY = getenv("EXA_API_KEY", "")
+EXA_MCP_URL = (
+    f"https://mcp.exa.ai/mcp?exaApiKey={EXA_API_KEY}&tools=web_search_exa,web_fetch_exa"
+    if EXA_API_KEY
+    else "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa"
+)
 
 SLACK_TOKEN = getenv("SLACK_TOKEN", "")
 SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET", "")
@@ -37,9 +47,12 @@ SCOUT_VOICE_DIR = Path(getenv("SCOUT_VOICE_DIR", str(SCOUT_CONTEXT_DIR / "voice"
 WORKSPACE_ID = getenv("SCOUT_WORKSPACE_ID", "default")
 
 # GitHubSource — live-read over locally cloned repos + ad-hoc search_code.
+# Public repos work without a token (anonymous clone + lower API rate).
+# GITHUB_READ_TOKEN is optional — set it to raise the rate ceiling or
+# access private repos.
 GITHUB_READ_TOKEN = getenv("GITHUB_READ_TOKEN", "")
 GITHUB_REPOS = tuple(r.strip() for r in getenv("GITHUB_REPOS", "").split(",") if r.strip())
-GITHUB_SOURCE_ENABLED = bool(GITHUB_REPOS and GITHUB_READ_TOKEN)
+GITHUB_SOURCE_ENABLED = bool(GITHUB_REPOS)
 
 # S3Source — compile-only in this build. S3_BUCKETS entries are
 # `bucket[:prefix]`. One Source instance is registered per entry.
@@ -60,6 +73,8 @@ __all__ = [
     "CONTEXT_RAW_DIR",
     "CONTEXT_VOICE_DIR",
     "DRIVE_SOURCE_ENABLED",
+    "EXA_API_KEY",
+    "EXA_MCP_URL",
     "GITHUB_READ_TOKEN",
     "GITHUB_REPOS",
     "GITHUB_SOURCE_ENABLED",

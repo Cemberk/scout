@@ -16,12 +16,14 @@ from agno.knowledge import Knowledge
 from agno.tools.file import FileTools
 from agno.tools.sql import SQLTools
 
-# ParallelTools is imported lazily inside each builder — it pulls in the
-# optional `parallel-web` package. Lazy import keeps `_smoke_gating` and
-# other entry points usable even when parallel-web isn't installed.
+# ParallelTools / MCPTools are imported lazily inside the builders —
+# ParallelTools pulls in the optional `parallel-web` package, and
+# MCPTools opens a network handshake we don't want on import.
 from db import SCOUT_SCHEMA, get_sql_engine
 from scout.config import (
+    EXA_MCP_URL,
     GOOGLE_INTEGRATION_ENABLED,
+    PARALLEL_API_KEY,
     SCOUT_CONTEXT_DIR,
     SCOUT_RAW_DIR,
 )
@@ -30,6 +32,24 @@ from scout.tools.ingest import create_ingest_tools
 from scout.tools.knowledge import create_update_knowledge
 from scout.tools.manifest_tools import create_manifest_tool
 from scout.tools.sources import create_source_tools
+
+
+def _web_search_tools() -> list:
+    """Web search backend selection.
+
+    Parallel is the premium path (better extraction, higher rate limits)
+    when PARALLEL_API_KEY is set. Otherwise we fall back to Exa's public
+    MCP endpoint, which works keyless — this is what lets a freshly-cloned
+    Scout with only OPENAI_API_KEY answer "tell me about X" questions.
+    """
+    if PARALLEL_API_KEY:
+        from agno.tools.parallel import ParallelTools  # lazy — optional dep
+
+        return [ParallelTools()]
+
+    from agno.tools.mcp import MCPTools  # lazy — opens network on init
+
+    return [MCPTools(url=EXA_MCP_URL)]
 
 
 def build_navigator_tools(knowledge: Knowledge) -> list:
@@ -44,8 +64,6 @@ def build_navigator_tools(knowledge: Knowledge) -> list:
     on `context/` paths are the refusal path — Navigator refuses with
     no tool call rather than silently editing.
     """
-    from scout.config import PARALLEL_API_KEY
-
     tools: list = [
         SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
         FileTools(
@@ -59,12 +77,8 @@ def build_navigator_tools(knowledge: Knowledge) -> list:
         create_update_knowledge(knowledge),
         create_manifest_tool("navigator"),
         *create_source_tools("navigator"),
+        *_web_search_tools(),
     ]
-
-    if PARALLEL_API_KEY:
-        from agno.tools.parallel import ParallelTools  # lazy — optional dep
-
-        tools.append(ParallelTools())
 
     if GOOGLE_INTEGRATION_ENABLED:
         # Spec §9 governance: Gmail read-only + drafts, Calendar read-only.
@@ -87,13 +101,16 @@ def build_navigator_tools(knowledge: Knowledge) -> list:
 
 
 def build_researcher_tools(knowledge: Knowledge) -> list:
-    """Tools for the Researcher — Parallel search/extract + ingest to context/raw/."""
-    from agno.tools.parallel import ParallelTools  # lazy — optional dep
+    """Tools for the Researcher — web search/extract + ingest to context/raw/.
 
+    Uses Parallel if PARALLEL_API_KEY is set, Exa MCP otherwise. The
+    Researcher is always instantiated; the backend choice is transparent
+    to its instructions.
+    """
     ingest_url, ingest_text, _read_manifest_legacy, _ = create_ingest_tools(SCOUT_RAW_DIR)
     return [
         FileTools(base_dir=SCOUT_CONTEXT_DIR, enable_delete_file=False),
-        ParallelTools(),
+        *_web_search_tools(),
         create_update_knowledge(knowledge),
         ingest_url,
         ingest_text,

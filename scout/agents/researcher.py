@@ -5,12 +5,12 @@ Researcher Agent
 Gathers source material from the web and local files, converts to
 clean markdown, saves to raw/ with YAML frontmatter.
 
-Conditional — only instantiated when PARALLEL_API_KEY is set.
-Uses Parallel for web search (parallel_search) and content
-extraction (parallel_extract).
+Always instantiated. Uses Parallel for search + extract when
+PARALLEL_API_KEY is set; otherwise falls back to Exa's public MCP
+endpoint (keyless, no signup). Either backend exposes a web-search
+function and a URL-content function — the Researcher is instructed
+against that capability shape, not against specific tool names.
 """
-
-from os import getenv
 
 from agno.agent import Agent
 from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
@@ -24,13 +24,22 @@ RESEARCHER_INSTRUCTIONS = """\
 You are the Researcher, a specialist in gathering and ingesting source material.
 
 ## Your Job
-1. Search the web using `parallel_search` to find relevant sources.
-2. Extract full content from URLs using `parallel_extract`.
-3. Save to context/raw/ using `ingest_text` (or `ingest_url` for quick URL
-   ingestion via Parallel). The Compiler will pick up new files on its
-   next run and produce wiki articles — do NOT try to write to
-   context/compiled/ yourself.
-4. Optionally insert a `Source:` row into scout_knowledge so future
+1. Search the web to find relevant sources. You have a web-search tool
+   (`parallel_search` if Parallel is configured, otherwise
+   `web_search_exa` from the Exa MCP server). Either one takes a query
+   and returns ranked results.
+2. Read the best URLs using your URL-content tool (`parallel_extract`
+   or `web_fetch_exa` — whichever you have). Prefer the first one that
+   returns useful text.
+3. Save the retrieved content to context/raw/ using `ingest_text` with
+   the fetched markdown as the `content` argument. This works no matter
+   which backend you used for extraction — the Compiler will pick up
+   the new file on its next run and produce a wiki article. Do NOT try
+   to write to context/compiled/ yourself.
+4. `ingest_url` is a one-shot "fetch + save" convenience that relies on
+   Parallel's extract API. If Parallel is configured, prefer it for
+   simple URL ingestion. Otherwise use `web_fetch_exa` + `ingest_text`.
+5. Optionally insert a `Source:` row into scout_knowledge so future
    queries know that a topic was ingested. Do NOT use a `Wiki:` prefix —
    that one belongs to the Compiler.
 
@@ -42,10 +51,11 @@ You are the Researcher, a specialist in gathering and ingesting source material.
 - For multi-page sources, save key sections — the Compiler will summarize.
 
 ## Search Strategy
-- Use `parallel_search` with clear objectives.
-- Use `parallel_extract` for the best hits.
+- Run a clear, objective-shaped query.
+- Read the top results; re-query if the first page doesn't look
+  on-topic.
 - Prefer official documentation over blog posts.
-- Always include the source URL.
+- Always include the source URL in whatever you save.
 
 ## What You Do NOT Do
 - Do not compile wiki articles — that's the Compiler's job.
@@ -54,24 +64,21 @@ You are the Researcher, a specialist in gathering and ingesting source material.
 - Do not answer user questions directly — you gather material, Navigator answers.\
 """
 
-researcher: Agent | None = None
-
-if getenv("PARALLEL_API_KEY"):
-    researcher = Agent(
-        id="researcher",
-        name="Researcher",
-        role="Gathers source material from the web, converts to markdown, saves to raw/",
-        model=OpenAIResponses(id="gpt-5.4"),
-        db=agent_db,
-        instructions=build_researcher_instructions(RESEARCHER_INSTRUCTIONS),
-        knowledge=scout_knowledge,
-        search_knowledge=True,
-        learning=LearningMachine(
-            knowledge=scout_learnings,
-            learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
-        ),
-        add_learnings_to_context=True,
-        tools=build_researcher_tools(scout_knowledge),
-        add_datetime_to_context=True,
-        markdown=True,
-    )
+researcher: Agent = Agent(
+    id="researcher",
+    name="Researcher",
+    role="Gathers source material from the web, converts to markdown, saves to raw/",
+    model=OpenAIResponses(id="gpt-5.4"),
+    db=agent_db,
+    instructions=build_researcher_instructions(RESEARCHER_INSTRUCTIONS),
+    knowledge=scout_knowledge,
+    search_knowledge=True,
+    learning=LearningMachine(
+        knowledge=scout_learnings,
+        learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
+    ),
+    add_learnings_to_context=True,
+    tools=build_researcher_tools(scout_knowledge),
+    add_datetime_to_context=True,
+    markdown=True,
+)

@@ -9,7 +9,7 @@ Scout v3 is an **enterprise context agent** — a team of specialists that navig
 ```
 Scout (Team Leader — coordinate mode)
 ├── Navigator    — primary user-facing agent. Reads compiled/ + live sources via Source dispatch.
-├── Researcher   — Parallel web search + ingest into context/raw/ (conditional on PARALLEL_API_KEY)
+├── Researcher   — web search + ingest into context/raw/. Parallel if PARALLEL_API_KEY; otherwise Exa MCP (keyless)
 ├── Compiler     — iterates compile-on sources, writes Obsidian-compat markdown to context/compiled/,
 │                   and runs lint checks (broken backlinks, stale articles, needs_split) after every pass
 └── [leader responds directly for greetings/simple questions]
@@ -158,8 +158,8 @@ User Question → Classify → Recall (Manifest+Knowledge+Learnings) → Read (S
 
 | Agent | Tools |
 |-------|-------|
-| Navigator | SQLTools, FileTools (context), ParallelTools (if configured), GmailTools, CalendarTools, update_knowledge, read_manifest, source_* |
-| Researcher | FileTools, ParallelTools, update_knowledge, ingest_url, ingest_text, read_manifest, source_* |
+| Navigator | SQLTools, FileTools (context), web search (ParallelTools or Exa MCP), GmailTools, CalendarTools, update_knowledge, read_manifest, source_* |
+| Researcher | FileTools, web search (ParallelTools or Exa MCP), update_knowledge, ingest_url, ingest_text, read_manifest, source_* |
 | Compiler | FileTools (context), update_knowledge, read_manifest, source_* (compile-only), compile_* — also runs the lint pass after each compile |
 
 All tool returns are passed through the redactor in `scout.tools.redactor` — secret-shaped strings are stripped before they reach the model.
@@ -169,7 +169,7 @@ All tool returns are passed through the redactor in `scout.tools.redactor` — s
 | Task | Schedule | Endpoint |
 |------|----------|----------|
 | Daily Briefing | Weekdays 8 AM | `/teams/scout/runs` |
-| **Wiki Compile** | **Every 10 min** | `/compile/run` (lint runs inside each pass) |
+| **Wiki Compile** | **Hourly on :00** | `/compile/run` (lint runs inside each pass). A one-shot compile also fires at container boot so the wiki is populated within ~30s of startup. |
 | **Source Health Check** | **Every 15 min** | `/manifest/reload` |
 | Inbox Digest | Weekdays 12 PM | `/teams/scout/runs` |
 | Learning Summary | Monday 10 AM | `/teams/scout/runs` |
@@ -200,7 +200,8 @@ Knowledge/Learnings PgVector path, so one key covers everything.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent + embeddings for Knowledge |
-| `PARALLEL_API_KEY` | No | Web search + extraction — used by Navigator + Researcher. Without it, Researcher is disabled and Navigator has no web search. |
+| `PARALLEL_API_KEY` | No | Premium web search + extraction. When unset, Scout falls back to Exa's public MCP endpoint (keyless) — Navigator and Researcher always have a web-search backend. |
+| `EXA_API_KEY` | No | Optional. Raises rate limits on the Exa MCP fallback; not required to use it. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Gmail + Calendar + Drive (all three required together) |
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | Comma-separated — enables `GoogleDriveSource` |
 | `SLACK_TOKEN` | No | Enables Slack Interface + SlackTools + `SlackSource` |
