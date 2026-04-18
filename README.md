@@ -1,289 +1,181 @@
 # Scout
 
-Scout is an **enterprise context agent**. It navigates your company's knowledge through a uniform `Source` protocol: compile dumb stores (local folders, S3 buckets) into a curated wiki; live-read smart sources (Drive, Slack, GitHub) on demand.
+Scout is a context agent that answers questions by navigating your team's knowledge in Slack, Drive, GitHub, and local docs.
 
-Feed it your docs — policies, runbooks, architecture, meeting notes, reports. Scout organizes everything into two layers: a compiled wiki for text-heavy knowledge (concepts, summaries, cross-references) in `context/compiled/`, and a Postgres `scout_knowledge` index that acts as the metadata router across every source. A learning loop in `scout_learnings` compounds every interaction.
+> **Context Agent:** An agent that navigates sources to assemble context on demand. Unlike retrieval pipelines that fetch chunks from a pre-built index, a Context Agent explores live sources (Slack, Drive, GitHub, docs) the same way a teammate would.
 
-Ask a question over Slack, the terminal, or the [AgentOS](https://os.agno.com) web UI. The Leader routes to one of three specialists (Navigator / Researcher / Compiler), each wired to only the tools it needs. The Navigator never reads raw sources — that's the Compiler's job.
+Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
 
-## Quick Start
+## Quick start
+
+> **Prerequisite:** Docker Desktop installed and running ([install guide](https://docs.docker.com/desktop/)).
 
 ```sh
+# Clone and configure
 git clone https://github.com/agno-agi/scout && cd scout
-cp example.env .env              # add OPENAI_API_KEY
+
+# Copy the example.env file and set your OpenAI API key
+cp example.env .env
+
+# Run Scout + Postgres
 docker compose up -d --build
 ```
 
-Confirm Scout is running:
+Scout is now running at `http://localhost:8000`.
+
+## Chat with Scout
+
+Scout is designed to live in Slack with your team. But to get started, we can chat with Scout via the web UI:
+
+1. Open [os.agno.com](https://os.agno.com) and log in
+2. Click **Add OS**, choose **Local**, enter **http://localhost:8000**, then **Connect**. The web UI is now connected to your Scout running locally on your machine.
+3. Click on one of the pre-configured prompts to take Scout for a spin.
+
+## Take Scout for a spin
+
+While Scout gets more useful with more context, it's designed to work out of the box. Walk through the three tiers:
+
+### 1. Ask Scout about anything
+
+Scout ships with a web researcher, so you can start asking questions immediately with no setup beyond your OpenAI key.
+
+> *Let's chat about Agno. Read the docs at https://docs.agno.com and tell me what it is.*
+
+The researcher navigates the web, reads the sources it finds, and answers with citations.
+
+### 2. Ask Scout about Scout
+
+Scout can navigate codebases, including its own.
+
+> *Let's chat about Scout. Navigate https://github.com/agno-agi/scout and explain how the compiler turns raw files into a wiki.*
+
+Scout reads its own source to answer. You learn what Scout is by watching Scout work.
+
+### 3. Give Scout your context
+
+Drop files into `context/raw/` and Scout will compile them into its wiki. But to start, let's use the sample document: `context/raw/offsite-notes.md`
+
+The compiler runs every hour. But to test the compiler, run it manually:
 
 ```sh
-curl -s http://localhost:8000/manifest | python -m json.tool | head -20
+docker exec -it scout-api python -m scout compile
 ```
 
-You should see `local:raw` + `local:wiki` with `status: connected`. That's a working Scout with nothing configured beyond the model key.
+Now ask Scout about your own documents.
 
-### Connect to the Web UI
+> *Summarize the key decisions from last week's engineering offsite.*
 
-1. Open [os.agno.com](https://os.agno.com) and login
-2. **Add OS → Local → `http://localhost:8000`**
-3. Click **Connect**
+## Why navigation over search
 
-## How It Works
+When you point a coding agent at a codebase, it navigates. It reads the directory structure, follows imports, checks dependencies, builds a map of where things live. The more it explores, the more accurate it gets.
 
-Scout is a team of five specialists coordinated by a Leader:
+Apply the same pattern to everything else a team knows, and you get a context agent.
 
-```
-Scout (Team Leader — coordinate mode)
-├── Navigator    — the workhorse: reads the compiled wiki + live sources,
-│                  handles SQL, files, email, calendar, web search
-├── Researcher   — gathers sources from the web, saves to context/raw/
-│                  (conditional on PARALLEL_API_KEY)
-└── Compiler     — iterates compile-on sources, writes Obsidian-compatible
-                   markdown to context/compiled/, and runs lint checks
-                   (broken backlinks, stale articles, needs_split) after
-                   every compile pass
-```
+The alternative is what most teams already tried: embed every document into a vector store, retrieve chunks at query time, hope the right ones come back. RAG was a breakthrough. It also flattened every source into one interface. Email, docs, Slack, code, all chunked and embedded and searched the same way.
 
-### The wiki-first rule
+Navigation keeps each source on its own terms. Slack is queried by channel and thread. GitHub is queried by grep and git history. Drive is queried by folder and filename. A SQL database is queried with SQL. Nothing gets flattened.
 
-Not every source compiles. Compile only makes sense for stores where the raw form has no good query surface and there's no user edit path that would fight the compiled mirror. **Compile dumb stores. Live-read smart sources.**
+For the full argument, read [Context Agents: Navigation over Search](https://agno.com/blog/context-agents).
 
-| Source | Behaviour | Why |
+## How it works
+
+Scout has two execution modes and a team of three specialists.
+
+### Compile vs live-read
+
+Every source Scout connects to is either compiled into a wiki or read live. The choice is per-source and depends on whether the source already has a good query interface.
+
+| Source | Mode | Why |
 |---|---|---|
-| `LocalFolderSource("./context/raw")` | **compile** → `context/compiled/` | Files have no query surface; wiki is where they become usable |
-| `LocalFolderSource("./context/compiled")` | **live-read**, auto-registered | The compile output — this is what Navigator reads |
-| `S3Source(bucket=...)` | **compile** → `context/compiled/` | Bucket is a dumb store |
-| `GoogleDriveSource(...)` | **live-read** | Drive search is excellent; compiling drifts, users can't edit back |
-| `SlackSource(...)` | **live-read** | Threads are the query surface. No meaningful place to "edit" a compiled summary. |
-| `GitHubSource(...)` | **live-read** | Grep + git history *is* the query surface. Compiling creates drift with no merge path. |
+| `./context/raw` (local folder) | compile | Raw files lack structure; compiling gives them one |
+| `./context/compiled` (local folder) | live-read | The compiled wiki itself |
+| S3 bucket | compile | Bucket listings are flat; compiling adds structure |
+| Google Drive | live-read | Drive search is already good |
+| Slack | live-read | Threads *are* the query surface |
+| GitHub | live-read | Grep and git history *are* the query surface |
 
-Every source carries two flags: `compile=True` makes it visible to the Compiler; `live_read=True` makes it visible to the Navigator. The Manifest (rebuilt at startup and every 15 min) enforces both at tool-call time: a Navigator-role `source_read("local:raw", ...)` raises `PermissionError` by contract.
+Compiled sources get turned into a cross-linked markdown wiki that lives in `context/compiled/`. Live sources get queried in place. No mirror, no drift.
 
-### Execution loop
+### The team
 
-Every non-greeting interaction:
+Three specialists coordinated by a Leader:
 
-1. **Classify** — intent + candidate sources from the Manifest.
-2. **Recall** — Manifest (free), `scout_knowledge` search, `scout_learnings` search, `context/compiled/index.md`.
-3. **Read** — dispatch via the `Source` protocol. Compile-backed content via `context/compiled/`; live sources via `list` / `read` / `find`.
-4. **Act** — synthesise; produce drafts only. No sends, no deletions outside `context/raw/`.
-5. **Learn** — write `Discovery:` (where the answer lived) and `Retrieval:` (what sequence worked).
+- **Navigator** answers the question. Reads the compiled wiki and live sources. Handles SQL, files, mail drafts, calendar, web search.
+- **Compiler** iterates over compile-mode sources, writes Obsidian-compatible markdown into `context/compiled/`, lints for broken backlinks and stale articles after each pass.
+- **Researcher** runs web search and URL extraction. Ingests new content into `context/raw/` for the Compiler to pick up.
 
-## Integrations
+Scout drafts, you send. Gmail send is disabled at the code level. Calendar is read-only. No deletes outside `context/raw/`.
 
-Scout boots with local sources on day one. Everything else activates when you add env.
+## Connect your sources
 
-<details>
-<summary><strong>Slack</strong> — receive @mentions + post to channels + search threads</summary>
+Scout ships with local folders on day one. Each row below activates when you add the env.
 
-Full setup guide in [docs/SLACK_CONNECT.md](docs/SLACK_CONNECT.md). Three surfaces, all conditional:
+| Integration | Env | What it does |
+|---|---|---|
+| **Gmail + Calendar + Drive** | `GOOGLE_*` ([setup](docs/GOOGLE_AUTH.md)) | Search mail, draft replies, read events, query Drive |
+| **Slack** | `SLACK_TOKEN` + `SLACK_SIGNING_SECRET` ([setup](docs/SLACK_CONNECT.md)) | @mention in channels, search threads, post |
+| **GitHub** | `GITHUB_REPOS` + `GITHUB_READ_TOKEN` | Clone and ripgrep repos for code questions |
+| **S3** | `S3_BUCKETS` + `AWS_*` | Compile PDFs and docs from buckets into the wiki |
+| **Parallel** | `PARALLEL_API_KEY` | Web search and URL extraction |
 
-- **Slack Interface** — inbound events. Requires `SLACK_TOKEN` + `SLACK_SIGNING_SECRET`.
-- **SlackTools** — Leader posts into channels. Requires `SLACK_TOKEN`.
-- **SlackSource** — live-read source for Navigator over threads (capabilities: `LIST`, `READ`, `METADATA`, `FIND_NATIVE`). Requires `SLACK_TOKEN`.
-
-Restrict which channels Scout responds to via `SLACK_CHANNEL_ALLOWLIST` (comma-separated channel IDs). Middleware in `app/main.py` drops events from any other channel.
-
-Each Slack thread maps to a session ID, so every thread gets its own context.
-
-</details>
-
-<details>
-<summary><strong>Gmail + Google Calendar + Google Drive</strong></summary>
-
-Full setup in [docs/GOOGLE_AUTH.md](docs/GOOGLE_AUTH.md). One OAuth flow, three services:
-
-- **Gmail** — search, read threads, create drafts. Send is disabled at the code level (`exclude_tools=['send_email','send_email_reply']`).
-- **Calendar** — read-only in this build. View events, find available slots. `exclude_tools=['create_event','update_event','delete_event']` + `allow_update=False` on scope.
-- **GoogleDriveSource** — live-read source with capabilities `LIST`, `READ`, `METADATA`, `FIND_NATIVE` (Drive's `fullText contains`). Scoped to `GOOGLE_DRIVE_FOLDER_IDS`. Workspace docs (Docs / Sheets) export to markdown / CSV.
-
-All three `GOOGLE_*` env vars must be set together.
-
-</details>
-
-<details>
-<summary><strong>GitHub (code search)</strong> — live-read over cloned repos</summary>
-
-`GitHubSource` clones repos into `.scout-cache/repos/<owner>-<repo>/` on first use, debounced fetches every 5 minutes. Capabilities: `LIST`, `READ`, `METADATA`, `FIND_LEXICAL` (ripgrep), `FIND_NATIVE` (REST `search/code` for ad-hoc public repos).
-
-```env
-GITHUB_REPOS=acme/api,acme/web
-GITHUB_READ_TOKEN=ghp_***
-```
-
-Read-only PAT. Scout clones the repos into `.scout-cache/repos/` and ripgreps them in place.
-
-</details>
-
-<details>
-<summary><strong>S3 buckets (compile-only)</strong></summary>
-
-Drop PDFs / docs into a bucket, Scout compiles them into the wiki on the next pass.
-
-```env
-S3_BUCKETS=acme-docs,acme-archive:reports/
-AWS_ACCESS_KEY_ID=AKIA***
-AWS_SECRET_ACCESS_KEY=***
-AWS_REGION=us-east-1
-```
-
-One `S3Source` instance per `bucket[:prefix]`. Compile-only (no live-read) — the Navigator sees compiled articles, not raw S3 objects. Objects over 25 MB skip text extraction and log `skipped-empty`.
-
-</details>
-
-<details>
-<summary><strong>Parallel web research</strong> — the single web-search backend</summary>
-
-```env
-PARALLEL_API_KEY=***
-```
-
-Navigator + Researcher use `parallel_search` + `parallel_extract`. Without this key, Navigator loses web search and the Researcher agent is disabled entirely — the wiki and live sources still work.
-
-</details>
-
-## Example Prompts
+## Example prompts
 
 ```
 What does our wiki say about PTO?
-Ingest this article: https://arxiv.org/abs/2312.10997
-Compile any new sources into the wiki
-Lint the wiki — find stale articles and broken backlinks
-Push the latest context changes to git
-Draft an email to alex@acme.com about the Q2 roadmap
+Ingest https://arxiv.org/abs/2312.10997
 Find the JWT middleware in our acme/api repo
+Draft an email to alex@acme.com about Q2 roadmap
 What's in the engineering OKRs doc on Drive?
 ```
-
-## Scheduled Tasks
-
-| Task | Schedule | Endpoint |
-|------|----------|----------|
-| Daily Briefing | Weekdays 8 AM | `/teams/scout/runs` |
-| Wiki Compile | Every 10 min | `/compile/run` (includes lint pass) |
-| Source Health Check | Every 15 min | `/manifest/reload` |
-| Inbox Digest | Weekdays 12 PM | `/teams/scout/runs` |
-| Learning Summary | Monday 10 AM | `/teams/scout/runs` |
-| Weekly Review | Friday 5 PM | `/teams/scout/runs` |
-
-## Architecture
-
-```
-AgentOS (app/main.py)  [scheduler=True, tracing=True, GPT-5.4]
- ├── FastAPI / Uvicorn
- ├── Slack Interface (optional)
- ├── Custom router (scout-specific endpoints)
- └── Scout Team (scout/team.py, coordinate mode)
-     ├─ Navigator   (scout/agents/navigator.py)
-     │  ├─ SQLTools         → PostgreSQL (scout_* tables)
-     │  ├─ FileTools        → context/
-     │  ├─ ParallelTools    → web search + extraction (conditional)
-     │  ├─ GmailTools       → Gmail (drafts only) — conditional
-     │  ├─ CalendarTools    → Calendar (read only) — conditional
-     │  ├─ source_list / source_read / source_find  [manifest-gated]
-     │  ├─ read_manifest
-     │  └─ update_knowledge
-     ├─ Researcher  (scout/agents/researcher.py) [conditional]
-     │  ├─ ParallelTools, FileTools on context/raw/
-     │  ├─ ingest_url, ingest_text  → context/raw/<slug>-<short-sha>.md
-     │  └─ read_manifest, update_knowledge, source_*
-     └─ Compiler    (scout/agents/compiler.py)
-        ├─ FileTools (context, no delete)
-        ├─ list_compile_sources / compile_one / compile_one_source
-        ├─ list_compile_records
-        ├─ source_*  [scoped to compile=True sources only]
-        └─ runs lint pass after every compile — broken backlinks,
-           stale articles, needs_split, user-edit conflicts
-
-     Leader tools: SlackTools (post to channels) [conditional]
-     Knowledge:    scout_knowledge (metadata routing)
-     Learnings:    scout_learnings (per-user retrieval patterns)
-     Manifest:     scout_sources (mirrored in-memory + Postgres)
-     Compile state: scout_compiled (source_hash + compiler_output_hash + needs_split)
-```
-
-### Sources
-
-| Source | Mode | Enabled by |
-|---|---|---|
-| `local:raw` — LocalFolderSource(`context/raw`) | compile-only | Always |
-| `local:wiki` — LocalFolderSource(`context/compiled`) | live-read | Always |
-| `drive` — GoogleDriveSource | live-read | `GOOGLE_DRIVE_FOLDER_IDS` + Google OAuth |
-| `slack` — SlackSource | live-read | `SLACK_TOKEN` |
-| `github` — GitHubSource | live-read | `GITHUB_REPOS` + `GITHUB_READ_TOKEN` |
-| `s3:<bucket>[/<prefix>]` — S3Source | compile-only | `S3_BUCKETS` + `AWS_*` |
 
 ## CLI
 
 ```sh
-python -m scout                       # interactive chat
-python -m scout sources               # list registered sources + capabilities
-python -m scout manifest              # print the live manifest
-python -m scout compile               # compile every compile-on source (skips unchanged)
-python -m scout compile --source local:raw --entry handbook.pdf
+python -m scout                       # chat
+python -m scout sources               # registered sources + capabilities
+python -m scout manifest              # live manifest
+python -m scout compile               # compile new or changed inputs
 python -m scout compile --force       # re-compile everything
-python -m scout _smoke_gating         # assert Navigator can't read local:raw
 ```
 
-## API Endpoints
+## API
 
 | Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/teams/scout/runs` | POST | Run the Scout team (SSE streaming) |
+|---|---|---|
+| `/teams/scout/runs` | POST | Run Scout (SSE streaming) |
 | `/manifest` | GET | Current manifest |
-| `/manifest/reload` | POST | Rebuild manifest from sources |
+| `/manifest/reload` | POST | Rebuild manifest |
 | `/sources/{id}/health` | GET | Per-source health ping |
-| `/compile/run` | POST | Run compile pipeline (no body / `{source_id}` / `{source_id, entry_id}` / `{force: true}`) |
-| `/wiki/compile` | POST | Legacy alias for `/compile/run` |
+| `/compile/run` | POST | Run compile pass |
 | `/wiki/ingest` | POST | URL or text → `context/raw/` |
 
-## Live Eval Harness
+## Scheduled tasks
 
-A Docker-hosted test harness is wired into `evals/live/`:
+Compile runs every hour. Source health refresh every 15 minutes. Scout also sends a weekday 8 AM briefing, a noon inbox digest, a Monday learning summary, and a Friday review. Configurable in `app/main.py`.
 
-```sh
-python -m evals.live run                  # all cases; env-missing ones SKIP
-python -m evals.live run --case greeting  # one case
-./scripts/eval_loop.sh gating_adversarial # autonomous fix loop (up to 5 attempts)
-```
+## Environment
 
-Each case declares its prompt, expected agent, required/forbidden tools, and a single `target_file`. On FAIL the runner writes a rich diagnostic to `evals/results/<case>.md` (failures + member responses + tool calls + docker logs + target file verbatim + directive to Claude Code) so `scripts/eval_loop.sh` can hand it off for autonomous repair.
+| Variable | Required | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | **Yes** | Model and embeddings |
+| `PARALLEL_API_KEY` | No | Web search |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Gmail + Calendar + Drive |
+| `GOOGLE_DRIVE_FOLDER_IDS` | No | Enables Drive as a live source |
+| `SLACK_TOKEN` / `SLACK_SIGNING_SECRET` | No | Slack interface and source |
+| `GITHUB_REPOS` / `GITHUB_READ_TOKEN` | No | GitHub live-read |
+| `S3_BUCKETS` / `AWS_*` | No | S3 compile |
+| `SCOUT_API_HOST_PORT` | No | Host port, default `8000` |
+| `DB_*` | No | Postgres (compose defaults work) |
 
-## Environment Variables
-
-| Variable | Required | Default | Purpose |
-|----------|----------|---------|---------|
-| `OPENAI_API_KEY` | **Yes** | — | GPT-5.4 (every agent, Leader, compile runner, eval judge) + `text-embedding-3-small` for Knowledge |
-| `PARALLEL_API_KEY` | No | — | Web search + extraction — used by Navigator + Researcher. Without it, the Researcher agent is disabled and Navigator loses web search. |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | — | Gmail + Calendar + Drive (all three required together) |
-| `GOOGLE_DRIVE_FOLDER_IDS` | No | — | Comma-separated folder IDs — enables `GoogleDriveSource` |
-| `SLACK_TOKEN` | No | — | Slack bot token — enables Interface + SlackTools + SlackSource |
-| `SLACK_SIGNING_SECRET` | No | — | Required alongside `SLACK_TOKEN` for inbound events |
-| `GITHUB_REPOS` | No | — | Comma-separated `owner/repo` — enables `GitHubSource` |
-| `GITHUB_READ_TOKEN` | No | — | Read-only PAT for `GitHubSource` |
-| `S3_BUCKETS` | No | — | Comma-separated `bucket[:prefix]` — enables `S3Source` |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | — | Required when `S3_BUCKETS` is set |
-| `SCOUT_WORKSPACE_ID` | No | `default` | Workspace scoping (multi-workspace lands later) |
-| `SCOUT_API_HOST_PORT` | No | `8000` | Host port the API publishes on |
-| `SCOUT_CONTEXT_DIR` / `SCOUT_RAW_DIR` / `SCOUT_COMPILED_DIR` / `SCOUT_VOICE_DIR` | No | — | Override context paths |
-| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` / `DB_DATABASE` | No | compose defaults | Postgres |
-| `RUNTIME_ENV` | No | — | `dev` for hot reload |
+Full list in `example.env`.
 
 ## Troubleshooting
 
-**Navigator answers from `context/raw/` instead of `context/compiled/`**: it shouldn't — `source_read("local:raw", ...)` raises `PermissionError` for any non-Compiler role. Re-run `python -m scout _smoke_gating` — if that PASSes and the Navigator is still leaking, check the diagnostic from `evals/live/`.
+- **Google token expired.** Testing-mode OAuth expires every 7 days. Re-run `python scripts/google_auth.py`.
+- **Port 5432 or 8000 in use.** Set `SCOUT_API_HOST_PORT`, or drop `ports:` from `scout-db` if Postgres is on the host.
+- **Source shows `unconfigured`.** Env missing; check `example.env`.
+- **Live eval says "Incorrect API key".** `OPENAI_API_KEY` rotated; fix and `docker compose restart scout-api`.
 
-**Google token expired**: Google's "Testing" mode expires tokens every 7 days. Re-run `python scripts/google_auth.py` to re-authorize.
+## Architecture
 
-**Docker port collision on 5432 / 8000**: set `SCOUT_API_HOST_PORT` in `.env` (or remove the `ports:` entry from `scout-db` if you already have a host Postgres).
-
-**Manifest shows sources `unconfigured`**: the source's env is missing. Check `example.env` for the required set.
-
-**Live eval errors with "Incorrect API key"**: `OPENAI_API_KEY` in `.env` is invalid or rotated. Fix it and `docker compose restart scout-api`.
-
-## Links
-
-- [Agno Docs](https://docs.agno.com)
-- [AgentOS Docs](https://docs.agno.com/agent-os/introduction)
-- Spec: `tmp/spec.md`
-- Pre-build diff: `tmp/spec-diff.md`
+Implementation notes and contribution guide: [CLAUDE.md](CLAUDE.md). Built on Agno and AgentOS: [docs.agno.com](https://docs.agno.com).

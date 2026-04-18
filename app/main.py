@@ -109,9 +109,7 @@ async def _rewrite_empty_prompt(request, call_next):  # type: ignore[no-untyped-
                 async def _receive():  # type: ignore[no-untyped-def]
                     return {"type": "http.request", "body": new_body, "more_body": False}
 
-                new_headers = [
-                    (k, v) for k, v in request.scope.get("headers", []) if k.lower() != b"content-length"
-                ]
+                new_headers = [(k, v) for k, v in request.scope.get("headers", []) if k.lower() != b"content-length"]
                 new_headers.append((b"content-length", str(len(new_body)).encode()))
                 new_scope = dict(request.scope)
                 new_scope["headers"] = new_headers
