@@ -16,9 +16,9 @@ from agno.os import AgentOS
 
 from app.router import create_router
 from db import get_postgres_db
-from scout.agents import compiler, linter, navigator, researcher, syncer
+from scout.agents import compiler, navigator, researcher
 from scout.agents.settings import scout_knowledge, scout_learnings
-from scout.config import GIT_SYNC_ENABLED, SCOUT_REPO_URL, SLACK_SIGNING_SECRET, SLACK_TOKEN
+from scout.config import SLACK_SIGNING_SECRET, SLACK_TOKEN
 from scout.team import scout
 
 # ---------------------------------------------------------------------------
@@ -28,16 +28,17 @@ runtime_env = getenv("RUNTIME_ENV", "prd")
 scheduler_base_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
 
 # ---------------------------------------------------------------------------
-# Interfaces — Slack with channel allowlist enforcement
+# Interfaces — Slack
 # ---------------------------------------------------------------------------
+# Channel scoping is configured via the Slack app (install to channels).
+# No server-side allowlist middleware.
 interfaces: list = []
 if SLACK_TOKEN and SLACK_SIGNING_SECRET:
     from agno.os.interfaces.slack import Slack
 
     # agno's Slack interface reads SLACK_TOKEN / SLACK_SIGNING_SECRET from
-    # env directly (both are already forwarded by compose.yaml). Pass-through
-    # kwargs the current Slack class accepts: agent / team / workflow / prefix
-    # / tags / reply_to_mentions_only.
+    # env directly. Pass-through kwargs the current Slack class accepts:
+    # agent / team / workflow / prefix / tags / reply_to_mentions_only.
     interfaces.append(Slack(team=scout, reply_to_mentions_only=False))
 
 
@@ -47,7 +48,6 @@ if SLACK_TOKEN and SLACK_SIGNING_SECRET:
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     _run_migrations()
-    _init_git_sync()
     _build_initial_manifest()
     _register_schedules()
     yield
@@ -56,7 +56,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
 # ---------------------------------------------------------------------------
 # Create AgentOS
 # ---------------------------------------------------------------------------
-agents: list = [a for a in [navigator, researcher, compiler, linter, syncer] if a is not None]
+agents: list = [a for a in [navigator, researcher, compiler] if a is not None]
 
 agent_os = AgentOS(
     name="Scout",
@@ -78,52 +78,6 @@ app.include_router(create_router(agent_os.settings))
 
 
 # ---------------------------------------------------------------------------
-# Slack channel allowlist middleware (defense in depth)
-# ---------------------------------------------------------------------------
-def _install_slack_allowlist() -> None:
-    """If SLACK_CHANNEL_ALLOWLIST is set, drop /slack events from other channels.
-
-    The agno SlackTools enforces the allowlist on outbound posts; this
-    middleware enforces it on inbound events too, so messages in other
-    channels never even reach the team.
-    """
-    from scout.config import SLACK_CHANNEL_ALLOWLIST
-
-    if not SLACK_CHANNEL_ALLOWLIST:
-        return
-
-    from starlette.requests import Request
-    from starlette.responses import Response
-
-    @app.middleware("http")
-    async def slack_allowlist(request: Request, call_next):  # type: ignore[no-untyped-def]
-        if not request.url.path.startswith("/slack"):
-            return await call_next(request)
-        body = await request.body()
-
-        # Reconstruct the request so downstream handlers can read body.
-        async def _receive():
-            return {"type": "http.request", "body": body, "more_body": False}
-
-        request._receive = _receive  # type: ignore[attr-defined]
-
-        try:
-            import json as _json
-
-            payload = _json.loads(body or b"{}")
-        except Exception:
-            return await call_next(request)
-
-        channel = payload.get("event", {}).get("channel") or payload.get("channel_id") or payload.get("channel")
-        if channel and channel not in SLACK_CHANNEL_ALLOWLIST:
-            return Response(status_code=200)  # ack, ignore
-        return await call_next(request)
-
-
-_install_slack_allowlist()
-
-
-# ---------------------------------------------------------------------------
 # Startup helpers
 # ---------------------------------------------------------------------------
 def _run_migrations() -> None:
@@ -134,16 +88,6 @@ def _run_migrations() -> None:
         print("[scout] Migrations: applied")
     except Exception as e:
         print(f"[scout] Migrations: failed: {e}")
-
-
-def _init_git_sync() -> None:
-    """Initialize context/ as a git repo and pull latest from GitHub."""
-    if not GIT_SYNC_ENABLED:
-        return
-    from scout.tools.git import init_context_repo
-
-    result = init_context_repo(SCOUT_REPO_URL)
-    print(f"[scout] Git sync: {result}")
 
 
 def _build_initial_manifest() -> None:
@@ -164,16 +108,6 @@ def _register_schedules() -> None:
     slack_post = "\n\nWhen done, post the results to the #scout-updates Slack channel." if SLACK_TOKEN else ""
 
     mgr.create(
-        name="context-refresh",
-        cron="0 8 * * *",
-        endpoint="/context/reload",
-        payload={},
-        timezone="America/New_York",
-        description="Daily context file re-index",
-        if_exists="update",
-    )
-
-    mgr.create(
         name="daily-briefing",
         cron="0 8 * * 1-5",
         endpoint="/teams/scout/runs",
@@ -191,18 +125,20 @@ def _register_schedules() -> None:
         if_exists="update",
     )
 
-    # v3 change: every 10 minutes, hits /compile/run directly (no team round-trip).
+    # Every 10 min: hits /compile/run directly (no team round-trip). The
+    # Compiler runs lint checks as part of each full compile pass, so there
+    # is no separate wiki-lint schedule.
     mgr.create(
         name="wiki-compile",
         cron="*/10 * * * *",
         endpoint="/compile/run",
         payload={"force": False},
         timezone="UTC",
-        description="Iterate compile-on sources every 10 minutes",
+        description="Iterate compile-on sources every 10 minutes (includes lint pass)",
         if_exists="update",
     )
 
-    # v3 NEW: source health refresh.
+    # Source health refresh.
     mgr.create(
         name="source-health-check",
         cron="*/15 * * * *",
@@ -253,38 +189,15 @@ def _register_schedules() -> None:
         endpoint="/teams/scout/runs",
         payload={
             "message": (
-                "It's Friday — time for a weekly review.\n"
-                "1. Read context/templates/weekly-review.md for the structure.\n"
-                "2. Fill it in based on this week's conversations, decisions, and action items.\n"
-                "3. Save the draft to context/meetings/ using the filename format "
-                "YYYY-MM-DD - weekly-review.md (use today's date)." + slack_post
+                "It's Friday — time for a weekly review. Summarize this "
+                "week's conversations, decisions, and open action items. "
+                "Cite any compiled wiki articles you reference." + slack_post
             ),
         },
         timezone="America/New_York",
         description="Friday afternoon weekly review draft",
         if_exists="update",
     )
-
-    mgr.create(
-        name="wiki-lint",
-        cron="0 8 * * 0",
-        endpoint="/wiki/lint",
-        payload={},
-        timezone="America/New_York",
-        description="Weekly wiki health check (compile conflicts, stale articles, source flap)",
-        if_exists="update",
-    )
-
-    if GIT_SYNC_ENABLED:
-        mgr.create(
-            name="sync-pull",
-            cron="*/30 * * * *",
-            endpoint="/sync/pull",
-            payload={},
-            timezone="UTC",
-            description="Pull remote context/ changes from GitHub every 30 minutes",
-            if_exists="update",
-        )
 
 
 if __name__ == "__main__":

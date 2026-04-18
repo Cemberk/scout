@@ -2,15 +2,18 @@
 Scout — Enterprise Context Agent
 ==================================
 
-An enterprise agent that navigates your company's entire knowledge graph
-and learns from every interaction.
+Three specialists coordinated by a Leader:
 
-Scout is a team of specialists coordinated by a leader:
-- Navigator:  routes queries, reads wiki, handles email/calendar/SQL/files/documents
-- Researcher: gathers sources from the web, ingests to raw/ (conditional)
-- Compiler:   reads raw/, compiles structured wiki articles
-- Linter:     health checks on the wiki, finds gaps
-- Syncer:     commits and pushes context/ changes to GitHub (conditional)
+- Navigator:  reads the wiki + live sources, handles SQL, files, email,
+              calendar, web search
+- Researcher: gathers sources from the web, ingests to raw/ (conditional
+              on PARALLEL_API_KEY)
+- Compiler:   reads raw/, compiles wiki articles, runs lint checks
+              (broken backlinks, stale articles, needs_split, user-edit
+              conflicts) at the end of every compile pass
+
+Sync (git push/pull for context/) is a Leader tool, not an agent —
+three tools are not enough mass to justify a specialist.
 
 Test:
     python -m scout.team
@@ -21,26 +24,26 @@ from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 from agno.models.openai import OpenAIResponses
 from agno.team import Team, TeamMode
 
-from scout.agents import compiler, linter, navigator, researcher, syncer
+from scout.agents import compiler, navigator, researcher
 from scout.agents.settings import agent_db, scout_learnings
-from scout.config import GIT_SYNC_ENABLED, SLACK_TOKEN
+from scout.config import SLACK_TOKEN
 from scout.instructions import build_leader_instructions
 from scout.tools import build_leader_tools
 
 # ---------------------------------------------------------------------------
-# Team Leader Tools (Slack — leader-only, channel-allowlisted)
+# Team Leader tools — Slack posting (conditional on SLACK_TOKEN)
 # ---------------------------------------------------------------------------
 leader_tools: list = build_leader_tools()
 
 # ---------------------------------------------------------------------------
-# Team Instructions
+# Team instructions
 # ---------------------------------------------------------------------------
 
 LEADER_INSTRUCTIONS = """\
 You are Scout, an enterprise knowledge agent that navigates your company's context graph.
 
-You lead a team of specialists. Route every non-greeting request using the
-five rules below (spec §6). There are no other routes.
+You lead three specialists. Route every non-greeting request using the
+rules below. There are no other routes.
 
 ## Routing rules
 
@@ -48,14 +51,12 @@ five rules below (spec §6). There are no other routes.
 |---|---|
 | Question answerable from `context/compiled/`, Drive, Slack, GitHub, SQL | **Navigator** |
 | "Ingest this URL / PDF / page" or "add to raw" | **Researcher** |
-| "Recompile X", "compile everything", or a compile failure surfaced elsewhere | **Compiler** |
-| "Lint the wiki", "check for broken links", "what's stale" | **Linter** |
-| "Push / pull context" | **Syncer** |
+| "Compile", "recompile X", "update the wiki", "lint the wiki", "check for broken links" | **Compiler** |
 
 Ambiguous intent → ask Navigator first. You never read sources directly;
 delegation is mandatory for any non-trivial answer.
 
-Direct-response exceptions (no delegation): greetings, thanks,
+Direct-response exceptions (no delegation, no tools): greetings, thanks,
 "what can you do?", meta-questions about Scout itself.
 
 ## How you work
@@ -77,38 +78,11 @@ Direct-response exceptions (no delegation): greetings, thanks,
 
 RESEARCHER_DISABLED_INSTRUCTIONS = """
 
-## Web Research — Enhanced Research Not Configured
+## Web Research — Researcher Not Configured
 
-For basic web search, the Navigator can use Exa (`web_search_exa`).
-For full research workflows (search + extract + ingest), enable the Parallel integration by adding `PARALLEL_API_KEY` to your `.env` and restarting.\
-"""
-
-SYNC_CHAIN_INSTRUCTIONS = """
-
-## Sync Chain
-
-After any workflow that creates or modifies files in context/, **always delegate
-to Syncer as the final step** to commit and push changes to GitHub. This ensures
-the knowledge base is durable and available everywhere.
-
-Chain examples:
-- User ingests a URL → Researcher saves to raw/ → **Syncer pushes**
-- Scheduled compile → Compiler writes wiki articles → **Syncer pushes**
-- Scheduled lint → Linter writes lint report → **Syncer pushes**
-- Navigator saves meeting notes or drafts a file → **Syncer pushes**
-- Weekly review → Navigator writes to meetings/ → **Syncer pushes**
-
-Do NOT skip the Syncer step. Every file change must be pushed.\
-"""
-
-SYNC_DISABLED_INSTRUCTIONS = """
-
-## Git Sync — Not Configured
-
-If the user asks about sync status, pushing, or pulling context, respond exactly:
-> Git sync isn't set up yet. Context changes are only stored locally. Add `GITHUB_ACCESS_TOKEN` and `SCOUT_REPO_URL` to your `.env` and restart to enable git-backed persistence.
-
-Do not delegate sync questions to Navigator.\
+Navigator has `parallel_search` + `parallel_extract` via ParallelTools.
+For dedicated ingest-into-raw/ workflows, set `PARALLEL_API_KEY` and
+restart — the Researcher agent activates automatically.\
 """
 
 SLACK_LEADER_INSTRUCTIONS = """
@@ -136,21 +110,15 @@ else:
     instructions += SLACK_DISABLED_LEADER_INSTRUCTIONS
 if not researcher:
     instructions += RESEARCHER_DISABLED_INSTRUCTIONS
-if GIT_SYNC_ENABLED:
-    instructions += SYNC_CHAIN_INSTRUCTIONS
-else:
-    instructions += SYNC_DISABLED_INSTRUCTIONS
 
 # Prefix the rendered manifest so the Leader sees ground truth on what
 # sources are reachable before it routes.
 instructions = build_leader_instructions(instructions)
 
 # ---------------------------------------------------------------------------
-# Members — conditional on configuration
+# Members
 # ---------------------------------------------------------------------------
-members: list[Agent | Team] = [m for m in [navigator, researcher, compiler, linter] if m is not None]
-if GIT_SYNC_ENABLED:
-    members.append(syncer)
+members: list[Agent | Team] = [m for m in [navigator, researcher, compiler] if m is not None]
 
 # ---------------------------------------------------------------------------
 # Create Team
@@ -177,28 +145,15 @@ scout = Team(
     markdown=True,
 )
 
-# ---------------------------------------------------------------------------
-# Run Team
-# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     test_cases = [
-        # Smoke 1: Direct response
         "Hey, what can you do?",
-        # Smoke 2: Navigator — enterprise document retrieval
         "What's our PTO policy?",
-        # Smoke 3: Navigator — file retrieval
-        "What voice guides do we have?",
-        # Smoke 4: Navigator — Gmail fallback
         "Check my latest emails",
-        # Smoke 5: Researcher — ingest (requires PARALLEL_API_KEY)
         "Ingest this article: https://example.com/article-on-rag",
-        # Smoke 6: Navigator — capture
-        "Save a note: Met with Sarah Chen from Acme Corp about a partnership.",
-        # Smoke 7: Compiler trigger
         "Compile any new sources into the wiki",
-        # Smoke 8: Linter trigger
-        "Run a health check on the wiki",
-        # Smoke 9: Syncer — check status
+        "Lint the wiki — find stale articles and broken backlinks",
         "What's the sync status?",
     ]
     for idx, prompt in enumerate(test_cases, start=1):

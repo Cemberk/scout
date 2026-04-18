@@ -117,11 +117,15 @@ class Manifest:
         # from the mirror table). Gating is authoritative from the in-memory
         # Manifest and must not depend on the DB being reachable — otherwise
         # the _smoke_gating CLI and any dev environment without Postgres
-        # would lose the safety rail. Log and move on.
+        # would lose the safety rail.
+        #
+        # At import-time this often runs before migrations have created
+        # scout.scout_sources, so we log the skip at DEBUG only to keep
+        # startup logs clean. The next reload (post-migration) persists fine.
         try:
             m.persist()
         except Exception as exc:
-            logger.warning("Manifest.persist() skipped: %s", exc)
+            logger.debug("Manifest.persist() skipped: %s", exc)
         return m
 
     # ------------------------------------------------------------------

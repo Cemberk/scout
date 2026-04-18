@@ -10,9 +10,8 @@ Scout v3 is an **enterprise context agent** — a team of specialists that navig
 Scout (Team Leader — coordinate mode)
 ├── Navigator    — primary user-facing agent. Reads compiled/ + live sources via Source dispatch.
 ├── Researcher   — Parallel web search + ingest into context/raw/ (conditional on PARALLEL_API_KEY)
-├── Compiler     — iterates compile-on sources, writes Obsidian-compat markdown to context/compiled/
-├── Linter       — wiki health, source flap, user-edit conflicts, stale articles
-├── Syncer       — git push/pull for context/ (conditional on GITHUB_ACCESS_TOKEN)
+├── Compiler     — iterates compile-on sources, writes Obsidian-compat markdown to context/compiled/,
+│                   and runs lint checks (broken backlinks, stale articles, needs_split) after every pass
 └── [leader responds directly for greetings/simple questions]
 ```
 
@@ -29,28 +28,29 @@ The Compiler turns raw inputs into clean wiki articles. The Navigator reads the 
 ```
 scout/
 ├── __init__.py               # Exports: scout (Team)
-├── __main__.py               # CLI: chat | compile | manifest | sources
+├── __main__.py               # CLI: chat | compile | manifest | sources | _smoke_gating
 ├── team.py                   # Scout team definition (leader + members)
 ├── config.py                 # Env vars and feature flags
-├── paths.py                  # CONTEXT_*, DOCUMENTS_DIR
+├── paths.py                  # CONTEXT_*
 ├── instructions.py           # Instruction assembly
 ├── manifest.py               # Runtime capability registry
-├── compile_state.py          # Postgres-backed compile state (replaces .state.json)
+├── compile_state.py          # Postgres-backed compile state
 ├── sources/
 │   ├── base.py               # Source protocol + Entry/Content/Meta/Hit/HealthStatus
 │   ├── local_folder.py       # LocalFolderSource (compile or live-read)
 │   ├── drive.py              # GoogleDriveSource (live-read)
-│   └── __init__.py           # build_sources() / get_sources() / reload_sources()
+│   ├── slack.py              # SlackSource (live-read)
+│   ├── github.py             # GitHubSource (live-read w/ clone cache)
+│   ├── s3.py                 # S3Source (compile-only)
+│   └── __init__.py           # get_sources() / reload_sources()
 ├── compile/
-│   ├── runner.py             # The compile pipeline. Heart of v3.
+│   ├── runner.py             # The compile pipeline
 │   └── __init__.py
 ├── agents/
 │   ├── settings.py           # Shared DB, knowledge bases
 │   ├── navigator.py          # Source-dispatch + SQL + Gmail/Calendar
 │   ├── researcher.py         # Parallel + ingest_url/text → context/raw/
-│   ├── compiler.py           # Drives compile.runner
-│   ├── linter.py             # Wiki health checks
-│   └── syncer.py             # Git commit + push
+│   └── compiler.py           # Drives compile.runner + owns lint pass
 └── tools/
     ├── build.py              # Tool assembly per agent role
     ├── manifest_tools.py     # read_manifest
@@ -58,33 +58,22 @@ scout/
     ├── compile_tools.py      # list_compile_sources / compile_one / compile_one_source / ...
     ├── knowledge.py          # update_knowledge
     ├── ingest.py             # ingest_url / ingest_text (Researcher)
-    ├── git.py                # Git sync tools (Syncer)
     └── redactor.py           # Secret-stripping middleware
 
 context/
-├── about-us.md
-├── preferences.md
 ├── voice/
 │   ├── email.md
 │   ├── slack-message.md
 │   ├── document.md
-│   └── wiki-article.md       # Voice guide for the Compiler
-├── templates/
-├── meetings/
-├── projects/
+│   └── wiki-article.md       # Voice guide for the Compiler (Appendix A verbatim)
 ├── raw/                      # User-writable intake. Compile-only. Navigator-invisible.
 └── compiled/                 # Obsidian-compatible vault. Live-read.
     ├── articles/             # <slug>-<short-hash>.md
-    ├── concepts/
-    ├── summaries/
-    ├── outputs/
     └── index.md              # Auto-regenerated after each compile pass
-
-documents/                    # Read-only enterprise document corpus
 
 app/
 ├── main.py                   # AgentOS entry (lifespan: migrations + manifest + schedules)
-├── router.py                 # /manifest, /compile/run, /sources/{id}/health, /wiki/*, /sync/pull
+├── router.py                 # /manifest, /compile/run, /sources/{id}/health, /wiki/ingest
 └── config.yaml
 
 db/
@@ -169,11 +158,9 @@ User Question → Classify → Recall (Manifest+Knowledge+Learnings) → Read (S
 
 | Agent | Tools |
 |-------|-------|
-| Navigator | SQLTools, FileTools (context + documents), ParallelTools, GmailTools, CalendarTools, update_knowledge, read_manifest, source_* |
+| Navigator | SQLTools, FileTools (context), ParallelTools (if configured), GmailTools, CalendarTools, update_knowledge, read_manifest, source_* |
 | Researcher | FileTools, ParallelTools, update_knowledge, ingest_url, ingest_text, read_manifest, source_* |
-| Compiler | FileTools (context), update_knowledge, read_manifest, source_* (compile-only), compile_* |
-| Linter | FileTools (compiled+context), ParallelTools, update_knowledge, read_manifest, source_* (live-read) |
-| Syncer | sync_push, sync_pull, sync_status |
+| Compiler | FileTools (context), update_knowledge, read_manifest, source_* (compile-only), compile_* — also runs the lint pass after each compile |
 
 All tool returns are passed through the redactor in `scout.tools.redactor` — secret-shaped strings are stripped before they reach the model.
 
@@ -181,15 +168,12 @@ All tool returns are passed through the redactor in `scout.tools.redactor` — s
 
 | Task | Schedule | Endpoint |
 |------|----------|----------|
-| Context Refresh | Daily 8 AM | `/context/reload` |
 | Daily Briefing | Weekdays 8 AM | `/teams/scout/runs` |
-| **Wiki Compile** | **Every 10 min** | `/compile/run` |
+| **Wiki Compile** | **Every 10 min** | `/compile/run` (lint runs inside each pass) |
 | **Source Health Check** | **Every 15 min** | `/manifest/reload` |
 | Inbox Digest | Weekdays 12 PM | `/teams/scout/runs` |
 | Learning Summary | Monday 10 AM | `/teams/scout/runs` |
 | Weekly Review | Friday 5 PM | `/teams/scout/runs` |
-| Wiki Lint | Sunday 8 AM | `/wiki/lint` |
-| Sync Pull | Every 30 min | `/sync/pull` |
 
 ## API Endpoints
 
@@ -201,10 +185,7 @@ All tool returns are passed through the redactor in `scout.tools.redactor` — s
 | `/sources/{id}/health` | GET | Per-source health ping |
 | `/compile/run` | POST | Run compile pipeline (no body / source_id / source_id+entry_id) |
 | `/wiki/compile` | POST | Legacy alias for /compile/run |
-| `/wiki/lint` | POST | Trigger Linter agent |
 | `/wiki/ingest` | POST | Ingest URL or text into context/raw/ |
-| `/context/reload` | POST | Re-index context files |
-| `/sync/pull` | POST | Pull remote context/ from GitHub |
 
 ## Model
 
@@ -219,25 +200,21 @@ Knowledge/Learnings PgVector path, so one key covers everything.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent + embeddings for Knowledge |
-| `PARALLEL_API_KEY` | No | Web search + extraction — used by Navigator / Linter / Researcher. Without it, web search is off and the Researcher agent is disabled. |
+| `PARALLEL_API_KEY` | No | Web search + extraction — used by Navigator + Researcher. Without it, Researcher is disabled and Navigator has no web search. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Gmail + Calendar + Drive (all three required together) |
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | Comma-separated — enables `GoogleDriveSource` |
 | `SLACK_TOKEN` | No | Enables Slack Interface + SlackTools + `SlackSource` |
 | `SLACK_SIGNING_SECRET` | No | Slack inbound event verification |
-| `SLACK_CHANNEL_ALLOWLIST` | No | Comma-separated channel IDs (empty = allow all) |
 | `GITHUB_REPOS` | No | Comma-separated `owner/repo` — enables `GitHubSource` |
 | `GITHUB_READ_TOKEN` | No | Read-only PAT for `GitHubSource` |
 | `S3_BUCKETS` | No | Comma-separated `bucket[:prefix]` — enables `S3Source` |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `S3_BUCKETS` is set |
-| `GITHUB_ACCESS_TOKEN` | No | Git sync (both required with `SCOUT_REPO_URL`) |
-| `SCOUT_REPO_URL` | No | Git sync repo URL |
 | `SCOUT_CONTEXT_DIR` | No | Context directory (default: `./context`) |
 | `SCOUT_RAW_DIR` | No | Override raw intake dir |
 | `SCOUT_COMPILED_DIR` | No | Override compiled wiki dir |
 | `SCOUT_VOICE_DIR` | No | Override voice-guide dir |
 | `SCOUT_WORKSPACE_ID` | No | Workspace scoping (default: `default`) |
 | `SCOUT_API_HOST_PORT` | No | Host port the API publishes on (default: `8000`) |
-| `DOCUMENTS_DIR` | No | Documents directory (default: `./documents`) |
 | `DB_HOST/PORT/USER/PASS/DATABASE` | No | PostgreSQL config |
 | `RUNTIME_ENV` | No | `dev` for hot reload |
 

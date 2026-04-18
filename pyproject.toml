@@ -52,10 +52,8 @@ exclude = [".venv*"]
 [[tool.mypy.overrides]]
 module = [
   "pgvector.*",
-  "setuptools.*",
   "agno.*",
   "httpx.*",
-  "mcp.*",
   "parallel.*",
   "google.*",
   "googleapiclient.*",

@@ -6,7 +6,6 @@ from scout.paths import (
     CONTEXT_DIR,
     CONTEXT_RAW_DIR,
     CONTEXT_VOICE_DIR,
-    DOCUMENTS_DIR,
 )
 
 # ---------------------------------------------------------------------------
@@ -16,9 +15,8 @@ PARALLEL_API_KEY = getenv("PARALLEL_API_KEY", "")
 
 SLACK_TOKEN = getenv("SLACK_TOKEN", "")
 SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET", "")
-# Comma-separated channel IDs Scout is allowed to post to (empty = allow all)
-SLACK_CHANNEL_ALLOWLIST = tuple(c.strip() for c in getenv("SLACK_CHANNEL_ALLOWLIST", "").split(",") if c.strip())
-# SlackSource is live-read only. Needs a token; allowlist is optional.
+# SlackSource is live-read only. Channel scope is configured via the
+# Slack app (install to channels) — no server-side allowlist.
 SLACK_SOURCE_ENABLED = bool(SLACK_TOKEN)
 
 GOOGLE_CLIENT_ID = getenv("GOOGLE_CLIENT_ID", "")
@@ -38,13 +36,7 @@ SCOUT_VOICE_DIR = Path(getenv("SCOUT_VOICE_DIR", str(SCOUT_CONTEXT_DIR / "voice"
 # Workspace scoping — fixed for Phase 1, real multi-workspace lands in Phase 4
 WORKSPACE_ID = getenv("SCOUT_WORKSPACE_ID", "default")
 
-# Git sync — push context/ to GitHub, pull on startup
-GITHUB_ACCESS_TOKEN = getenv("GITHUB_ACCESS_TOKEN", "")
-SCOUT_REPO_URL = getenv("SCOUT_REPO_URL", "")
-GIT_SYNC_ENABLED = bool(GITHUB_ACCESS_TOKEN and SCOUT_REPO_URL)
-
 # GitHubSource — live-read over locally cloned repos + ad-hoc search_code.
-# GITHUB_ACCESS_TOKEN is Scout's own context repo token (not this one).
 GITHUB_READ_TOKEN = getenv("GITHUB_READ_TOKEN", "")
 GITHUB_REPOS = tuple(r.strip() for r in getenv("GITHUB_REPOS", "").split(",") if r.strip())
 GITHUB_SOURCE_ENABLED = bool(GITHUB_REPOS and GITHUB_READ_TOKEN)
@@ -67,10 +59,7 @@ __all__ = [
     "CONTEXT_DIR",
     "CONTEXT_RAW_DIR",
     "CONTEXT_VOICE_DIR",
-    "DOCUMENTS_DIR",
     "DRIVE_SOURCE_ENABLED",
-    "GIT_SYNC_ENABLED",
-    "GITHUB_ACCESS_TOKEN",
     "GITHUB_READ_TOKEN",
     "GITHUB_REPOS",
     "GITHUB_SOURCE_ENABLED",
@@ -85,9 +74,7 @@ __all__ = [
     "SCOUT_COMPILED_DIR",
     "SCOUT_CONTEXT_DIR",
     "SCOUT_RAW_DIR",
-    "SCOUT_REPO_URL",
     "SCOUT_VOICE_DIR",
-    "SLACK_CHANNEL_ALLOWLIST",
     "SLACK_SIGNING_SECRET",
     "SLACK_SOURCE_ENABLED",
     "SLACK_TOKEN",

@@ -7,10 +7,6 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 
-class ContextReloadRequest(BaseModel):
-    recreate: bool = False
-
-
 class WikiCompileRequest(BaseModel):
     force: bool = False
     source_id: str | None = None
@@ -29,18 +25,6 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
     router = APIRouter(
         dependencies=[Depends(get_authentication_dependency(settings))],
     )
-
-    # ------------------------------------------------------------------
-    # Context
-    # ------------------------------------------------------------------
-
-    @router.post("/context/reload")
-    def reload_context(body: ContextReloadRequest = ContextReloadRequest()):
-        """Re-index context files into scout_knowledge."""
-        from context.load_context import load_context
-
-        loaded = load_context(recreate=body.recreate)
-        return {"loaded": loaded, "recreate": body.recreate}
 
     # ------------------------------------------------------------------
     # Manifest + sources
@@ -122,17 +106,6 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         """Legacy alias for /compile/run."""
         return run_compile(body)
 
-    @router.post("/wiki/lint")
-    async def lint_wiki():
-        """Trigger wiki health check via the Linter agent."""
-        from scout.team import scout
-
-        # agno's Team.arun is typed as returning TeamRunOutput but actually
-        # returns a coroutine in the non-streaming branch. Upstream bug.
-        response = await scout.arun("Run a health check on the wiki. Write a lint report.")  # type: ignore[misc]
-        content = response.content if response else "No response"
-        return {"status": "completed", "response": content}
-
     @router.post("/wiki/ingest")
     def ingest_to_wiki(body: WikiIngestRequest):
         """Ingest a URL or text into context/raw/."""
@@ -164,24 +137,6 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         # per spec §5a. Surface both the raw result and the top-level status.
         status = result.get("status", "ingested") if isinstance(result, dict) else "ingested"
         return {"status": status, "result": result}
-
-    # ------------------------------------------------------------------
-    # Git sync
-    # ------------------------------------------------------------------
-
-    @router.post("/sync/pull")
-    def sync_pull():
-        from scout.config import GIT_SYNC_ENABLED
-        from scout.tools.git import run_git
-
-        if not GIT_SYNC_ENABLED:
-            return JSONResponse(
-                content={"error": "Git sync not configured. Set GITHUB_ACCESS_TOKEN and SCOUT_REPO_URL."},
-                status_code=400,
-            )
-
-        ok, out = run_git(["pull", "--rebase", "--autostash"])
-        return {"status": "ok" if ok else "error", "output": out}
 
     return router
 

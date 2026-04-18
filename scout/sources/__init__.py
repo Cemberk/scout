@@ -32,7 +32,6 @@ from scout.config import (
     S3_SOURCE_ENABLED,
     SCOUT_COMPILED_DIR,
     SCOUT_RAW_DIR,
-    SLACK_CHANNEL_ALLOWLIST,
     SLACK_SOURCE_ENABLED,
     SLACK_TOKEN,
 )
@@ -81,7 +80,6 @@ def get_sources() -> tuple[Source, ...]:
         sources.append(
             SlackSource(
                 token=SLACK_TOKEN,
-                channel_allowlist=SLACK_CHANNEL_ALLOWLIST,
                 id="slack",
                 name="Slack",
                 compile=False,

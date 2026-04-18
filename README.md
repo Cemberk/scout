@@ -4,7 +4,7 @@ Scout is an **enterprise context agent**. It navigates your company's knowledge 
 
 Feed it your docs — policies, runbooks, architecture, meeting notes, reports. Scout organizes everything into two layers: a compiled wiki for text-heavy knowledge (concepts, summaries, cross-references) in `context/compiled/`, and a Postgres `scout_knowledge` index that acts as the metadata router across every source. A learning loop in `scout_learnings` compounds every interaction.
 
-Ask a question over Slack, the terminal, or the [AgentOS](https://os.agno.com) web UI. The Leader routes to one of five specialists (Navigator / Researcher / Compiler / Linter / Syncer), each wired to only the tools it needs. The Navigator never reads raw sources — that's the Compiler's job.
+Ask a question over Slack, the terminal, or the [AgentOS](https://os.agno.com) web UI. The Leader routes to one of three specialists (Navigator / Researcher / Compiler), each wired to only the tools it needs. The Navigator never reads raw sources — that's the Compiler's job.
 
 ## Quick Start
 
@@ -38,12 +38,10 @@ Scout (Team Leader — coordinate mode)
 │                  handles SQL, files, email, calendar, web search
 ├── Researcher   — gathers sources from the web, saves to context/raw/
 │                  (conditional on PARALLEL_API_KEY)
-├── Compiler     — iterates compile-on sources, writes Obsidian-compatible
-│                  markdown to context/compiled/
-├── Linter       — wiki health, source flap, user-edit conflicts, stale
-│                  articles, needs_split flags
-└── Syncer       — git push/pull for context/ (conditional on
-                   GITHUB_ACCESS_TOKEN + SCOUT_REPO_URL)
+└── Compiler     — iterates compile-on sources, writes Obsidian-compatible
+                   markdown to context/compiled/, and runs lint checks
+                   (broken backlinks, stale articles, needs_split) after
+                   every compile pass
 ```
 
 ### The wiki-first rule
@@ -59,7 +57,7 @@ Not every source compiles. Compile only makes sense for stores where the raw for
 | `SlackSource(...)` | **live-read** | Threads are the query surface. No meaningful place to "edit" a compiled summary. |
 | `GitHubSource(...)` | **live-read** | Grep + git history *is* the query surface. Compiling creates drift with no merge path. |
 
-Every source carries two flags: `compile=True` makes it visible to the Compiler; `live_read=True` makes it visible to the Navigator + Linter. The Manifest (rebuilt at startup and every 15 min) enforces both at tool-call time: a Navigator-role `source_read("local:raw", ...)` raises `PermissionError` by contract.
+Every source carries two flags: `compile=True` makes it visible to the Compiler; `live_read=True` makes it visible to the Navigator. The Manifest (rebuilt at startup and every 15 min) enforces both at tool-call time: a Navigator-role `source_read("local:raw", ...)` raises `PermissionError` by contract.
 
 ### Execution loop
 
@@ -113,7 +111,7 @@ GITHUB_REPOS=acme/api,acme/web
 GITHUB_READ_TOKEN=ghp_***
 ```
 
-Keep `GITHUB_READ_TOKEN` separate from `GITHUB_ACCESS_TOKEN` — the latter is Scout's own context repo (see below).
+Read-only PAT. Scout clones the repos into `.scout-cache/repos/` and ripgreps them in place.
 
 </details>
 
@@ -140,21 +138,7 @@ One `S3Source` instance per `bucket[:prefix]`. Compile-only (no live-read) — t
 PARALLEL_API_KEY=***
 ```
 
-Navigator / Linter / Researcher all use `parallel_search` + `parallel_extract`. Without this key, web search is unavailable — the wiki and live sources still work.
-
-</details>
-
-<details>
-<summary><strong>Git sync for context/</strong> — durable, portable, no volumes</summary>
-
-Both required together:
-
-```env
-GITHUB_ACCESS_TOKEN=ghp_***          # push on your context repo
-SCOUT_REPO_URL=https://github.com/your-org/scout-context.git
-```
-
-When configured, the Syncer agent gets wired in, `/sync/pull` + `POST` routes activate, and the `sync-pull` cron runs every 30 minutes.
+Navigator + Researcher use `parallel_search` + `parallel_extract`. Without this key, Navigator loses web search and the Researcher agent is disabled entirely — the wiki and live sources still work.
 
 </details>
 
@@ -173,32 +157,27 @@ What's in the engineering OKRs doc on Drive?
 
 ## Scheduled Tasks
 
-All nine run on the agno scheduler:
-
 | Task | Schedule | Endpoint |
 |------|----------|----------|
-| Context Refresh | Daily 8 AM | `/context/reload` |
 | Daily Briefing | Weekdays 8 AM | `/teams/scout/runs` |
-| Wiki Compile | Every 10 min | `/compile/run` |
+| Wiki Compile | Every 10 min | `/compile/run` (includes lint pass) |
 | Source Health Check | Every 15 min | `/manifest/reload` |
 | Inbox Digest | Weekdays 12 PM | `/teams/scout/runs` |
 | Learning Summary | Monday 10 AM | `/teams/scout/runs` |
 | Weekly Review | Friday 5 PM | `/teams/scout/runs` |
-| Wiki Lint | Sunday 8 AM | `/wiki/lint` |
-| Sync Pull | Every 30 min | `/sync/pull` (only when git sync is configured) |
 
 ## Architecture
 
 ```
 AgentOS (app/main.py)  [scheduler=True, tracing=True, GPT-5.4]
  ├── FastAPI / Uvicorn
- ├── Slack Interface (optional) + channel-allowlist middleware
+ ├── Slack Interface (optional)
  ├── Custom router (scout-specific endpoints)
  └── Scout Team (scout/team.py, coordinate mode)
      ├─ Navigator   (scout/agents/navigator.py)
      │  ├─ SQLTools         → PostgreSQL (scout_* tables)
-     │  ├─ FileTools        → context/ + documents/
-     │  ├─ ParallelTools   → web search + extraction
+     │  ├─ FileTools        → context/
+     │  ├─ ParallelTools    → web search + extraction (conditional)
      │  ├─ GmailTools       → Gmail (drafts only) — conditional
      │  ├─ CalendarTools    → Calendar (read only) — conditional
      │  ├─ source_list / source_read / source_find  [manifest-gated]
@@ -208,17 +187,13 @@ AgentOS (app/main.py)  [scheduler=True, tracing=True, GPT-5.4]
      │  ├─ ParallelTools, FileTools on context/raw/
      │  ├─ ingest_url, ingest_text  → context/raw/<slug>-<short-sha>.md
      │  └─ read_manifest, update_knowledge, source_*
-     ├─ Compiler    (scout/agents/compiler.py)
-     │  ├─ FileTools (context, no delete)
-     │  ├─ list_compile_sources / compile_one / compile_one_source
-     │  ├─ list_compile_records
-     │  └─ source_*  [scoped to compile=True sources only]
-     ├─ Linter      (scout/agents/linter.py)
-     │  ├─ FileTools (compiled + context), ParallelTools
-     │  ├─ source_*  [live-read only]
-     │  └─ update_knowledge
-     └─ Syncer      (scout/agents/syncer.py) [conditional]
-        └─ sync_push, sync_pull, sync_status
+     └─ Compiler    (scout/agents/compiler.py)
+        ├─ FileTools (context, no delete)
+        ├─ list_compile_sources / compile_one / compile_one_source
+        ├─ list_compile_records
+        ├─ source_*  [scoped to compile=True sources only]
+        └─ runs lint pass after every compile — broken backlinks,
+           stale articles, needs_split, user-edit conflicts
 
      Leader tools: SlackTools (post to channels) [conditional]
      Knowledge:    scout_knowledge (metadata routing)
@@ -260,10 +235,7 @@ python -m scout _smoke_gating         # assert Navigator can't read local:raw
 | `/sources/{id}/health` | GET | Per-source health ping |
 | `/compile/run` | POST | Run compile pipeline (no body / `{source_id}` / `{source_id, entry_id}` / `{force: true}`) |
 | `/wiki/compile` | POST | Legacy alias for `/compile/run` |
-| `/wiki/lint` | POST | Trigger the Linter agent |
 | `/wiki/ingest` | POST | URL or text → `context/raw/` |
-| `/context/reload` | POST | Re-index context files into knowledge |
-| `/sync/pull` | POST | Pull remote `context/` from GitHub |
 
 ## Live Eval Harness
 
@@ -282,21 +254,18 @@ Each case declares its prompt, expected agent, required/forbidden tools, and a s
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
 | `OPENAI_API_KEY` | **Yes** | — | GPT-5.4 (every agent, Leader, compile runner, eval judge) + `text-embedding-3-small` for Knowledge |
-| `PARALLEL_API_KEY` | No | — | Web search + extraction — used by Navigator / Linter / Researcher. Without it, the Researcher agent is disabled and web search is unavailable. |
+| `PARALLEL_API_KEY` | No | — | Web search + extraction — used by Navigator + Researcher. Without it, the Researcher agent is disabled and Navigator loses web search. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | — | Gmail + Calendar + Drive (all three required together) |
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | — | Comma-separated folder IDs — enables `GoogleDriveSource` |
 | `SLACK_TOKEN` | No | — | Slack bot token — enables Interface + SlackTools + SlackSource |
 | `SLACK_SIGNING_SECRET` | No | — | Required alongside `SLACK_TOKEN` for inbound events |
-| `SLACK_CHANNEL_ALLOWLIST` | No | all | Comma-separated channel IDs |
 | `GITHUB_REPOS` | No | — | Comma-separated `owner/repo` — enables `GitHubSource` |
 | `GITHUB_READ_TOKEN` | No | — | Read-only PAT for `GitHubSource` |
 | `S3_BUCKETS` | No | — | Comma-separated `bucket[:prefix]` — enables `S3Source` |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | — | Required when `S3_BUCKETS` is set |
-| `GITHUB_ACCESS_TOKEN` / `SCOUT_REPO_URL` | No | — | Git sync for `context/` (both required together) |
 | `SCOUT_WORKSPACE_ID` | No | `default` | Workspace scoping (multi-workspace lands later) |
 | `SCOUT_API_HOST_PORT` | No | `8000` | Host port the API publishes on |
 | `SCOUT_CONTEXT_DIR` / `SCOUT_RAW_DIR` / `SCOUT_COMPILED_DIR` / `SCOUT_VOICE_DIR` | No | — | Override context paths |
-| `DOCUMENTS_DIR` | No | `./documents` | Enterprise documents corpus |
 | `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASS` / `DB_DATABASE` | No | compose defaults | Postgres |
 | `RUNTIME_ENV` | No | — | `dev` for hot reload |
 

@@ -69,10 +69,8 @@ Per-user operational memory. `Retrieval:`, `Pattern:`, `Correction:`.
 Search before saving — update, don't duplicate. `Correction:` always wins.
 
 ### 5. Files (the territory) — `{SCOUT_CONTEXT_DIR}`
-Voice guides, templates, your saved meeting notes. Read on demand.
+Voice guides + the compiled wiki live here.
 - `voice/` — channel tone guides. Read the matching guide before drafting.
-- `templates/` — document scaffolds.
-- `meetings/`, `projects/` — your saved work.
 - `compiled/` — the wiki (see above).
 
 ### 6. SQL Database — `scout_*` tables
@@ -81,10 +79,6 @@ Conventions: `scout_` prefix, `id SERIAL PRIMARY KEY`, `user_id TEXT NOT NULL`,
 `created_at TIMESTAMP DEFAULT NOW()`, `TEXT[]` for tags.
 
 **Data isolation**: every query scoped to `user_id = '{{user_id}}'`. Hard rule.
-
-### 7. Enterprise Documents — `documents/`
-Read-only enterprise document corpus. Navigate via `list_files` /
-`read_file` rooted at the documents directory.
 
 --------------------------------
 
@@ -248,25 +242,17 @@ def build_navigator_instructions() -> str:
 # Helpers the other agents use to prefix their own instructions.
 # ---------------------------------------------------------------------------
 #
-# Each agent file already defines its own role-specific instructions string
-# (COMPILER_INSTRUCTIONS, LINTER_INSTRUCTIONS, …). At Agent() construction
-# time they now prepend `sources_header(role)` via the wrappers below.
+# Each agent file defines its own role-specific instructions string
+# (COMPILER_INSTRUCTIONS, …). At Agent() construction time they prepend
+# `sources_header(role)` via the wrappers below.
 
 
 def build_compiler_instructions(role_body: str) -> str:
     return sources_header("compiler") + role_body
 
 
-def build_linter_instructions(role_body: str) -> str:
-    return sources_header("linter") + role_body
-
-
 def build_researcher_instructions(role_body: str) -> str:
     return sources_header("researcher") + role_body
-
-
-def build_syncer_instructions(role_body: str) -> str:
-    return sources_header("syncer") + role_body
 
 
 def build_leader_instructions(role_body: str) -> str:
