@@ -127,10 +127,25 @@ Output rules:
   the voice guide. Set user_edited: false on all output.
 - Filename slug for each article will be derived from its title — keep
   titles short, distinct, and noun-phrase shaped.
-- Tags: 2–5 lowercase kebab-case.
-- Backlinks: include 1–4 likely sibling articles even if they don't
-  exist yet. The Linter resolves [[?]] gaps.
+- Tags: 2–5 lowercase kebab-case. Emit them as a YAML list:
+  `tags: [onboarding, policy, paid-time-off]`. Never leave tags empty.
+- Backlinks: 1–4 likely sibling articles, YAML list form:
+  `backlinks: [[[pto-policy]], [[public-holidays]]]`. The Linter
+  resolves [[?]] gaps later.
 - Do NOT include any commentary outside the article blocks.
+
+Fidelity rules — these matter more than brevity:
+- If the raw document **enumerates** distinct items — numbered
+  decisions, action items, policy clauses, bullet points with
+  different referents — the article MUST include every one of them.
+  You can tighten each item's prose, but you may NOT drop items.
+  Dense documents get dense articles; that's fine.
+- Preserve owners, dates, numbers, and proper nouns verbatim.
+- If the raw document has a clear structure (e.g. "Decisions",
+  "Rejected/Deferred", "Action items"), mirror that structure as H2
+  sections in the article.
+- Brevity operates at the sentence level (no throat-clearing,
+  paraphrase crisply) — NOT at the fact level.
 
 VOICE GUIDE:
 ---
