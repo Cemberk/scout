@@ -2,9 +2,9 @@
 
 from agno.os.auth import get_authentication_dependency
 from agno.os.settings import AgnoAPISettings
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 
 class WikiCompileRequest(BaseModel):
@@ -107,8 +107,39 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         return run_compile(body)
 
     @router.post("/wiki/ingest")
-    def ingest_to_wiki(body: WikiIngestRequest):
-        """Ingest a URL or text into context/raw/."""
+    async def ingest_to_wiki(request: Request):
+        """Ingest a URL or text into context/raw/.
+
+        Expects a JSON body (`WikiIngestRequest`). Sending
+        `multipart/form-data` or any other content-type returns a clear
+        415 rather than the cryptic `Object of type bytes is not JSON
+        serializable` 500 users would otherwise hit when confusing this
+        endpoint with `/teams/scout/runs` (which *does* take multipart).
+        """
+        ctype = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        if ctype != "application/json":
+            return JSONResponse(
+                content={
+                    "error": "unsupported content-type",
+                    "hint": (
+                        "POST application/json with a body like "
+                        "{\"title\": \"...\", \"url\": \"...\" or \"text\": \"...\"}. "
+                        "/wiki/ingest does not accept form data."
+                    ),
+                },
+                status_code=415,
+            )
+
+        try:
+            payload = await request.json()
+        except Exception:
+            return JSONResponse(content={"error": "body is not valid JSON"}, status_code=400)
+
+        try:
+            body = WikiIngestRequest.model_validate(payload)
+        except ValidationError as e:
+            return JSONResponse(content={"error": "invalid body", "detail": e.errors()}, status_code=422)
+
         if not body.text and not body.url:
             return JSONResponse(content={"error": "Either url or text is required"}, status_code=400)
 
