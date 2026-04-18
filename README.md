@@ -114,9 +114,9 @@ Scout ships with local folders on day one. Each row below activates when you add
 |---|---|---|
 | **Gmail + Calendar + Drive** | `GOOGLE_*` ([setup](docs/GOOGLE_AUTH.md)) | Search mail, draft replies, read events, query Drive |
 | **Slack** | `SLACK_TOKEN` + `SLACK_SIGNING_SECRET` ([setup](docs/SLACK_CONNECT.md)) | @mention in channels, search threads, post |
-| **GitHub** | `GITHUB_REPOS` + `GITHUB_READ_TOKEN` | Clone and ripgrep repos for code questions |
+| **GitHub** | `GITHUB_REPOS` (+ optional `GITHUB_READ_TOKEN`) | Clone and ripgrep repos for code questions. Public repos work without a token; add one for private repos or higher rate limits. |
 | **S3** | `S3_BUCKETS` + `AWS_*` | Compile PDFs and docs from buckets into the wiki |
-| **Parallel** | `PARALLEL_API_KEY` | Web search and URL extraction |
+| **Web research** | built-in (Exa MCP, keyless); `PARALLEL_API_KEY` for premium | Web search + URL extraction. Scout ships with Exa MCP so research works on day one; set `PARALLEL_API_KEY` to switch to Parallel for better extraction and higher rate limits. |
 
 ## Example prompts
 
@@ -158,11 +158,13 @@ Compile runs every hour. Source health refresh every 15 minutes. Scout also send
 | Variable | Required | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | **Yes** | Model and embeddings |
-| `PARALLEL_API_KEY` | No | Web search |
+| `PARALLEL_API_KEY` | No | Premium web search + URL extraction. Without it, Scout uses Exa's keyless MCP server — research still works. |
+| `EXA_API_KEY` | No | Optional. Raises rate limits on the Exa MCP fallback; not needed to use it. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Gmail + Calendar + Drive |
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | Enables Drive as a live source |
 | `SLACK_TOKEN` / `SLACK_SIGNING_SECRET` | No | Slack interface and source |
-| `GITHUB_REPOS` / `GITHUB_READ_TOKEN` | No | GitHub live-read |
+| `GITHUB_REPOS` | No | Comma-separated `owner/repo`. Defaults to `agno-agi/scout` via compose so Scout can read its own source out of the box. Public repos need no token. |
+| `GITHUB_READ_TOKEN` | No | Read-only PAT. Optional — only needed for private repos or to raise the API rate ceiling above the anonymous limit. |
 | `S3_BUCKETS` / `AWS_*` | No | S3 compile |
 | `SCOUT_API_HOST_PORT` | No | Host port, default `8000` |
 | `DB_*` | No | Postgres (compose defaults work) |
