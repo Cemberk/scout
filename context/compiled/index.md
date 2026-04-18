@@ -1,3 +1,8 @@
-# Wiki Index
+# Scout Wiki Index
 
-No articles compiled yet. Ingest sources to `raw/` and run compilation.
+_Generated: 2026-04-18T11:22:26Z_  
+_Articles: 1_
+
+## Articles
+
+- [Scout adoption plan](compiled/articles/scout-adoption-plan-10ce1c28.md)
