@@ -136,7 +136,7 @@ python -m scout _smoke_gating                # assert Navigator can't read local
 | `local:wiki` | LocalFolderSource(./context/compiled) | live-read | The wiki Navigator reads |
 | `drive` | GoogleDriveSource(folder_ids=…) | live-read | Optional — needs Google + `GOOGLE_DRIVE_FOLDER_IDS` |
 | `slack` | SlackSource(channel_allowlist=…) | live-read | Optional — needs `SLACK_TOKEN` |
-| `github` | GitHubSource(repos=…) | live-read | Optional — needs `GITHUB_REPOS` + `GITHUB_READ_TOKEN`. Clones under `./.scout-cache/repos/` |
+| `github` | GitHubSource(repos=…) | live-read | Optional — needs `GITHUB_REPOS`. Public repos work anonymously; `GITHUB_READ_TOKEN` is only required for private repos or higher rate limits. Clones under `./.scout-cache/repos/` |
 | `s3:<bucket>[/<prefix>]` | S3Source | compile-only | Optional — needs `S3_BUCKETS` + `AWS_*`. One instance per entry. |
 
 ## Two Knowledge Systems
@@ -206,8 +206,8 @@ Knowledge/Learnings PgVector path, so one key covers everything.
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | Comma-separated — enables `GoogleDriveSource` |
 | `SLACK_TOKEN` | No | Enables Slack Interface + SlackTools + `SlackSource` |
 | `SLACK_SIGNING_SECRET` | No | Slack inbound event verification |
-| `GITHUB_REPOS` | No | Comma-separated `owner/repo` — enables `GitHubSource` |
-| `GITHUB_READ_TOKEN` | No | Read-only PAT for `GitHubSource` |
+| `GITHUB_REPOS` | No | Comma-separated `owner/repo` — enables `GitHubSource`. Defaults to `agno-agi/scout` in compose so Scout can read its own source out of the box |
+| `GITHUB_READ_TOKEN` | No | Optional read-only PAT. Public repos work anonymously (anon rate limit = 60/h); add a PAT for private repos or higher rate limits |
 | `S3_BUCKETS` | No | Comma-separated `bucket[:prefix]` — enables `S3Source` |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `S3_BUCKETS` is set |
 | `SCOUT_CONTEXT_DIR` | No | Context directory (default: `./context`) |
