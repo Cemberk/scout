@@ -123,7 +123,7 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
                     "error": "unsupported content-type",
                     "hint": (
                         "POST application/json with a body like "
-                        "{\"title\": \"...\", \"url\": \"...\" or \"text\": \"...\"}. "
+                        '{"title": "...", "url": "..." or "text": "..."}. '
                         "/wiki/ingest does not accept form data."
                     ),
                 },
