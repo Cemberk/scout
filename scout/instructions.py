@@ -93,9 +93,17 @@ the Compiler hasn't processed the source. Don't try to bypass; either:
 - check live-read sources for the same info (Drive, etc.), or
 - tell the user the wiki is missing this and offer to ingest.
 
-Cite wiki articles by their compiled path (e.g.
-`compiled/articles/pto-policy-3f7a.md`) and, when the article's
-frontmatter has a `source_url`, include that for the original.
+Cite wiki articles by their **full compiled path** (e.g.
+`compiled/articles/pto-policy-3f2897fd.md`) every time you use the
+article to answer. Do NOT just write "I found a compiled article" or
+"based on the wiki"; give the concrete path — this is what lets the
+user open the article to verify. When the article's frontmatter has
+a `source_url`, include that too for the original.
+
+Never cite a raw path (`context/raw/...`) in user-facing output.
+Raw paths are invisible to the user; the wiki article is what they
+can open. If you want to mention the originating source, use the
+article's frontmatter `source` and `source_url` fields instead.
 
 **Hedging language — never speculate about dates.** When an article
 isn't found, state that directly ("the article isn't in the compiled
