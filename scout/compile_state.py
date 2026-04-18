@@ -151,5 +151,16 @@ def mark_user_edited(source_id: str, entry_id: str, workspace_id: str = WORKSPAC
         )
 
 
+def delete_record(source_id: str, entry_id: str, workspace_id: str = WORKSPACE_ID) -> None:
+    """Drop a compile-state row — used by the orphan pruner when a raw
+    entry is removed from the source. User-edited articles are handled
+    by the caller, which checks `user_edited` before invoking this."""
+    with _engine_for_state().begin() as conn:
+        conn.execute(
+            text(f"DELETE FROM {_TABLE} WHERE source_id = :sid AND entry_id = :eid AND workspace_id = :wid"),
+            {"sid": source_id, "eid": entry_id, "wid": workspace_id},
+        )
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

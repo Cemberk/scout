@@ -32,7 +32,9 @@ from agno.models.openai import OpenAIResponses
 
 from scout.compile_state import (
     CompileRecord,
+    delete_record,
     get_record,
+    list_records_for_source,
     upsert_record,
 )
 from scout.config import SCOUT_COMPILED_DIR, SCOUT_VOICE_DIR, WORKSPACE_ID
@@ -59,7 +61,7 @@ def _sha256_bytes(data: bytes) -> str:
 class CompileResult:
     source_id: str
     entry_id: str
-    status: str  # "compiled" | "skipped-unchanged" | "skipped-user-edited" | "skipped-empty" | "error"
+    status: str  # "compiled" | "skipped-unchanged" | "skipped-user-edited" | "skipped-empty" | "pruned" | "error"
     wiki_path: str | None = None
     detail: str = ""
 
@@ -278,6 +280,7 @@ def compile_entry(
             workspace_id,
             needs_split=needs_split,
             sibling_of=record,
+            prior_record=None,  # sibling-write; don't delete the user-edited original
         )
 
     return _compile_and_write(
@@ -289,6 +292,7 @@ def compile_entry(
         knowledge,
         workspace_id,
         needs_split=needs_split,
+        prior_record=record,
     )
 
 
@@ -320,6 +324,7 @@ def _compile_and_write(
     *,
     needs_split: bool = False,
     sibling_of: CompileRecord | None = None,
+    prior_record: CompileRecord | None = None,
 ) -> CompileResult:
     voice = _voice_guide()
     compiled_at = _now_iso()
@@ -389,6 +394,21 @@ def _compile_and_write(
     if primary_path is None:
         return CompileResult(source.id, entry_id, "error", detail="no article written")
 
+    # Delete the prior article file if this recompile produced a
+    # different filename (filename is hash-of-article-content, so any
+    # substantive change in the LLM output rotates it). Without this,
+    # every recompile leaves the old article sitting alongside the new
+    # one — stale content with no source link, visible in the wiki
+    # index. We only delete when the prior record's wiki_path differs
+    # from the new path; if they match, we overwrote in place.
+    if prior_record and prior_record.wiki_path and prior_record.wiki_path != str(primary_path):
+        try:
+            prior_path = Path(prior_record.wiki_path)
+            if prior_path.exists():
+                prior_path.unlink()
+        except OSError:
+            pass
+
     # Linter surface row for oversized raw entries. `Discovery:` is the
     # spec-§8 prefix we're reusing here (tmp/spec-diff.md A3).
     if needs_split and knowledge is not None:
@@ -448,10 +468,49 @@ def compile_source(
         return [CompileResult(source_id, "", "error", detail=f"list failed: {e}")]
 
     results: list[CompileResult] = []
+    live_entry_ids: set[str] = set()
     for i, entry in enumerate(entries):
         if limit is not None and i >= limit:
             break
+        live_entry_ids.add(entry.id)
         results.append(compile_entry(source, entry.id, knowledge=knowledge, workspace_id=workspace_id, force=force))
+
+    # Prune orphans: compile_state rows whose entry_id is no longer in
+    # the source's live entry list. Delete the DB row + the compiled
+    # article file so the wiki matches source-of-truth after deletions.
+    # Respect user-edited articles — if a human touched the file, keep
+    # it and the state row so the Linter can surface the conflict.
+    if limit is None:
+        for record in list_records_for_source(source.id, workspace_id):
+            if record.entry_id in live_entry_ids:
+                continue
+            if record.user_edited:
+                results.append(
+                    CompileResult(
+                        source.id,
+                        record.entry_id,
+                        "skipped-user-edited",
+                        wiki_path=record.wiki_path,
+                        detail="source entry removed but article was user-edited; kept for Linter follow-up",
+                    )
+                )
+                continue
+            wiki_file = Path(record.wiki_path)
+            try:
+                if wiki_file.exists():
+                    wiki_file.unlink()
+            except OSError:
+                pass
+            delete_record(source.id, record.entry_id, workspace_id)
+            results.append(
+                CompileResult(
+                    source.id,
+                    record.entry_id,
+                    "pruned",
+                    wiki_path=record.wiki_path,
+                    detail="source entry removed; pruned article + state row",
+                )
+            )
     _refresh_index(workspace_id)
     return results
 
