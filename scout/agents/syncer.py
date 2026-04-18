@@ -11,7 +11,7 @@ volumes needed. Git is the persistence layer.
 """
 
 from agno.agent import Agent
-from agno.models.anthropic import Claude
+from agno.models.openai import OpenAIResponses
 
 from scout.agents.settings import agent_db
 from scout.instructions import build_syncer_instructions
@@ -53,7 +53,7 @@ syncer = Agent(
     id="syncer",
     name="Syncer",
     role="Commits and pushes context/ changes to GitHub",
-    model=Claude(id="claude-opus-4-7"),
+    model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
     instructions=build_syncer_instructions(SYNCER_INSTRUCTIONS),
     tools=build_syncer_tools(),

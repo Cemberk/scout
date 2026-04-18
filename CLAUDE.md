@@ -169,10 +169,10 @@ User Question → Classify → Recall (Manifest+Knowledge+Learnings) → Read (S
 
 | Agent | Tools |
 |-------|-------|
-| Navigator | SQLTools, FileTools (context + documents), MCPTools (Exa), GmailTools, CalendarTools, update_knowledge, read_manifest, source_* |
+| Navigator | SQLTools, FileTools (context + documents), ParallelTools, GmailTools, CalendarTools, update_knowledge, read_manifest, source_* |
 | Researcher | FileTools, ParallelTools, update_knowledge, ingest_url, ingest_text, read_manifest, source_* |
 | Compiler | FileTools (context), update_knowledge, read_manifest, source_* (compile-only), compile_* |
-| Linter | FileTools (compiled+context), MCPTools (Exa), update_knowledge, read_manifest, source_* (live-read) |
+| Linter | FileTools (compiled+context), ParallelTools, update_knowledge, read_manifest, source_* (live-read) |
 | Syncer | sync_push, sync_pull, sync_status |
 
 All tool returns are passed through the redactor in `scout.tools.redactor` — secret-shaped strings are stripped before they reach the model.
@@ -209,18 +209,17 @@ All tool returns are passed through the redactor in `scout.tools.redactor` — s
 ## Model
 
 Every agent, the Leader, the compile runner, and the evals judge run on
-`Claude(id="claude-opus-4-7")` via `agno.models.anthropic`. The literal
+`OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`. The literal
 sits at each call site — no `SCOUT_COMPILE_MODEL` / `COMPILE_MODEL_ID`
-indirection.
+indirection. OpenAI is also what `text-embedding-3-small` uses for the
+Knowledge/Learnings PgVector path, so one key covers everything.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | **Yes** | Claude Opus 4.7 — agents + Leader + Compiler + evals judge |
-| `OPENAI_API_KEY` | No | Only for `text-embedding-3-small` in the Knowledge path |
-| `EXA_API_KEY` | No | Web search for Navigator + Linter (tool loads regardless) |
-| `PARALLEL_API_KEY` | No | Enables the Researcher agent + full-content ingest_url |
+| `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent + embeddings for Knowledge |
+| `PARALLEL_API_KEY` | No | Web search + extraction — used by Navigator / Linter / Researcher. Without it, web search is off and the Researcher agent is disabled. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Gmail + Calendar + Drive (all three required together) |
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | Comma-separated — enables `GoogleDriveSource` |
 | `SLACK_TOKEN` | No | Enables Slack Interface + SlackTools + `SlackSource` |

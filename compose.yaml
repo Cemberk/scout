@@ -38,9 +38,7 @@ services:
       DB_DATABASE: ${DB_DATABASE:-ai}
       WAIT_FOR_DB: "True"
       PRINT_ENV_ON_LOAD: "True"
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      EXA_API_KEY: ${EXA_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
       # Slack
       SLACK_TOKEN: ${SLACK_TOKEN:-}

@@ -15,7 +15,7 @@ The Compiler agent itself remains useful for ad-hoc instructions like
 """
 
 from agno.agent import Agent
-from agno.models.anthropic import Claude
+from agno.models.openai import OpenAIResponses
 
 from scout.agents.settings import agent_db, scout_knowledge
 from scout.instructions import build_compiler_instructions
@@ -64,7 +64,7 @@ compiler = Agent(
     id="compiler",
     name="Compiler",
     role="Iterates compile-on sources and produces Obsidian-compatible markdown wiki articles",
-    model=Claude(id="claude-opus-4-7"),
+    model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
     instructions=build_compiler_instructions(COMPILER_INSTRUCTIONS),
     knowledge=scout_knowledge,

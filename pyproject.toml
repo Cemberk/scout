@@ -8,20 +8,14 @@ license-files = ["LICENSE"]
 authors = [{ name = "Agno", email = "hello@agno.com" }]
 
 dependencies = [
-  "agno",
-  "anthropic",
+  "agno[os]",
   "beautifulsoup4",
   "boto3",
-  "croniter",
-  "fastapi[standard]",
   "google-api-python-client",
   "google-auth",
   "httpx",
-  "mcp",
   "openai",
-  "openinference-instrumentation-agno",
-  "opentelemetry-api",
-  "opentelemetry-sdk",
+  "parallel-web",
   "pgvector",
   "psycopg[binary]",
   "pypdf",
@@ -29,7 +23,6 @@ dependencies = [
   "pytz",
   "pyyaml",
   "slack_sdk",
-  "sqlalchemy",
 ]
 
 [project.optional-dependencies]

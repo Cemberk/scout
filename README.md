@@ -1,6 +1,6 @@
 # Scout
 
-Scout is an **enterprise context agent**. It navigates your company's knowledge graph through a uniform `Source` protocol: compile dumb stores (local folders, S3 buckets) into a curated wiki; live-read smart sources (Drive, Slack, GitHub) on demand.
+Scout is an **enterprise context agent**. It navigates your company's knowledge through a uniform `Source` protocol: compile dumb stores (local folders, S3 buckets) into a curated wiki; live-read smart sources (Drive, Slack, GitHub) on demand.
 
 Feed it your docs — policies, runbooks, architecture, meeting notes, reports. Scout organizes everything into two layers: a compiled wiki for text-heavy knowledge (concepts, summaries, cross-references) in `context/compiled/`, and a Postgres `scout_knowledge` index that acts as the metadata router across every source. A learning loop in `scout_learnings` compounds every interaction.
 
@@ -10,7 +10,7 @@ Ask a question over Slack, the terminal, or the [AgentOS](https://os.agno.com) w
 
 ```sh
 git clone https://github.com/agno-agi/scout && cd scout
-cp example.env .env              # add ANTHROPIC_API_KEY
+cp example.env .env              # add OPENAI_API_KEY
 docker compose up -d --build
 ```
 
@@ -73,7 +73,7 @@ Every non-greeting interaction:
 
 ## Integrations
 
-Scout boots with local sources + Exa on day one. Everything else activates when you add env.
+Scout boots with local sources on day one. Everything else activates when you add env.
 
 <details>
 <summary><strong>Slack</strong> — receive @mentions + post to channels + search threads</summary>
@@ -134,24 +134,13 @@ One `S3Source` instance per `bucket[:prefix]`. Compile-only (no live-read) — t
 </details>
 
 <details>
-<summary><strong>Parallel web research</strong> — enables the Researcher agent</summary>
+<summary><strong>Parallel web research</strong> — the single web-search backend</summary>
 
 ```env
 PARALLEL_API_KEY=***
 ```
 
-The Researcher agent is conditional on this key. Without it, Navigator + Linter still have web search via Exa.
-
-</details>
-
-<details>
-<summary><strong>Exa web search</strong> — default (free via MCP)</summary>
-
-Available by default via the public MCP endpoint. Add a key for higher limits:
-
-```env
-EXA_API_KEY=***
-```
+Navigator / Linter / Researcher all use `parallel_search` + `parallel_extract`. Without this key, web search is unavailable — the wiki and live sources still work.
 
 </details>
 
@@ -201,7 +190,7 @@ All nine run on the agno scheduler:
 ## Architecture
 
 ```
-AgentOS (app/main.py)  [scheduler=True, tracing=True, Claude Opus 4.7]
+AgentOS (app/main.py)  [scheduler=True, tracing=True, GPT-5.4]
  ├── FastAPI / Uvicorn
  ├── Slack Interface (optional) + channel-allowlist middleware
  ├── Custom router (scout-specific endpoints)
@@ -209,7 +198,7 @@ AgentOS (app/main.py)  [scheduler=True, tracing=True, Claude Opus 4.7]
      ├─ Navigator   (scout/agents/navigator.py)
      │  ├─ SQLTools         → PostgreSQL (scout_* tables)
      │  ├─ FileTools        → context/ + documents/
-     │  ├─ MCPTools         → Exa web search
+     │  ├─ ParallelTools   → web search + extraction
      │  ├─ GmailTools       → Gmail (drafts only) — conditional
      │  ├─ CalendarTools    → Calendar (read only) — conditional
      │  ├─ source_list / source_read / source_find  [manifest-gated]
@@ -225,7 +214,7 @@ AgentOS (app/main.py)  [scheduler=True, tracing=True, Claude Opus 4.7]
      │  ├─ list_compile_records
      │  └─ source_*  [scoped to compile=True sources only]
      ├─ Linter      (scout/agents/linter.py)
-     │  ├─ FileTools (compiled + context), MCPTools (Exa)
+     │  ├─ FileTools (compiled + context), ParallelTools
      │  ├─ source_*  [live-read only]
      │  └─ update_knowledge
      └─ Syncer      (scout/agents/syncer.py) [conditional]
@@ -292,10 +281,8 @@ Each case declares its prompt, expected agent, required/forbidden tools, and a s
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `ANTHROPIC_API_KEY` | **Yes** | — | Claude Opus 4.7 — every agent, Leader, compile runner, eval judge |
-| `OPENAI_API_KEY` | No | — | Only for `text-embedding-3-small` in the Knowledge PgVector path |
-| `EXA_API_KEY` | No | — | Exa web search (Navigator + Linter); tool loads regardless |
-| `PARALLEL_API_KEY` | No | — | Enables the Researcher agent + full-content `ingest_url` |
+| `OPENAI_API_KEY` | **Yes** | — | GPT-5.4 (every agent, Leader, compile runner, eval judge) + `text-embedding-3-small` for Knowledge |
+| `PARALLEL_API_KEY` | No | — | Web search + extraction — used by Navigator / Linter / Researcher. Without it, the Researcher agent is disabled and web search is unavailable. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | — | Gmail + Calendar + Drive (all three required together) |
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | — | Comma-separated folder IDs — enables `GoogleDriveSource` |
 | `SLACK_TOKEN` | No | — | Slack bot token — enables Interface + SlackTools + SlackSource |
@@ -323,7 +310,7 @@ Each case declares its prompt, expected agent, required/forbidden tools, and a s
 
 **Manifest shows sources `unconfigured`**: the source's env is missing. Check `example.env` for the required set.
 
-**Live eval errors with "Incorrect API key"**: `ANTHROPIC_API_KEY` in `.env` is invalid or rotated. Fix it and `docker compose restart scout-api`.
+**Live eval errors with "Incorrect API key"**: `OPENAI_API_KEY` in `.env` is invalid or rotated. Fix it and `docker compose restart scout-api`.
 
 ## Links
 

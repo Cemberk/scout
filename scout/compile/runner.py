@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agno.agent import Agent
-from agno.models.anthropic import Claude
+from agno.models.openai import OpenAIResponses
 
 from scout.compile_state import (
     CompileRecord,
@@ -153,7 +153,7 @@ def _build_compiler_agent() -> Agent:
     return Agent(
         id="compile-runner",
         name="Compile Runner",
-        model=Claude(id="claude-opus-4-7"),
+        model=OpenAIResponses(id="gpt-5.4"),
         instructions="You convert raw documents into Obsidian-compatible markdown articles.",
         markdown=False,
     )

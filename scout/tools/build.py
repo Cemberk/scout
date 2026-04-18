@@ -15,17 +15,14 @@ from __future__ import annotations
 
 from agno.knowledge import Knowledge
 from agno.tools.file import FileTools
-from agno.tools.mcp import MCPTools
 from agno.tools.sql import SQLTools
 
-# ParallelTools is imported lazily in build_researcher_tools — it pulls in
-# the optional `parallel-web` package which isn't installed when Researcher
-# is disabled. Unconditional import breaks `python -m scout _smoke_gating`
-# and any other entry point that just needs manifest/gating.
+# ParallelTools is imported lazily inside each builder — it pulls in the
+# optional `parallel-web` package. Lazy import keeps `_smoke_gating` and
+# other entry points usable even when parallel-web isn't installed.
 from db import SCOUT_SCHEMA, get_sql_engine
 from scout.config import (
     DOCUMENTS_DIR,
-    EXA_MCP_URL,
     GOOGLE_INTEGRATION_ENABLED,
     SCOUT_COMPILED_DIR,
     SCOUT_CONTEXT_DIR,
@@ -47,12 +44,14 @@ def build_navigator_tools(knowledge: Knowledge) -> list:
     so source_read on it returns 'refused'. context/compiled/ is reached
     via source tools rooted at `local:wiki`.
     """
+    from agno.tools.parallel import ParallelTools  # lazy — optional dep
+
     tools: list = [
         SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
         FileTools(base_dir=SCOUT_CONTEXT_DIR, enable_delete_file=False),
         FileTools(base_dir=DOCUMENTS_DIR, enable_save_file=False, enable_delete_file=False),
         create_update_knowledge(knowledge),
-        MCPTools(url=EXA_MCP_URL),
+        ParallelTools(),
         create_manifest_tool("navigator"),
         *create_source_tools("navigator"),
     ]
@@ -111,14 +110,16 @@ def build_compiler_tools(knowledge: Knowledge) -> list:
 
 
 def build_linter_tools(knowledge: Knowledge) -> list:
-    """Tools for the Linter — live-read source dispatch + lint reports + Exa for gap research.
+    """Tools for the Linter — live-read source dispatch + lint reports + Parallel for gap research.
 
     Linter writes its lint reports under context/compiled/ via FileTools.
     """
+    from agno.tools.parallel import ParallelTools  # lazy — optional dep
+
     return [
         FileTools(base_dir=SCOUT_COMPILED_DIR, enable_delete_file=False),
         FileTools(base_dir=SCOUT_CONTEXT_DIR, enable_delete_file=False),
-        MCPTools(url=EXA_MCP_URL),
+        ParallelTools(),
         create_update_knowledge(knowledge),
         create_manifest_tool("linter"),
         *create_source_tools("linter"),

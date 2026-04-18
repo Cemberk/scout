@@ -12,7 +12,6 @@ from scout.paths import (
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
-EXA_API_KEY = getenv("EXA_API_KEY", "")
 PARALLEL_API_KEY = getenv("PARALLEL_API_KEY", "")
 
 SLACK_TOKEN = getenv("SLACK_TOKEN", "")
@@ -38,12 +37,6 @@ SCOUT_VOICE_DIR = Path(getenv("SCOUT_VOICE_DIR", str(SCOUT_CONTEXT_DIR / "voice"
 
 # Workspace scoping — fixed for Phase 1, real multi-workspace lands in Phase 4
 WORKSPACE_ID = getenv("SCOUT_WORKSPACE_ID", "default")
-
-EXA_MCP_URL = (
-    f"https://mcp.exa.ai/mcp?exaApiKey={EXA_API_KEY}&tools=web_search_exa"
-    if EXA_API_KEY
-    else "https://mcp.exa.ai/mcp?tools=web_search_exa"
-)
 
 # Git sync — push context/ to GitHub, pull on startup
 GITHUB_ACCESS_TOKEN = getenv("GITHUB_ACCESS_TOKEN", "")
@@ -76,8 +69,6 @@ __all__ = [
     "CONTEXT_VOICE_DIR",
     "DOCUMENTS_DIR",
     "DRIVE_SOURCE_ENABLED",
-    "EXA_API_KEY",
-    "EXA_MCP_URL",
     "GIT_SYNC_ENABLED",
     "GITHUB_ACCESS_TOKEN",
     "GITHUB_READ_TOKEN",

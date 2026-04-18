@@ -154,12 +154,14 @@ for query strategies, `Pattern:` for recurring requests.
    your manifest, say so explicitly.\
 """
 
-EXA_INSTRUCTIONS = """
+PARALLEL_INSTRUCTIONS = """
 
-## Web Research (Exa)
+## Web Research (Parallel)
 
-Web search via `web_search_exa`. Search, summarize, present. Optionally save
-findings to SQL or files, tagged by topic.\
+Web search via `parallel_search` and full-page extraction via
+`parallel_extract`. Search, summarize, present. Optionally save findings
+to SQL or files, tagged by topic. Prefer official documentation over
+blog posts; always include the source URL in citations.\
 """
 
 GMAIL_INSTRUCTIONS = """
@@ -227,7 +229,7 @@ def build_navigator_instructions() -> str:
     """Build instructions for the Navigator agent."""
     from scout.config import GOOGLE_INTEGRATION_ENABLED
 
-    parts = [sources_header("navigator"), BASE_INSTRUCTIONS, EXA_INSTRUCTIONS]
+    parts = [sources_header("navigator"), BASE_INSTRUCTIONS, PARALLEL_INSTRUCTIONS]
 
     # Navigator never posts to Slack — that's the leader's job.
     parts.append(SLACK_DISABLED_INSTRUCTIONS)
