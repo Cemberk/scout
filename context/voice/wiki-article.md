@@ -1,5 +1,4 @@
 # Voice guide: Wiki articles
-# Voice guide: Wiki articles
 
 You are compiling a raw document into a wiki article. Write for fast retrieval: concise, factual, and easy to scan.
 

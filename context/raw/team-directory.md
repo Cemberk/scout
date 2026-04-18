@@ -13,13 +13,16 @@ article to land on first.
 
 ## Engineering
 
-- **Platform**: Priya Menon (lead), Jordan Kim, Wei Chen
-- **Product Eng**: Sam Okafor (lead), Ana García, Lou Martinez
-- **Agents & ML**: Taylor Reeves (lead), Morgan Patel
+- **VP Engineering**: Maya Chen
+- **Platform**: Diego Alvarez (lead)
+- **API**: Sarah O'Connell (engineering manager)
+- **Data Infra**: Kenji Tanaka (lead)
+- **Growth**: Reza Haddad (senior engineer)
+- **Developer Productivity**: Priya Ramanathan (staff engineer)
 
 ## Operations
 
-- **Security**: Ivy Liu (lead)
+- **Security**: Nadia Park (security engineer)
 - **IT**: Chris Park
 - **People / HR**: Dana Obi
 
@@ -36,4 +39,5 @@ article to land on first.
 - Remote-first for all engineering roles
 
 Reach the whole company in `#all-hands`; reach your function in
-`#eng`, `#security`, `#ops`, or `#people`.
+`#eng`, `#security`, `#ops`, or `#people`. Scout posts its scheduled
+updates (daily briefing, inbox digest, weekly review) to `#scout-updates`.

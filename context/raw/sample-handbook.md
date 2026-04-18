@@ -66,4 +66,4 @@ All production deploys go through the `deploy` GitHub Action on the
 deploy in the dashboard. Incidents of Sev-2 or higher page the on-call
 engineer via PagerDuty.
 
-See also: on-call rotation policy, incident response procedure.
+See also: [[on-call-rotation]], [[incident-response]].

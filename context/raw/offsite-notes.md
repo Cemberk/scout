@@ -46,7 +46,7 @@ We considered running a separate Scout per team. Rejected — the whole point of
 
 ### D4 — Sources to wire up, in order
 
-1. **GitHub** — the repos we actively work in: `acme/api`, `acme/web`, `acme/infra`. Diego will set `GITHUB_REPOS` and a read-only PAT. Target: 2026-04-18.
+1. **GitHub** — the repos we actively work in: `acme/api`, `acme/web`, `acme/infra`. Diego will wire read-only GitHub access for CodeExplorer (`GITHUB_ACCESS_TOKEN` in the scout service env). CodeExplorer clones on demand — no pre-configured repo list. Target: 2026-04-18.
 2. **Drive** — the `Engineering` shared drive. Only folders, not the whole org. Sarah will collect the folder IDs for `Engineering/Handbook`, `Engineering/RFCs`, and `Engineering/Postmortems`. Target: 2026-04-22.
 3. **Slack** — `#eng`, `#eng-platform`, `#eng-api`, `#eng-incidents`. Slack is live-read, so threads stay where they are; Scout just queries them. Nadia will review the scope before we install. Target: 2026-05-02.
 4. **S3** — the `acme-eng-archive` bucket that holds old PDFs (architecture diagrams, vendor contracts, post-mortem decks). Compile-only; let Scout turn them into wiki articles. Kenji will handle. Target: 2026-05-09.
@@ -87,7 +87,7 @@ Priya will wire this up. The static eval suite (`python -m evals`) takes under 9
 
 | # | Owner | Item | Due |
 |---|-------|------|-----|
-| A1 | Diego | Wire `GITHUB_REPOS=acme/api,acme/web,acme/infra` and read-only PAT | 2026-04-18 |
+| A1 | Diego | Wire `GITHUB_ACCESS_TOKEN` (read-only PAT) so CodeExplorer can reach `acme/api`, `acme/web`, `acme/infra` | 2026-04-18 |
 | A2 | Sarah | Collect Drive folder IDs for Handbook, RFCs, Postmortems | 2026-04-22 |
 | A3 | Nadia | Security review of Slack install scope + post-install audit | 2026-05-02 |
 | A4 | Kenji | Point S3 compile at `acme-eng-archive` bucket | 2026-05-09 |
