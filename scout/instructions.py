@@ -132,6 +132,11 @@ names, or other specifics not present in the source.
 ### 3. Read
 For knowledge: `source_find("local:wiki", q)` → `source_read(...)`.
 For Drive: `source_find("drive", q)` → `source_read(...)`.
+For GitHub: `source_find("github", q)` → `source_read("github", "<owner>/<repo>/<path>")`.
+  **If the user pastes a github.com URL for a repo that's in your `github`
+  source, do NOT fetch it via the web — use `source_read("github", ...)`
+  against the local clone for grounded answers. Check `read_manifest` if
+  you're unsure whether the URL's repo is configured.**
 For SQL/email/calendar: their respective tools.
 
 ### 4. Act
@@ -156,14 +161,27 @@ for query strategies, `Pattern:` for recurring requests.
    your manifest, say so explicitly.\
 """
 
-PARALLEL_INSTRUCTIONS = """
+WEB_RESEARCH_INSTRUCTIONS = """
 
-## Web Research (Parallel)
+## Web Research
 
-Web search via `parallel_search` and full-page extraction via
-`parallel_extract`. Search, summarize, present. Optionally save findings
-to SQL or files, tagged by topic. Prefer official documentation over
-blog posts; always include the source URL in citations.\
+You always have a web-search backend. The specific tool names depend on
+configuration:
+- If `PARALLEL_API_KEY` is set: `parallel_search` for queries,
+  `parallel_extract` for full-page extraction.
+- Otherwise: `web_search_exa` for queries, `web_fetch_exa` for full
+  page content. Both are provided by the Exa MCP server (keyless).
+
+Whichever you have, the workflow is the same: search, read the best
+hits, summarize, present. Optionally save findings to SQL or files,
+tagged by topic. Prefer official documentation over blog posts; always
+include the source URL in citations.
+
+**Before falling to the web**, check whether the URL or topic is covered
+by one of your configured sources. If a question can be answered from
+`github`, `drive`, or the compiled wiki, use that path — it's grounded
+in your team's actual state. The web is the fallback for topics Scout
+doesn't already have a source for.\
 """
 
 GMAIL_INSTRUCTIONS = """
@@ -235,7 +253,7 @@ def build_navigator_instructions() -> str:
     """Build instructions for the Navigator agent."""
     from scout.config import GOOGLE_INTEGRATION_ENABLED
 
-    parts = [sources_header("navigator"), BASE_INSTRUCTIONS, PARALLEL_INSTRUCTIONS]
+    parts = [sources_header("navigator"), BASE_INSTRUCTIONS, WEB_RESEARCH_INSTRUCTIONS]
 
     # Navigator never posts to Slack — that's the leader's job.
     parts.append(SLACK_DISABLED_INSTRUCTIONS)
