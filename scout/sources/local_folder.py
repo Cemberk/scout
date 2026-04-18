@@ -133,6 +133,11 @@ class LocalFolderSource:
                 continue
             if any(part in _SKIP_DIRS for part in p.parts):
                 continue
+            # Skip dotfiles (e.g. .gitkeep, .manifest.json, .DS_Store)
+            # — these are infrastructure, not source material the
+            # Compiler should turn into wiki articles.
+            if any(part.startswith(".") for part in p.relative_to(self.root).parts):
+                continue
             yield p
 
     # ------------------------------------------------------------------
