@@ -182,11 +182,49 @@ def _kick_initial_compile() -> None:
     threading.Thread(target=_run, name="scout-initial-compile", daemon=True).start()
 
 
+# Canonical set of schedules this build owns. Anything else in
+# agno_schedules is an orphan from an older revision and gets
+# removed on every startup to keep the scheduler surface clean.
+_OWNED_SCHEDULES = frozenset(
+    {
+        "daily-briefing",
+        "wiki-compile",
+        "source-health-check",
+        "inbox-digest",
+        "learning-summary",
+        "weekly-review",
+    }
+)
+
+
 def _register_schedules() -> None:
-    """Register all scheduled tasks (idempotent — safe to run on every startup)."""
+    """Register all scheduled tasks (idempotent — safe to run on every startup).
+
+    Also prunes orphan schedules left behind by older revisions — e.g.
+    `context-refresh` and `wiki-lint` from pre-v3 code that pointed at
+    endpoints that no longer exist. Without pruning, the scheduler
+    fires 404s on the old cron slots.
+    """
     from agno.scheduler import ScheduleManager
 
     mgr = ScheduleManager(get_postgres_db())
+
+    # Prune orphans first so a subsequent create can't collide with
+    # a stale row (if_exists="update" would otherwise re-activate them).
+    try:
+        existing = mgr.list()
+        for sched in existing or []:
+            name = getattr(sched, "name", None) or (sched.get("name") if isinstance(sched, dict) else None)
+            sched_id = getattr(sched, "id", None) or (sched.get("id") if isinstance(sched, dict) else None)
+            if name and sched_id and name not in _OWNED_SCHEDULES:
+                try:
+                    mgr.delete(sched_id)
+                    print(f"[scout] Schedule pruned: {name}")
+                except Exception as exc:
+                    print(f"[scout] Schedule prune failed for {name}: {exc}")
+    except Exception as exc:
+        print(f"[scout] Schedule prune skipped: {exc}")
+
     slack_post = "\n\nWhen done, post the results to the #scout-updates Slack channel." if SLACK_TOKEN else ""
 
     mgr.create(
