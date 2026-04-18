@@ -16,9 +16,10 @@ Case inventory (local-only runs first, env-gated at the bottom):
   Wiki / Navigator behavior .......... 5
   Response format .................... 3
   Robustness ......................... 4
-  ------------------------------------- 50 local
+  GitHub live-read ................... 1  (keyless; compose sets GITHUB_REPOS)
+  ------------------------------------- 51 local
 
-  Env-gated (SKIP without env) ....... 5
+  Env-gated (SKIP without env) ....... 4
   ------------------------------------- 55 total
 """
 
@@ -568,6 +569,11 @@ CASES: list[EvalCase] = [
         expected_tools=["ingest_url"],
         max_duration_s=180,
         target_file=_AGENTS / "researcher.py",
+        # Gated on PARALLEL_API_KEY: `ingest_url` is the Parallel-only
+        # one-shot convenience. Without Parallel, the Researcher uses
+        # `web_fetch_exa` + `ingest_text` instead — a different tool
+        # shape that this case doesn't assert. Keep gated so the
+        # `expected_tools` check stays meaningful.
         requires=["PARALLEL_API_KEY"],
     ),
     EvalCase(
@@ -609,7 +615,12 @@ CASES: list[EvalCase] = [
         expected_agent="navigator",
         max_duration_s=180,
         target_file=_SOURCES / "github.py",
-        requires=["GITHUB_REPOS", "GITHUB_READ_TOKEN"],
+        # Previously gated on GITHUB_READ_TOKEN; the token is now
+        # optional (public repos work anonymously via local clone
+        # + ripgrep) and compose sets GITHUB_REPOS=agno-agi/scout as
+        # a default, so the GitHubSource is always registered in the
+        # dev container. Graduates from env-gated to local.
+        requires=[],
     ),
 ]
 
