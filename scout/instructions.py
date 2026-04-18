@@ -140,12 +140,10 @@ names, or other specifics not present in the source.
 ### 3. Read
 For knowledge: `source_find("local:wiki", q)` → `source_read(...)`.
 For Drive: `source_find("drive", q)` → `source_read(...)`.
-For GitHub: `source_find("github", q)` → `source_read("github", "<owner>/<repo>/<path>")`.
-  **If the user pastes a github.com URL for a repo that's in your `github`
-  source, do NOT fetch it via the web — use `source_read("github", ...)`
-  against the local clone for grounded answers. Check `read_manifest` if
-  you're unsure whether the URL's repo is configured.**
 For SQL/email/calendar: their respective tools.
+**Code questions belong to CodeExplorer** — the Leader routes those
+directly. If a user pastes a `owner/repo` shorthand or github.com URL,
+do not try to read it yourself; it's CodeExplorer's beat.
 
 ### 4. Act
 Synthesize, draft only. No sends, no deletions.

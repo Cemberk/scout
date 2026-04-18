@@ -3,12 +3,8 @@ name: Validate
 on:
   push:
   pull_request:
-    types:
-      - opened
-      - edited
-      - reopened
-    branches:
-      - "main"
+    types: [opened, synchronize, reopened]
+    branches: [main]
 
 env:
   UV_SYSTEM_PYTHON: 1
@@ -40,8 +36,5 @@ jobs:
       - name: Format with ruff
         run: uv run ruff format --check .
 
-      - name: Lint with ruff
-        run: uv run ruff check .
-
-      - name: Type-check with mypy
-        run: uv run mypy .
+      - name: Validate (lint + type + smoke)
+        run: uv run bash scripts/validate.sh

@@ -8,6 +8,7 @@ FROM agnohq/python:3.12
 # System dependencies
 # ---------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
         git \
         git-lfs \
         openssh-client \
@@ -45,10 +46,10 @@ RUN printf '%s\n' \
 # Application code
 # ---------------------------------------------------------------------------
 WORKDIR /app
+ENV PYTHONPATH=/app
 COPY requirements.txt ./
 RUN uv pip sync requirements.txt --system
 COPY . .
-ENV PYTHONPATH=/app
 
 # ---------------------------------------------------------------------------
 # Entrypoint

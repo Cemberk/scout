@@ -46,13 +46,14 @@ SCOUT_VOICE_DIR = Path(getenv("SCOUT_VOICE_DIR", str(SCOUT_CONTEXT_DIR / "voice"
 # Workspace scoping — fixed for Phase 1, real multi-workspace lands in Phase 4
 WORKSPACE_ID = getenv("SCOUT_WORKSPACE_ID", "default")
 
-# GitHubSource — live-read over locally cloned repos + ad-hoc search_code.
-# Public repos work without a token (anonymous clone + lower API rate).
-# GITHUB_READ_TOKEN is optional — set it to raise the rate ceiling or
-# access private repos.
-GITHUB_READ_TOKEN = getenv("GITHUB_READ_TOKEN", "")
-GITHUB_REPOS = tuple(r.strip() for r in getenv("GITHUB_REPOS", "").split(",") if r.strip())
-GITHUB_SOURCE_ENABLED = bool(GITHUB_REPOS)
+# GitHub PAT for CodeExplorer. Optional — public repos clone without a
+# token; set this to access private repos or raise the API rate ceiling.
+GITHUB_ACCESS_TOKEN = getenv("GITHUB_ACCESS_TOKEN", "")
+
+# Clone cache for CodeExplorer. In docker-compose this points at the
+# `repos` named volume (/repos); outside Docker it falls back to a
+# local gitignored path.
+REPOS_DIR = Path(getenv("REPOS_DIR", ".scout-cache/repos"))
 
 # S3Source — compile-only in this build. S3_BUCKETS entries are
 # `bucket[:prefix]`. One Source instance is registered per entry.
@@ -75,15 +76,14 @@ __all__ = [
     "DRIVE_SOURCE_ENABLED",
     "EXA_API_KEY",
     "EXA_MCP_URL",
-    "GITHUB_READ_TOKEN",
-    "GITHUB_REPOS",
-    "GITHUB_SOURCE_ENABLED",
+    "GITHUB_ACCESS_TOKEN",
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_SECRET",
     "GOOGLE_DRIVE_FOLDER_IDS",
     "GOOGLE_INTEGRATION_ENABLED",
     "GOOGLE_PROJECT_ID",
     "PARALLEL_API_KEY",
+    "REPOS_DIR",
     "S3_BUCKETS",
     "S3_SOURCE_ENABLED",
     "SCOUT_COMPILED_DIR",

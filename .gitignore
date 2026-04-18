@@ -37,6 +37,7 @@ env/
 ENV/
 .env
 .envrc
+token.json
 
 # =========================
 # Jupyter / notebooks
@@ -62,7 +63,7 @@ tmp
 .claude
 .conductor
 
-# GitHubSource-owned local clone cache (spec §4.4)
+# CodeExplorer local clone cache (Docker uses the `repos` named volume)
 .scout-cache/
 
 # Live-eval run artifacts (regenerated every run)

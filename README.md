@@ -114,7 +114,7 @@ Scout ships with local folders on day one. Each row below activates when you add
 |---|---|---|
 | **Gmail + Calendar + Drive** | `GOOGLE_*` ([setup](docs/GOOGLE_AUTH.md)) | Search mail, draft replies, read events, query Drive |
 | **Slack** | `SLACK_TOKEN` + `SLACK_SIGNING_SECRET` ([setup](docs/SLACK_CONNECT.md)) | @mention in channels, search threads, post |
-| **GitHub** | `GITHUB_REPOS` (+ optional `GITHUB_READ_TOKEN`) | Clone and ripgrep repos for code questions. Public repos work without a token; add one for private repos or higher rate limits. |
+| **Code exploration** | built-in (+ optional `GITHUB_ACCESS_TOKEN`) | `CodeExplorer` clones any public repo on demand and answers code questions — grep, read, blame, log. Add a PAT for private repos or higher rate limits. |
 | **S3** | `S3_BUCKETS` + `AWS_*` | Compile PDFs and docs from buckets into the wiki |
 | **Web research** | built-in (Exa MCP, keyless); `PARALLEL_API_KEY` for premium | Web search + URL extraction. Scout ships with Exa MCP so research works on day one; set `PARALLEL_API_KEY` to switch to Parallel for better extraction and higher rate limits. |
 
@@ -123,7 +123,7 @@ Scout ships with local folders on day one. Each row below activates when you add
 ```
 What does our wiki say about PTO?
 Ingest https://arxiv.org/abs/2312.10997
-Find the JWT middleware in our acme/api repo
+Find where `Team.coordinate` is defined in agno-agi/agno
 Draft an email to alex@acme.com about Q2 roadmap
 What's in the engineering OKRs doc on Drive?
 ```
@@ -163,10 +163,9 @@ Compile runs every hour. Source health refresh every 15 minutes. Scout also send
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Gmail + Calendar + Drive |
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | Enables Drive as a live source |
 | `SLACK_TOKEN` / `SLACK_SIGNING_SECRET` | No | Slack interface and source |
-| `GITHUB_REPOS` | No | Comma-separated `owner/repo`. Defaults to `agno-agi/scout` via compose so Scout can read its own source out of the box. Public repos need no token. |
-| `GITHUB_READ_TOKEN` | No | Read-only PAT. Optional — only needed for private repos or to raise the API rate ceiling above the anonymous limit. |
+| `GITHUB_ACCESS_TOKEN` | No | Optional PAT for CodeExplorer. Public repos clone tokenless; set this for private repos or to raise the API rate ceiling. |
+| `REPOS_DIR` | No | Where CodeExplorer clones repos. Compose sets `/repos` (the `repos` named volume); local defaults to `.scout-cache/repos`. |
 | `S3_BUCKETS` / `AWS_*` | No | S3 compile |
-| `SCOUT_API_HOST_PORT` | No | Host port, default `8000` |
 | `DB_*` | No | Postgres (compose defaults work) |
 
 Full list in `example.env`.
@@ -174,7 +173,7 @@ Full list in `example.env`.
 ## Troubleshooting
 
 - **Google token expired.** Testing-mode OAuth expires every 7 days. Re-run `python scripts/google_auth.py`.
-- **Port 5432 or 8000 in use.** Set `SCOUT_API_HOST_PORT`, or drop `ports:` from `scout-db` if Postgres is on the host.
+- **Port 5432 or 8000 in use.** Edit the host-side port in `compose.yaml` (e.g. change `"8000:8000"` to `"8001:8000"`), or drop `ports:` from `scout-db` if Postgres is already running on the host.
 - **Source shows `unconfigured`.** Env missing; check `example.env`.
 - **Live eval says "Incorrect API key".** `OPENAI_API_KEY` rotated; fix and `docker compose restart scout-api`.
 

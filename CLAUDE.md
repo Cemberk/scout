@@ -8,10 +8,12 @@ Scout v3 is an **enterprise context agent** — a team of specialists that navig
 
 ```
 Scout (Team Leader — coordinate mode)
-├── Navigator    — primary user-facing agent. Reads compiled/ + live sources via Source dispatch.
-├── Researcher   — web search + ingest into context/raw/. Parallel if PARALLEL_API_KEY; otherwise Exa MCP (keyless)
-├── Compiler     — iterates compile-on sources, writes Obsidian-compat markdown to context/compiled/,
-│                   and runs lint checks (broken backlinks, stale articles, needs_split) after every pass
+├── Navigator     — primary user-facing agent. Reads compiled/ + live sources via Source dispatch.
+├── Researcher    — web search + ingest into context/raw/. Parallel if PARALLEL_API_KEY; otherwise Exa MCP (keyless)
+├── Compiler      — iterates compile-on sources, writes Obsidian-compat markdown to context/compiled/,
+│                    and runs lint checks (broken backlinks, stale articles, needs_split) after every pass
+├── CodeExplorer  — clones public/PAT-authed git repos on demand into $REPOS_DIR and answers code questions.
+│                    Read-only. CodingTools (read_file/grep/find/ls) + GitTools + ReasoningTools.
 └── [leader responds directly for greetings/simple questions]
 ```
 
@@ -40,7 +42,6 @@ scout/
 │   ├── local_folder.py       # LocalFolderSource (compile or live-read)
 │   ├── drive.py              # GoogleDriveSource (live-read)
 │   ├── slack.py              # SlackSource (live-read)
-│   ├── github.py             # GitHubSource (live-read w/ clone cache)
 │   ├── s3.py                 # S3Source (compile-only)
 │   └── __init__.py           # get_sources() / reload_sources()
 ├── compile/
@@ -50,7 +51,8 @@ scout/
 │   ├── settings.py           # Shared DB, knowledge bases
 │   ├── navigator.py          # Source-dispatch + SQL + Gmail/Calendar
 │   ├── researcher.py         # Parallel + ingest_url/text → context/raw/
-│   └── compiler.py           # Drives compile.runner + owns lint pass
+│   ├── compiler.py           # Drives compile.runner + owns lint pass
+│   └── code_explorer.py      # On-demand git clone + read-only code exploration
 └── tools/
     ├── build.py              # Tool assembly per agent role
     ├── manifest_tools.py     # read_manifest
@@ -58,6 +60,7 @@ scout/
     ├── compile_tools.py      # list_compile_sources / compile_one / compile_one_source / ...
     ├── knowledge.py          # update_knowledge
     ├── ingest.py             # ingest_url / ingest_text (Researcher)
+    ├── git.py                # GitTools — clone_repo + read-only git helpers (CodeExplorer)
     └── redactor.py           # Secret-stripping middleware
 
 context/
@@ -82,7 +85,7 @@ db/
 └── migrations.py             # scout_compiled, scout_sources, workspace_id columns
 
 evals/
-├── __init__.py               # CATEGORIES (security, routing, ..., wiki_compile, manifest, isolation, drive_live, slack, github_live, s3_compile)
+├── __init__.py               # CATEGORIES (security, routing, ..., wiki_compile, manifest, isolation, drive_live, slack, code_explorer, s3_compile)
 ├── __main__.py / run.py
 ├── cases/                    # static cases
 └── live/                     # Docker-hosted harness (SSE + diagnostic + autofix)
@@ -136,8 +139,13 @@ python -m scout _smoke_gating                # assert Navigator can't read local
 | `local:wiki` | LocalFolderSource(./context/compiled) | live-read | The wiki Navigator reads |
 | `drive` | GoogleDriveSource(folder_ids=…) | live-read | Optional — needs Google + `GOOGLE_DRIVE_FOLDER_IDS` |
 | `slack` | SlackSource(channel_allowlist=…) | live-read | Optional — needs `SLACK_TOKEN` |
-| `github` | GitHubSource(repos=…) | live-read | Optional — needs `GITHUB_REPOS`. Public repos work anonymously; `GITHUB_READ_TOKEN` is only required for private repos or higher rate limits. Clones under `./.scout-cache/repos/` |
 | `s3:<bucket>[/<prefix>]` | S3Source | compile-only | Optional — needs `S3_BUCKETS` + `AWS_*`. One instance per entry. |
+
+Code exploration is **not** modeled as a Source. The `CodeExplorer`
+agent clones arbitrary git repos on demand into `$REPOS_DIR` (compose:
+`/repos` named volume; local: `./.scout-cache/repos`) and answers
+questions by reading the source directly — no manifest entry, no
+pre-configured repo list.
 
 ## Two Knowledge Systems
 
@@ -161,6 +169,7 @@ User Question → Classify → Recall (Manifest+Knowledge+Learnings) → Read (S
 | Navigator | SQLTools, FileTools (context), web search (ParallelTools or Exa MCP), GmailTools, CalendarTools, update_knowledge, read_manifest, source_* |
 | Researcher | FileTools, web search (ParallelTools or Exa MCP), update_knowledge, ingest_url, ingest_text, read_manifest, source_* |
 | Compiler | FileTools (context), update_knowledge, read_manifest, source_* (compile-only), compile_* — also runs the lint pass after each compile |
+| CodeExplorer | CodingTools (read_file, grep, find, ls — read-only), GitTools (clone_repo, git_log/diff/blame/show/branches, repo_summary, list_repos, get_github_remote), ReasoningTools |
 
 All tool returns are passed through the redactor in `scout.tools.redactor` — secret-shaped strings are stripped before they reach the model.
 
@@ -206,8 +215,8 @@ Knowledge/Learnings PgVector path, so one key covers everything.
 | `GOOGLE_DRIVE_FOLDER_IDS` | No | Comma-separated — enables `GoogleDriveSource` |
 | `SLACK_TOKEN` | No | Enables Slack Interface + SlackTools + `SlackSource` |
 | `SLACK_SIGNING_SECRET` | No | Slack inbound event verification |
-| `GITHUB_REPOS` | No | Comma-separated `owner/repo` — enables `GitHubSource`. Defaults to `agno-agi/scout` in compose so Scout can read its own source out of the box |
-| `GITHUB_READ_TOKEN` | No | Optional read-only PAT. Public repos work anonymously (anon rate limit = 60/h); add a PAT for private repos or higher rate limits |
+| `GITHUB_ACCESS_TOKEN` | No | Optional PAT for CodeExplorer. Public repos clone tokenless; set this for private repos or to raise the API rate ceiling |
+| `REPOS_DIR` | No | Where CodeExplorer clones repos. Compose sets `/repos` (the `repos` named volume); local falls back to `.scout-cache/repos` |
 | `S3_BUCKETS` | No | Comma-separated `bucket[:prefix]` — enables `S3Source` |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `S3_BUCKETS` is set |
 | `SCOUT_CONTEXT_DIR` | No | Context directory (default: `./context`) |
@@ -215,7 +224,6 @@ Knowledge/Learnings PgVector path, so one key covers everything.
 | `SCOUT_COMPILED_DIR` | No | Override compiled wiki dir |
 | `SCOUT_VOICE_DIR` | No | Override voice-guide dir |
 | `SCOUT_WORKSPACE_ID` | No | Workspace scoping (default: `default`) |
-| `SCOUT_API_HOST_PORT` | No | Host port the API publishes on (default: `8000`) |
 | `DB_HOST/PORT/USER/PASS/DATABASE` | No | PostgreSQL config |
 | `RUNTIME_ENV` | No | `dev` for hot reload |
 

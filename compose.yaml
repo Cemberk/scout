@@ -15,57 +15,40 @@ services:
       - scout
 
   scout-api:
-    container_name: scout-api
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: scout-api
     image: ${IMAGE_NAME:-scout}:${IMAGE_TAG:-latest}
-    # --reload-dir is scoped to the Python packages Scout actually serves
-    # from. Watching the entire bind-mounted repo (the default) meant
-    # writes to context/compiled/*, evals/results/*, tmp/*, and
-    # .scout-cache/repos/* all triggered uvicorn restarts mid-request —
-    # that's what made the live-eval harness flaky (eval runs write
-    # results to evals/results/). Narrow watches, calm dev loop.
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir scout --reload-dir app --reload-dir db
+    # --reload-dir limits the hot-reload watcher to the directories whose
+    # Python modules are actually imported by the server. Without this,
+    # uvicorn watches all .py under /app and reloads on every edit under
+    # evals/, docs/, scripts/, etc. — disruptive when evals are running.
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      --reload-dir scout --reload-dir app --reload-dir db
     restart: unless-stopped
     ports:
-      - "${SCOUT_API_HOST_PORT:-8000}:8000"
+      - "8000:8000"
     volumes:
       - .:/app
-      - ./context:/app/context
+      - repos:/repos
+    env_file:
+      - path: .env
+        required: false
     environment:
       RUNTIME_ENV: dev
       AGNO_DEBUG: "True"
+      WAIT_FOR_DB: "True"
+      PRINT_ENV_ON_LOAD: "True"
+      AGENTOS_URL: http://127.0.0.1:8000
       DB_HOST: scout-db
       DB_PORT: 5432
       DB_USER: ${DB_USER:-ai}
       DB_PASS: ${DB_PASS:-ai}
       DB_DATABASE: ${DB_DATABASE:-ai}
-      WAIT_FOR_DB: "True"
-      PRINT_ENV_ON_LOAD: "True"
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      # Web research — Parallel (premium) or Exa MCP (keyless fallback)
-      PARALLEL_API_KEY: ${PARALLEL_API_KEY:-}
-      EXA_API_KEY: ${EXA_API_KEY:-}
-      # Slack
-      SLACK_TOKEN: ${SLACK_TOKEN:-}
-      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
-      # Google — Gmail + Calendar + Drive
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID:-}
-      GOOGLE_DRIVE_FOLDER_IDS: ${GOOGLE_DRIVE_FOLDER_IDS:-}
-      # GitHubSource — default to agno-agi/scout for out-of-the-box demo
-      GITHUB_REPOS: ${GITHUB_REPOS:-agno-agi/scout}
-      GITHUB_READ_TOKEN: ${GITHUB_READ_TOKEN:-}
-      # S3Source (compile-only)
-      S3_BUCKETS: ${S3_BUCKETS:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_REGION: ${AWS_REGION:-}
-      # Internals
-      SCOUT_WORKSPACE_ID: ${SCOUT_WORKSPACE_ID:-default}
       SCOUT_CONTEXT_DIR: /app/context
+      REPOS_DIR: /repos
     depends_on:
       - scout-db
     networks:
@@ -78,3 +61,4 @@ networks:
 
 volumes:
   pgdata:
+  repos:

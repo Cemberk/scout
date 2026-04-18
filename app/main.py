@@ -2,7 +2,7 @@
 Scout AgentOS
 =============
 
-The main entry point for Scout v3.
+The main entry point for Scout.
 
 Run:
     python -m app.main

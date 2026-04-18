@@ -16,7 +16,7 @@ Case inventory (local-only runs first, env-gated at the bottom):
   Wiki / Navigator behavior .......... 5
   Response format .................... 3
   Robustness ......................... 4
-  GitHub live-read ................... 1  (keyless; compose sets GITHUB_REPOS)
+  CodeExplorer ....................... 1  (keyless; clones a public repo)
   ------------------------------------- 51 local
 
   Env-gated (SKIP without env) ....... 4
@@ -610,16 +610,16 @@ CASES: list[EvalCase] = [
         ],
     ),
     EvalCase(
-        id="github_lexical",
-        prompt="Search our code for 'def deploy' — cite the file and line.",
-        expected_agent="navigator",
+        id="code_explorer_lexical",
+        prompt=(
+            "In the agno-agi/agno repo, find where Team.coordinate is "
+            "defined. Cite the file and line."
+        ),
+        expected_agent="code_explorer",
         max_duration_s=180,
-        target_file=_SOURCES / "github.py",
-        # Previously gated on GITHUB_READ_TOKEN; the token is now
-        # optional (public repos work anonymously via local clone
-        # + ripgrep) and compose sets GITHUB_REPOS=agno-agi/scout as
-        # a default, so the GitHubSource is always registered in the
-        # dev container. Graduates from env-gated to local.
+        target_file=_AGENTS / "code_explorer.py",
+        # Keyless: public repo clones without a token via the `repos`
+        # named volume. CodeExplorer calls `clone_repo` on demand.
         requires=[],
     ),
 ]

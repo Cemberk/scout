@@ -2,14 +2,16 @@
 
 ############################################################################
 #
-#    Agno Railway Deployment
+#    Agno Railway Setup (first-time provisioning)
 #
 #    Usage: ./scripts/railway_up.sh
+#    Redeploy: ./scripts/railway_redeploy.sh
+#    Sync .env:  ./scripts/railway_env.sh
 #
 #    Prerequisites:
 #      - Railway CLI installed
 #      - Logged in via `railway login`
-#      - OPENAI_API_KEY set in environment
+#      - OPENAI_API_KEY set in environment (or .env)
 #
 ############################################################################
 
@@ -59,32 +61,37 @@ railway init -n "scout"
 echo ""
 echo -e "${BOLD}Deploying PgVector database...${NC}"
 echo ""
-railway deploy -t 3jJFCA
+railway add -s pgvector -i agnohq/pgvector:18 \
+    -v "POSTGRES_USER=${DB_USER:-ai}" \
+    -v "POSTGRES_PASSWORD=${DB_PASS:-ai}" \
+    -v "POSTGRES_DB=${DB_DATABASE:-ai}"
 
 echo ""
-echo -e "${DIM}Waiting 10s for database...${NC}"
-sleep 10
+echo -e "${BOLD}Adding database volume...${NC}"
+railway service link pgvector
+railway volume add -m /var/lib/postgresql 2>/dev/null || echo -e "${DIM}Volume already exists or skipped${NC}"
+
+echo ""
+echo -e "${DIM}Waiting 15s for database...${NC}"
+sleep 15
 
 echo ""
 echo -e "${BOLD}Creating application service...${NC}"
 echo ""
-railway add --service scout \
-    --variables 'DB_USER=${{pgvector.PGUSER}}' \
-    --variables 'DB_PASS=${{pgvector.PGPASSWORD}}' \
-    --variables 'DB_HOST=${{pgvector.PGHOST}}' \
-    --variables 'DB_PORT=${{pgvector.PGPORT}}' \
-    --variables 'DB_DATABASE=${{pgvector.PGDATABASE}}' \
-    --variables "DB_DRIVER=postgresql+psycopg" \
-    --variables "WAIT_FOR_DB=True" \
-    --variables "OPENAI_API_KEY=${OPENAI_API_KEY}" \
-    --variables "DOCUMENTS_DIR=/documents" \
-    --variables "PORT=8000"
-
-# Add optional EXA_API_KEY if set
-if [[ -n "$EXA_API_KEY" ]]; then
-    echo -e "${DIM}Adding EXA_API_KEY...${NC}"
-    railway variables --set "EXA_API_KEY=${EXA_API_KEY}" --service scout --skip-deploys
-fi
+railway add -s scout \
+    -v "DB_USER=${DB_USER:-ai}" \
+    -v "DB_PASS=${DB_PASS:-ai}" \
+    -v "DB_HOST=pgvector.railway.internal" \
+    -v "DB_PORT=${DB_PORT:-5432}" \
+    -v "DB_DATABASE=${DB_DATABASE:-ai}" \
+    -v "DB_DRIVER=postgresql+psycopg" \
+    -v "WAIT_FOR_DB=True" \
+    -v "REPOS_DIR=/repos" \
+    -v "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+    -v "PARALLEL_API_KEY=${PARALLEL_API_KEY:-}" \
+    -v "EXA_API_KEY=${EXA_API_KEY:-}" \
+    -v "GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:-}" \
+    -v "PORT=8000"
 
 echo ""
 echo -e "${BOLD}Deploying application...${NC}"
@@ -98,5 +105,6 @@ railway domain --service scout
 
 echo ""
 echo -e "${BOLD}Done.${NC} Domain may take ~5 minutes."
-echo -e "${DIM}Logs: railway logs --service scout${NC}"
+echo -e "${DIM}Logs:       railway logs --service scout${NC}"
+echo -e "${DIM}Sync .env:  ./scripts/railway_env.sh  (for Slack / Google / S3 vars)${NC}"
 echo ""

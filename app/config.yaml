@@ -1,6 +1,6 @@
 chat:
   quick_prompts:
     scout:
-      - "Let's chat about Agno. Read the docs at https://docs.agno.com and tell me what it is."
-      - "Let's chat about Scout. Navigate https://github.com/agno-agi/scout and explain how the compiler turns raw files into a wiki."
+      - "What do you know about Agno. Docs for reference: https://docs.agno.com"
+      - "Let's chat about Scout. Navigate https://github.com/agno-agi/scout and walk me through the system."
       - "Summarize the key decisions from last week's engineering offsite."
