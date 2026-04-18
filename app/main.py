@@ -78,6 +78,59 @@ app.include_router(create_router(agent_os.settings))
 
 
 # ---------------------------------------------------------------------------
+# Empty-prompt middleware
+# ---------------------------------------------------------------------------
+# AgentOS's /teams/*/runs form validator rejects empty `message` as missing.
+# We want the Leader to respond to an empty prompt gracefully (asking for
+# clarification) rather than surfacing a 422. This middleware rewrites the
+# form body so the validator sees a non-empty placeholder.
+
+
+@app.middleware("http")
+async def _rewrite_empty_prompt(request, call_next):  # type: ignore[no-untyped-def]
+    path = request.url.path
+    if request.method == "POST" and path.endswith("/runs") and "/teams/" in path:
+        ctype = request.headers.get("content-type", "")
+        if "application/x-www-form-urlencoded" in ctype:
+            body = await request.body()
+            form_text = body.decode("utf-8", errors="ignore")
+            from urllib.parse import parse_qsl, urlencode
+
+            pairs = parse_qsl(form_text, keep_blank_values=True)
+            msg = next((v for k, v in pairs if k == "message"), None)
+            if not msg or not msg.strip():
+                placeholder = "(the user submitted an empty prompt — ask them what they need)"
+                pairs = [(k, v) for k, v in pairs if k != "message"]
+                pairs.append(("message", placeholder))
+                new_body = urlencode(pairs).encode("utf-8")
+
+                # Rebuild scope with corrected content-length and inject receive.
+                async def _receive():  # type: ignore[no-untyped-def]
+                    return {"type": "http.request", "body": new_body, "more_body": False}
+
+                new_headers = [
+                    (k, v) for k, v in request.scope.get("headers", []) if k.lower() != b"content-length"
+                ]
+                new_headers.append((b"content-length", str(len(new_body)).encode()))
+                new_scope = dict(request.scope)
+                new_scope["headers"] = new_headers
+                from starlette.requests import Request as StarletteRequest
+
+                new_request = StarletteRequest(new_scope, _receive)
+                # call_next respects Request object, not the passed-in one, so
+                # we build our own mini-ASGI cycle by re-dispatching via app.
+                # Simpler: monkey-patch the existing request.
+                request._body = new_body  # type: ignore[attr-defined]
+                request._receive = _receive  # type: ignore[attr-defined]
+                request.scope["headers"] = new_headers
+                # Also clear any cached form state.
+                if hasattr(request, "_form"):
+                    delattr(request, "_form")
+                del new_request  # unused
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
 # Startup helpers
 # ---------------------------------------------------------------------------
 def _run_migrations() -> None:

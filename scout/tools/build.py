@@ -33,13 +33,29 @@ from scout.tools.sources import create_source_tools
 
 
 def build_navigator_tools(knowledge: Knowledge) -> list:
-    """Tools for the Navigator — SQL, context files, source dispatch,
-    plus Parallel (if configured) and Gmail/Calendar (if Google configured)."""
+    """Tools for the Navigator — SQL, context files (READ-ONLY), source
+    dispatch, plus Parallel (if configured) and Gmail/Calendar (if
+    Google configured).
+
+    Navigator's FileTools is read-only on purpose: spec §9 governance
+    says Navigator does not write compiled articles or voice guides
+    (that's the Compiler's exclusive domain), does not hand-edit any
+    context file, and does not delete files. Writes/overwrites/deletes
+    on `context/` paths are the refusal path — Navigator refuses with
+    no tool call rather than silently editing.
+    """
     from scout.config import PARALLEL_API_KEY
 
     tools: list = [
         SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
-        FileTools(base_dir=SCOUT_CONTEXT_DIR, enable_delete_file=False),
+        FileTools(
+            base_dir=SCOUT_CONTEXT_DIR,
+            enable_save_file=False,
+            enable_read_file=True,
+            enable_list_files=True,
+            enable_search_files=True,
+            enable_delete_file=False,
+        ),
         create_update_knowledge(knowledge),
         create_manifest_tool("navigator"),
         *create_source_tools("navigator"),
