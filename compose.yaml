@@ -20,7 +20,13 @@ services:
       context: .
       dockerfile: Dockerfile
     image: ${IMAGE_NAME:-scout}:${IMAGE_TAG:-latest}
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # --reload-dir is scoped to the Python packages Scout actually serves
+    # from. Watching the entire bind-mounted repo (the default) meant
+    # writes to context/compiled/*, evals/results/*, tmp/*, and
+    # .scout-cache/repos/* all triggered uvicorn restarts mid-request —
+    # that's what made the live-eval harness flaky (eval runs write
+    # results to evals/results/). Narrow watches, calm dev loop.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir scout --reload-dir app --reload-dir db
     restart: unless-stopped
     ports:
       - "${SCOUT_API_HOST_PORT:-8000}:8000"
