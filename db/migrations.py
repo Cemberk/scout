@@ -73,17 +73,20 @@ WORKSPACE_COLUMN = "ALTER TABLE {table} ADD COLUMN IF NOT EXISTS workspace_id TE
 
 def run_migrations() -> None:
     engine = get_sql_engine()
+    # Core DDL (CREATE TABLE IF NOT EXISTS ...) in one transaction.
     with engine.begin() as conn:
         for stmt in DDL:
             conn.execute(text(stmt))
-        for table in KNOWLEDGE_TABLES:
-            try:
+    # Knowledge-table column backfills in their own per-statement transactions
+    # so that a missing agno table doesn't roll back any prior work.
+    for table in KNOWLEDGE_TABLES:
+        try:
+            with engine.begin() as conn:
                 conn.execute(text(WORKSPACE_COLUMN.format(table=table)))
-            except Exception:
-                # Table doesn't exist yet — agno will create it on first insert.
-                # Next startup will add the column.
-                conn.rollback()
-                continue
+        except Exception:
+            # Table doesn't exist yet — agno will create it on first insert.
+            # Next startup will add the column.
+            continue
     engine.dispose()
 
 
