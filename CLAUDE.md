@@ -2,124 +2,109 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a team of specialists that navigates your company's knowledge graph through a uniform `Source` protocol. The wiki is the map: dumb stores compile into a curated, navigable, user-editable artifact; smart sources are queried live.
+Scout is an **enterprise context agent** — a four-role team coordinated by a Leader, built on top of two protocols:
+
+- **`Context`** (query + health) — live-read sources. `LocalContext`, `GithubContext`, `S3Context`, `SlackContext`, `GmailContext`, `DriveContext`. Any subset registered at startup from `SCOUT_CONTEXTS`.
+- **`WikiContext`** — the one compile-capable knowledge store. Implements the Context protocol and adds `ingest_url` / `ingest_text` / `compile`. Composes a `WikiBackend` — `LocalBackend` (dev), `GithubBackend` (prod, git-coordinated), or `S3Backend` (prod, S3 conditional PUT). Configured via `SCOUT_WIKI`.
+
+Compile lives in exactly one place (WikiContext). Everything else is read-only. Multi-container works because WikiContext coordinates through its backend's substrate — never through Scout's process.
 
 ## Architecture
 
 ```
 Scout (Team Leader — coordinate mode)
-├── Navigator     — read-only knowledge-graph navigator. Wiki, SQL (SELECT only),
-│                   files (read), Drive/Slack/Gmail inbox/Calendar, web search.
-├── Compiler      — owns every wiki write path: ingests raw inputs (ingest_url/text
-│                   → context/raw/), compiles into context/compiled/, runs lint
-│                   checks (broken backlinks, stale articles, needs_split,
-│                   user-edit conflicts) after every pass.
-├── CodeExplorer  — clones public/PAT-authed git repos on demand into $REPOS_DIR
-│                   and answers code questions. Read-only (CodingTools + GitTools
-│                   + ReasoningTools).
-├── Engineer      — owns SQL writes. Creates scout_* tables on demand, inserts
-│                   user-provided notes/facts, records every schema change back to
-│                   Knowledge so Navigator can find it.
-└── Doctor        — diagnoses Scout's own health (sources, compile state, env,
-                    schedules) and self-heals via retry/reload/refresh/cache-clear.
-                    Never modifies user content.
+├── Explorer  — answers questions by asking the wiki + registered contexts.
+│               SQL read-only (scout_* tables). Shares scout_learnings.
+├── Engineer  — owns every non-outbound write:
+│                 · scout_* user-data tables (DDL + DML in the scout schema)
+│                 · the wiki (ingest_url / ingest_text / trigger_compile)
+│               Shares scout_learnings.
+└── Doctor    — diagnoses health: wiki, contexts, DB, env. Read-only
+                everywhere. Shares scout_learnings.
 
-Leader handles all outbound communication directly (Slack post, Gmail send,
-Calendar write — gated by SCOUT_ALLOW_SENDS).
+Leader handles outbound directly (Slack post, Gmail send, Calendar write —
+gated by SCOUT_ALLOW_SENDS). Read-only SQL for contact lookups.
 ```
 
 ## The wiki-first rule
 
-The Compiler turns raw inputs into clean wiki articles. The Navigator reads the wiki, never the raw inputs directly. Two flags on every Source enforce this at the code level:
-- `compile=True` → Compiler iterates this source, writes to `context/compiled/`
-- `live_read=True` → Navigator can query this source directly
+The wiki is the one write surface for knowledge; live contexts are read-only by construction. Two-way boundary:
 
-`context/raw/` is `compile=True, live_read=False` and is invisible to the Navigator. Drive is `compile=False, live_read=True`. The Manifest enforces tool-registration boundaries by role.
+- **Wiki inputs** land under `raw/` on the WikiContext's backend. `ingest_url` / `ingest_text` write there; `compile` reads `raw/`, LLM-transforms, writes `compiled/`, updates `.scout/state.json`.
+- **Wiki reads** go through `WikiContext.query()`. The internal query agent reads `compiled/` via the backend — never the filesystem directly.
 
-## Three write paths, three owners
+Backends are swappable per deploy (`LocalBackend` / `GithubBackend` / `S3Backend`); the pipeline is the same across all three.
 
-| Write surface | Owner | Tools |
+## Three write paths, two owners
+
+| Write surface | Owner | Call |
 |---|---|---|
-| `context/raw/` + `context/compiled/` | Compiler | `ingest_url`, `ingest_text`, compile pipeline |
-| `scout_*` user tables (SQL) | Engineer | DDL + DML, guarded to `scout` schema |
-| Outbound (Slack post, Gmail send, Calendar write) | Leader | SlackTools, GmailTools, GoogleCalendarTools (gated by `SCOUT_ALLOW_SENDS`) |
+| `scout_*` user-data tables | Engineer | SQL DDL + DML, scoped to the `scout` schema (write guard + `get_sql_engine()`) |
+| WikiContext substrate (raw + compiled + state) | Engineer (via the wiki) | `ingest_url`, `ingest_text`, `trigger_compile` |
+| Outbound (Slack post, Gmail send, Calendar write) | Leader | SlackTools / GmailTools / GoogleCalendarTools (gated by `SCOUT_ALLOW_SENDS`) |
 
-Everything else reads. Navigator and Doctor use the **read-only engine**
-(`get_readonly_engine()`) which uses PostgreSQL's `default_transaction_read_only`
-setting — any write is rejected at the database level. The Scout engine
-(`get_sql_engine()`) is the one Engineer uses; it has a `before_cursor_execute`
-hook that rejects any DDL/DML targeting `public` or `ai` as a second-layer
-guard.
+Everything else reads. Explorer and Doctor use the **read-only engine** (`get_readonly_engine()` — PostgreSQL's `default_transaction_read_only`). The scout engine (`get_sql_engine()`) is the one Engineer uses; it has a `before_cursor_execute` hook that rejects any DDL/DML targeting `public` or `ai` as a second-layer guard.
 
 ## Structure
 
 ```
 scout/
-├── __init__.py               # Exports: scout (Team)
-├── __main__.py               # CLI: chat | compile | manifest | sources | _smoke_gating
-├── team.py                   # Scout team definition (leader + 5 members)
-├── settings.py               # Env, feature flags, runtime objects (agent_db, knowledge)
-├── paths.py                  # CONTEXT_*
-├── instructions.py           # Instruction assembly
-├── manifest.py               # Runtime capability registry
-├── compile_state.py          # Postgres-backed compile state
-├── sources/
-│   ├── base.py               # Source protocol + Entry/Content/Meta/Hit/HealthStatus
-│   ├── local_folder.py       # LocalFolderSource (compile or live-read)
-│   ├── drive.py              # GoogleDriveSource (live-read)
-│   ├── slack.py              # SlackSource (live-read)
-│   ├── s3.py                 # S3Source (compile-only)
-│   └── __init__.py           # get_sources() / reload_sources()
-├── compile/
-│   ├── runner.py             # The compile pipeline
-│   └── __init__.py
+├── __init__.py
+├── __main__.py                     # CLI: chat | compile | contexts
+├── team.py                         # Leader + three specialists, coordinate mode
+├── settings.py                     # Env, paths, DB-dependent runtime objects
+├── instructions.py                 # explorer_instructions()
 ├── agents/
-│   ├── navigator.py          # Read-only — wiki + SQL SELECT + Gmail/Calendar read + web
-│   ├── compiler.py           # Drives compile.runner + ingest + lint
-│   ├── code_explorer.py      # On-demand git clone + read-only code exploration
-│   ├── engineer.py           # SQL writer — scout_* tables, introspect, update_knowledge
-│   └── doctor.py             # Self-diagnosis + retry/reload/refresh/cache-clear
+│   ├── explorer.py                 # ask_context + list_contexts + read-only SQL
+│   ├── engineer.py                 # SQL writes + wiki ingest/compile
+│   └── doctor.py                   # health / health_all / db_health / env_report
+├── context/
+│   ├── base.py                     # Context + WikiBackend protocols
+│   ├── config.py                   # build_wiki / build_contexts / parse_spec
+│   ├── wiki.py                     # WikiContext (concrete — one instance)
+│   ├── _shared.py                  # answer_from_run, google_env_missing,
+│   │                                 google_auth_material_missing
+│   ├── local.py / github.py / s3.py / slack.py / gmail.py / drive.py
+│   └── backends/
+│       ├── local.py                # LocalBackend (dev)
+│       ├── github.py               # GithubBackend (commit + push, pull-rebase retry)
+│       ├── s3.py                   # S3Backend (conditional PUT on state)
+│       ├── _git.py                 # shared clone_url / ensure_clone / run
+│       └── _s3.py                  # shared boto3 client + prefix normalizer
 └── tools/
-    ├── manifest_tools.py     # read_manifest
-    ├── sources.py            # list_sources / source_list / source_find / source_read
-    ├── compile_tools.py      # list_compile_sources / compile_one / compile_one_source / ...
-    ├── knowledge.py          # update_knowledge
-    ├── ingest.py             # ingest_url / ingest_text (Compiler)
-    ├── git.py                # GitTools — clone_repo + read-only git helpers (CodeExplorer)
-    ├── introspect.py         # introspect_schema (Engineer) — ported from Dash
-    ├── diagnostics.py        # health_ping / reload_manifest / retrigger_compile / env_report (Doctor)
-    └── redactor.py           # Secret-stripping middleware
+    ├── ask_context.py              # ask_context + list_contexts (Explorer)
+    ├── ingest.py                   # ingest_url + ingest_text + trigger_compile (Engineer)
+    ├── diagnostics.py              # health / health_all / db_health / env_report (Doctor)
+    ├── introspect.py               # introspect_schema (Engineer)
+    ├── learnings.py                # create_update_learnings (all three specialists)
+    └── redactor.py                 # Secret-stripping middleware
 
 context/
-├── voice/
+├── voice/                          # Leader's drafting guides (read-only)
 │   ├── email.md
 │   ├── slack-message.md
-│   ├── document.md
-│   └── wiki-article.md       # Voice guide for the Compiler (Appendix A verbatim)
-├── raw/                      # User-writable intake. Compile-only. Navigator-invisible.
-└── compiled/                 # Obsidian-compatible vault. Live-read.
-    ├── articles/             # <slug>-<short-hash>.md
-    └── index.md              # Auto-regenerated after each compile pass
+│   └── document.md
+└── raw/                            # Sample content LocalBackend reads in dev
 
 app/
-├── main.py                   # AgentOS entry (lifespan: tables + manifest + wiki-compile schedule)
-├── router.py                 # /manifest, /sources/{id}/health, /compile/run
+├── main.py                         # AgentOS entry (lifespan wires wiki + contexts)
+├── router.py                       # /wiki/* + /contexts/* (§7.5 surface)
 └── config.yaml
 
 db/
-├── session.py                # get_sql_engine (guarded) / get_readonly_engine / get_postgres_db / create_knowledge
-├── url.py                    # DB URL builder
-└── tables.py                 # Canonical DDL: scout_compiled, scout_sources, scout_contacts/projects/notes/decisions
+├── session.py                      # get_sql_engine (guarded) / get_readonly_engine
+├── url.py                          # DB URL builder
+└── tables.py                       # Canonical DDL: scout_contacts / projects /
+                                    # notes / decisions. Drops legacy
+                                    # scout_knowledge / scout_compiled /
+                                    # scout_sources on startup.
 
 evals/
-├── __init__.py               # CATEGORIES (security, routing, ..., engineer, doctor, code_explorer, s3_compile)
-├── __main__.py / run.py
-├── cases/                    # Static cases (engineer.py, doctor.py, ...)
-└── live/                     # Docker-hosted harness (SSE + diagnostic + autofix)
-    ├── __main__.py           # python -m evals.live run [--case ID]
-    ├── cases.py              # EvalCase dataclass + case inventory
-    ├── client.py             # SSE POST /teams/scout/runs
-    └── runner.py             # assertions + evals/results/<case>.md diagnostic
+├── cases.py                        # Behavioral Case dataclass + CASES tuple
+├── runner.py                       # In-process + SSE transports + fixtures
+├── wiring.py                       # Code-level invariants (no LLM)
+├── judges.py                       # LLM-scored quality tier (voice + grounded-answer)
+└── __main__.py                     # CLI dispatch
 ```
 
 ## Commands
@@ -127,58 +112,66 @@ evals/
 ```bash
 ./scripts/venv_setup.sh && source .venv/bin/activate
 ./scripts/format.sh                   # Format code
-./scripts/validate.sh                 # Lint + type check
+./scripts/validate.sh                 # ruff + mypy + wiring invariants
 
 # CLI
 python -m scout                       # Chat
-python -m scout sources               # List registered sources + capabilities
-python -m scout manifest              # Print the live manifest
-python -m scout compile               # Compile every compile-on source (skips unchanged)
-python -m scout compile --source local:raw --entry handbook.pdf
-python -m scout compile --force       # Re-compile everything
-
-# Context
-python context/load_context.py
-python context/load_context.py --recreate
+python -m scout contexts              # Wiki + registered contexts + health
+python -m scout compile               # One wiki compile pass
+python -m scout compile --force       # Recompile unchanged entries too
 
 # Tables (also run automatically on app startup)
 python -m db.tables
 
-# Static evals (AccuracyEval / ReliabilityEval / AgentAsJudgeEval)
-python -m evals
-python -m evals --category engineer
-
-# Live eval harness — hits the Docker-hosted API over SSE
-python -m evals.live run                     # all cases; env-missing SKIP
-python -m evals.live run --case greeting
-./scripts/eval_loop.sh gating_adversarial    # autonomous fix loop
-
-# Smoke tests
-python -m scout _smoke_gating                # assert Navigator can't read local:raw
-./scripts/validate.sh                        # ruff + mypy + smoke
+# Evals
+python -m evals wiring                # Code-level invariants (no LLM)
+python -m evals                       # Behavioral cases, in-process
+python -m evals --case <id>           # Single case
+python -m evals --live                # Same cases over SSE
+python -m evals judges                # LLM-scored quality tier
+./scripts/eval_loop.sh <case_id>      # Autonomous fix loop (claude -p)
 ```
 
 ### Environment loading for CLI work
 
-Secrets live in `.env` (and `.envrc` for direnv). If you're running anything that hits OpenAI or Google directly (`python -m evals`, `python -m evals smoke`, `python -m evals improve`, `python -m scout`, `python -m scout compile`, etc.) and the shell reports `OPENAI_API_KEY not set`, the fix is to load the env file — don't ask the user, don't skip, don't fabricate a key. In order:
+Secrets live in `.env` (and `.envrc` for direnv). Anything that hits OpenAI / Google directly from the host (`python -m evals`, `python -m scout compile`, etc.) needs `.env` loaded. In order:
 
-1. **Prefer direnv:** `direnv allow .` once per repo. After that every shell in this directory has the env.
-2. **Fallback (single command):** `set -a; source .env; set +a; python -m evals smoke`
-3. **Per-invocation (Bash tool):** prefix the command with `set -a && source .env && set +a && ...`
+1. **Prefer direnv:** `direnv allow .` once per repo.
+2. **Fallback:** `set -a; source .env; set +a; python -m evals`
+3. **Per-invocation (Bash tool):** `set -a && source .env && set +a && ...`
 
-Docker picks up `.env` automatically via `docker compose`, so code running inside `scout-api` already has everything. Only direct host-shell invocations need the explicit source.
+Docker picks up `.env` automatically via `docker compose`, so code inside `scout-api` has everything. Only direct host-shell invocations need the explicit source.
 
-## Sources
+## Contexts
 
-| Source id | Kind | Mode | Notes |
+Registered from `SCOUT_CONTEXTS` — comma-separated spec strings. Spec syntax is `<kind>[:<param>]`.
+
+| Kind | Spec example | Constructor | Notes |
 |---|---|---|---|
-| `local:raw` | LocalFolderSource(./context/raw) | compile-only | Invisible to Navigator — gated by `manifest.can_call`, raises `PermissionError` on violation |
-| `local:wiki` | LocalFolderSource(./context/compiled) | live-read | The wiki Navigator reads |
-| `drive` | GoogleDriveSource | live-read | Optional — needs Google OAuth. Drive scope managed by sharing folders with Scout's account. |
-| `slack` | SlackSource | live-read | Optional — needs `SLACK_BOT_TOKEN`. Channel scope managed by inviting the bot. |
-| `s3:<bucket>[/<prefix>]` | S3Source | compile-only | Optional — needs `S3_BUCKETS` + `AWS_*`. One instance per entry. |
+| `slack` | `slack` | `SlackContext()` | Needs `SLACK_BOT_TOKEN`. Read-only; send/upload/download excluded. |
+| `gmail` | `gmail` | `GmailContext()` | Needs `GOOGLE_*` + `token.json`. Read-only; every write/modify tool excluded. |
+| `drive` | `drive` | `DriveContext()` | Needs `GOOGLE_*` + `token.json`. Read-only; upload excluded. |
+| `local` | `local:./context/raw` | `LocalContext(path)` | Agent gets `read_file` / `grep` / `list_dir` scoped to path. |
+| `github` | `github:agno-agi/agno` | `GithubContext(repo)` | Clones to `$REPOS_DIR/<owner>__<repo>` on first use. Agent adds `git_log` / `git_blame` / `git_diff` / `git_show`. |
+| `s3` | `s3:acme-docs/reports` | `S3Context(bucket, prefix)` | Needs `AWS_*`. Agent gets `list_keys` / `head_object` / `get_object`. |
 
-Code exploration is **not** modeled as a Source. The `CodeExplorer` agent clones arbitrary git repos on demand into `$REPOS_DIR` (compose: `/repos` named volume; local: `./.scout/repos`) and answers questions by reading the source directly — no manifest entry, no pre-configured repo list.
+Every Context is **agentic** — `.query()` wraps an internal Agno sub-agent with tools specific to the substrate (spec §5.3). Fresh-per-query for now; cache later if traffic warrants.
+
+## Wiki backends
+
+Chosen via `SCOUT_WIKI` using the same spec syntax.
+
+| Spec | Backend | Concurrency |
+|---|---|---|
+| `local:./context` (default) | `LocalBackend` | None — single-container only |
+| `github:agno-agi/scout-context` | `GithubBackend` | git push rejection → pull-rebase, retry up to 3× |
+| `s3:scout-wiki/prod` | `S3Backend` | Conditional PUT on `.scout/state.json` via `If-Match` etag |
+
+Layout is the same across backends:
+
+- `raw/<slug>-<short-sha>.md` — ingested content
+- `compiled/<slug>-<hash>.md` — compiled articles
+- `.scout/state.json` — `{"entries": [{"entry_id", "source_hash", "compiled_path", "compiled_at"}, ...]}`
 
 ## User Data Tables
 
@@ -191,104 +184,104 @@ Shipped tables under the `scout` schema (created on first startup via `db/tables
 | `scout_notes` | Free-form notes | `title`, `body`, `tags TEXT[]`, `source_url` |
 | `scout_decisions` | Decisions made | `title`, `rationale`, `made_at DATE`, `tags TEXT[]` |
 
-Beyond these four, the Engineer creates new `scout_*` tables on demand (always in the `scout` schema, always with the standard columns, always recording the schema to `scout_knowledge` afterward so Navigator can find it).
+Beyond these four, Engineer creates new `scout_*` tables on demand — always in the `scout` schema, always with the standard columns, always recording the new shape into `scout_learnings` afterward so Explorer can find it.
 
-## Two Knowledge Systems
+The old `scout_knowledge` / `scout_compiled` / `scout_sources` tables are **dropped on every startup** (`db/tables.py` → `_LEGACY_DROP_TABLES`). Their replacements live elsewhere: wiki state in the backend, context registration in env.
 
-| System | What It Stores | Prefixes |
-|--------|---------------|----------|
-| `scout_knowledge` | Metadata routing: where things live | `Wiki:`, `File:`, `Schema:`, `Source:`, `Discovery:`, `Code:` |
-| `scout_learnings` | Per-user operational memory | `Retrieval:`, `Pattern:`, `Correction:` |
+## Learnings
 
+One operational-memory store: `scout_learnings`. Explorer, Engineer, Doctor all attach it as their `LearningMachine`'s knowledge base in agentic mode. Routing hints, corrections, per-user preferences — Scout's memory *about itself*. `update_learnings(note, title=?)` writes; the LearningMachine searches before saving so duplicates don't pile up.
 
 ## Execution Loop
 
 ```
-User Question → Classify → Recall (Manifest+Knowledge+Learnings) → Read (Sources) → Act → Learn
+User Question → Leader routes → Specialist answers → Leader synthesizes
 ```
+
+Explorer's fan-out across wiki + contexts is informed by Learnings ("handbook stuff lives in wiki", "infra is in slack").
 
 ## Tools by Agent
 
 | Agent | Tools |
 |-------|-------|
-| Navigator | SQLTools (**read-only engine**), FileTools (context, read-only), web search (ParallelTools or Exa MCP), GmailTools (read-only), CalendarTools (read-only), update_knowledge, read_manifest, source_* |
-| Compiler | FileTools (context), update_knowledge, read_manifest, source_* (compile-only), compile_*, `ingest_url`, `ingest_text` — runs lint after each compile pass |
-| CodeExplorer | CodingTools (read_file, grep, find, ls — read-only), GitTools (clone_repo, git_log/diff/blame/show/branches, repo_summary, list_repos, get_github_remote), ReasoningTools |
-| Engineer | SQLTools (scout engine, **schema-guarded** to scout), introspect_schema, update_knowledge, ReasoningTools |
-| Doctor | SQLTools (**read-only**), FileTools (repo root, read-only — for docs/* reads), read_manifest, reload_manifest, health_ping, retrigger_compile, clear_repo_cache, env_report |
-| Leader | FileTools (voice/, read-only), SQLTools (**read-only**, for contact lookup), SlackTools (send-capable when SLACK_BOT_TOKEN set), GmailTools + GoogleCalendarTools (gated by `SCOUT_ALLOW_SENDS`) |
+| Explorer | `SQLTools` (**read-only engine**, `scout` schema), `ask_context`, `list_contexts`, `update_learnings` |
+| Engineer | `SQLTools` (scout engine, **schema-guarded** to `scout`), `introspect_schema`, `ingest_url`, `ingest_text`, `trigger_compile`, `update_learnings`, `ReasoningTools` |
+| Doctor | `SQLTools` (**read-only**), `health`, `health_all`, `db_health`, `env_report`, `update_learnings` |
+| Leader | `FileTools` (`voice/`, read-only), `SQLTools` (**read-only**, for contact lookup), `SlackTools` (send-capable when `SLACK_BOT_TOKEN` set), `GmailTools` + `GoogleCalendarTools` (gated by `SCOUT_ALLOW_SENDS`) |
 
-All tool returns are passed through the redactor in `scout.tools.redactor` — secret-shaped strings are stripped before they reach the model.
+All tool returns pass through `scout.tools.redactor` — secret-shaped strings are stripped before they reach the model.
 
 ## Scheduled Tasks
 
-| Task | Schedule | Endpoint |
-|------|----------|----------|
-| **Wiki Compile** | **Hourly on :00 (UTC)** | `/compile/run` (lint runs inside each pass). A one-shot compile also fires at container boot so the wiki is populated within ~30s of startup. |
+None registered in this build. To run compile on a cadence, either:
 
-This is the only schedule Scout owns today. Briefings, digests, learning
-summaries, weekly reviews, daily Doctor runs, etc. were removed in favor
-of an explicit ad-hoc model — kick them off from the chat or schedule
-them externally if needed.
+- `docker exec -it scout-api python -m scout compile` on a host-side cron, or
+- `POST /wiki/compile` from an external scheduler, or
+- ask Engineer "compile now" in chat.
+
+§8 Phase 3 calls for a scheduler pod posting to `/wiki/compile` on the API LB as the recommended shape for multi-container deploys.
 
 ## API Endpoints
 
-Three custom endpoints on top of AgentOS's defaults (which include
-`/teams/scout/runs`, `/health`, etc.):
+On top of AgentOS's defaults (`/teams/scout/runs`, `/health`, …), the custom endpoints are:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/manifest` | GET | Current manifest |
-| `/sources/{id}/health` | GET | Per-source health ping |
-| `/compile/run` | POST | Run compile pipeline (no body / source_id / source_id+entry_id) |
+| `/wiki/health` | GET | Wiki health |
+| `/wiki/compile` | POST | Run one compile pass (body: `{"force": bool}`) |
+| `/wiki/ingest` | POST | Ingest URL / text (body: `{"kind": "url"\|"text", "title": ..., ...}`) |
+| `/wiki/query` | POST | Debug: ask the wiki directly |
+| `/contexts` | GET | List wiki + every registered context + health |
+| `/contexts/{id}/health` | GET | One target's health |
+| `/contexts/{id}/query` | POST | Debug: ask one target directly |
 
 ## Model
 
-Every agent, the Leader, the compile runner, and the evals judge run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`. The literal sits at each call site — no `SCOUT_COMPILE_MODEL` / `COMPILE_MODEL_ID` indirection. OpenAI is also what `text-embedding-3-small` uses for the Knowledge/Learnings PgVector path, so one key covers everything.
+Every agent, the Leader, the compile runner, and the evals judge run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`. The literal sits at each call site — no env indirection. OpenAI is also what `text-embedding-3-small` uses for the Learnings PgVector path, so one key covers everything.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent + embeddings for Knowledge |
-| `PARALLEL_API_KEY` | No | Premium web search + extraction. When unset, Scout falls back to Exa's public MCP endpoint (keyless) — Navigator always has a web-search backend. |
+| `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent + embeddings for Learnings |
+| `SCOUT_WIKI` | No | Wiki backend spec. Default `local:./context`. Prod: `github:<owner>/<repo>` or `s3:<bucket>[/<prefix>]`. |
+| `SCOUT_CONTEXTS` | No | Comma-separated live-read context specs. Empty by default. |
+| `PARALLEL_API_KEY` | No | Premium web search + extraction (Explorer fallback). When unset, Scout falls back to Exa's public MCP endpoint (keyless). |
 | `EXA_API_KEY` | No | Optional. Raises rate limits on the Exa MCP fallback; not required to use it. |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Scout's own Google app — Gmail + Calendar + Drive (all three required together). Drive scope is managed on the Google side by sharing folders with Scout's account. |
-| `SLACK_BOT_TOKEN` | No | Scout's Slack bot token (xoxb-…) — enables Slack Interface + SlackTools + `SlackSource` |
-| `SLACK_SIGNING_SECRET` | No | Slack inbound event verification |
-| `SCOUT_ALLOW_SENDS` | No | When `true`, Leader can actually send Gmail / modify Calendar. Default `false` = drafts-only. Slack is always opt-in via `SLACK_BOT_TOKEN`. |
-| `GITHUB_ACCESS_TOKEN` | No | Optional PAT for CodeExplorer. Public repos clone tokenless; set this for private repos or to raise the API rate ceiling |
-| `REPOS_DIR` | No | Where CodeExplorer clones repos. Compose sets `/repos` (the `repos` named volume); local falls back to `.scout/repos` |
-| `S3_BUCKETS` | No | Comma-separated `bucket[:prefix]` — enables `S3Source` |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `S3_BUCKETS` is set |
-| `DB_HOST/PORT/USER/PASS/DATABASE` | No | PostgreSQL config |
-| `RUNTIME_ENV` | No | `dev` for hot reload |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Scout's Google OAuth app — Gmail + Calendar + Drive. Run `python scripts/google_auth.py` once to generate `token.json`. |
+| `SLACK_BOT_TOKEN` | No | Scout's Slack bot token (xoxb-…) — enables the Slack interface, Leader's SlackTools, and `SlackContext`. |
+| `SLACK_SIGNING_SECRET` | No | Verifies inbound Slack events (Slack interface). |
+| `SCOUT_ALLOW_SENDS` | No | When `true`, Leader can actually send Gmail / modify Calendar. Default `false` = drafts-only. |
+| `GITHUB_ACCESS_TOKEN` | No | Optional PAT. Public repos clone tokenless; set for private repos (`GithubContext` + `GithubBackend`) or higher API rate limits. |
+| `REPOS_DIR` | No | Where Scout clones repos. Compose sets `/repos` (the `repos` named volume); local falls back to `.scout/repos`. |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `SCOUT_WIKI` or `SCOUT_CONTEXTS` reference `s3:...`. |
+| `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
+| `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints (requires JWT key env). |
 
 ## Conventions
 
-### Source
+### Context + WikiBackend
 
-Every external store is a `Source`. Implementations live in `scout/sources/`. Capabilities (`LIST`, `READ`, `METADATA`, `FIND_LEXICAL`, `FIND_NATIVE`, `FIND_SEMANTIC`) are declared per source so callers can dispatch correctly.
+Every external store is either a `Context` (read-only, query + health) or a `WikiBackend` (raw-bytes I/O for the one WikiContext). Live contexts live in `scout/context/*.py`; backends in `scout/context/backends/*.py`. Implementation is agentic by default — `.query()` wraps an Agno sub-agent with substrate-specific tools (spec §5.3).
 
 ### Database
 
-- Use `get_postgres_db()` from `db` module
-- Use `create_knowledge()` for Knowledge bases with PgVector hybrid search
-- Use `get_sql_engine()` for SQL tools that need to write to the `scout` schema (Engineer, compile runner, manifest). This engine has a guard that rejects writes to `public` / `ai`.
-- Use `get_readonly_engine()` for SQL tools that should never write (Navigator, Doctor, Leader). This engine uses PostgreSQL's `default_transaction_read_only` — rejection happens at the DB level.
-- Knowledge bases use `text-embedding-3-small` embedder
-- `db/tables.py` runs at startup; safe to rerun
+- Use `get_postgres_db()` from the `db` module for agent session storage.
+- Use `create_knowledge()` for PgVector hybrid-search knowledge bases.
+- Use `get_sql_engine()` for tools that need to write to the `scout` schema (Engineer, migrations). This engine has a guard that rejects writes to `public` / `ai`.
+- Use `get_readonly_engine()` for tools that should never write (Explorer, Doctor, Leader). PostgreSQL's `default_transaction_read_only` enforces this at the DB level.
+- Knowledge bases use `text-embedding-3-small`.
+- `db/tables.py` runs at startup; safe to rerun.
 
 ### Imports
 
 ```python
 from db import db_url, get_postgres_db, create_knowledge, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
 from scout import scout
-from scout.settings import (
-    CONTEXT_DIR, CONTEXT_RAW_DIR, CONTEXT_COMPILED_DIR, CONTEXT_VOICE_DIR,
-    scout_knowledge, scout_learnings,
-)
-from scout.sources import get_sources, get_source
-from scout.manifest import get_manifest, reload_manifest
-from scout.compile import compile_all, compile_source, compile_entry
+from scout.settings import CONTEXT_DIR, CONTEXT_VOICE_DIR, scout_learnings
+from scout.context import Context, WikiBackend, HealthStatus, HealthState, Entry, Answer, Hit
+from scout.context.config import build_wiki, build_contexts, parse_spec
+from scout.context.wiki import WikiContext
+from scout.tools.ask_context import ask_context, list_contexts, set_runtime, get_wiki, get_contexts
+from scout.tools.ingest import ingest_url, ingest_text, trigger_compile
 ```
