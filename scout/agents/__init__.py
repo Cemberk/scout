@@ -5,7 +5,7 @@ from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
 
 # Legacy alias — `from scout.agents import navigator` still resolves during
-# the migration. Removed in sub-step 1k when team.py switches to explorer.
+# the migration. Removed when app/main.py drops the legacy agent list in 1m.
 navigator = explorer
 
-__all__ = ["explorer", "navigator", "compiler", "code_explorer", "engineer", "doctor"]
+__all__ = ["explorer", "navigator", "engineer", "doctor", "compiler", "code_explorer"]
