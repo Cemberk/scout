@@ -38,10 +38,6 @@ STATE_PATH = ".scout/state.json"
 RAW_PREFIX = "raw/"
 COMPILED_PREFIX = "compiled/"
 
-# Oversized raw entries still emit a single article; flagged with
-# needs_split=true in the state row.
-NEEDS_SPLIT_THRESHOLD = 20_000
-
 
 # ----------------------------------------------------------------------
 # Compile state — JSON on the backend, not Postgres.
@@ -54,7 +50,6 @@ class StateEntry:
     source_hash: str
     compiled_path: str
     compiled_at: str
-    needs_split: bool = False
 
 
 @dataclass
@@ -283,11 +278,9 @@ class WikiContext:
         state = self._load_state()
         raw_paths = [p for p in self.backend.list_paths(RAW_PREFIX) if p.endswith(".md")]
 
-        counts: dict[str, int] = {"compiled": 0, "skipped-unchanged": 0, "skipped-empty": 0, "pruned": 0, "error": 0}
-        seen: set[str] = set()
+        counts: dict[str, int] = {"compiled": 0, "skipped-unchanged": 0, "skipped-empty": 0, "error": 0}
 
         for raw_path in raw_paths:
-            seen.add(raw_path)
             try:
                 raw_bytes = self.backend.read_bytes(raw_path)
             except Exception as exc:
@@ -306,12 +299,11 @@ class WikiContext:
                 counts["skipped-unchanged"] += 1
                 continue
 
-            result = self._compile_one(raw_path, text, source_hash)
-            if result is None:
+            compiled_path = self._compile_one(raw_path, text, source_hash)
+            if compiled_path is None:
                 counts["error"] += 1
                 continue
 
-            compiled_path, needs_split = result
             # Delete the prior compiled file if the filename rotated.
             if existing and existing.compiled_path and existing.compiled_path != compiled_path:
                 try:
@@ -325,27 +317,15 @@ class WikiContext:
                     source_hash=source_hash,
                     compiled_path=compiled_path,
                     compiled_at=_now_iso(),
-                    needs_split=needs_split,
                 )
             )
             counts["compiled"] += 1
 
-        # Prune orphans: state rows whose raw/ entry is gone.
-        for orphan in [e for e in state.entries if e.entry_id not in seen]:
-            try:
-                if orphan.compiled_path:
-                    self.backend.delete(orphan.compiled_path)
-            except Exception:
-                pass
-            state.remove(orphan.entry_id)
-            counts["pruned"] += 1
-
         self._save_state(state)
         return counts
 
-    def _compile_one(self, raw_path: str, text: str, source_hash: str) -> tuple[str, bool] | None:
-        """LLM-transform one raw entry. Returns (compiled_path, needs_split)."""
-        needs_split = len(text) > NEEDS_SPLIT_THRESHOLD
+    def _compile_one(self, raw_path: str, text: str, source_hash: str) -> str | None:
+        """LLM-transform one raw entry. Returns compiled_path, or None on failure."""
         voice = self._voice_guide()
         prompt = _COMPILE_INSTRUCTIONS_TMPL.format(
             voice=voice,
@@ -366,7 +346,6 @@ class WikiContext:
             article,
             entry_id=raw_path,
             source_hash=source_hash,
-            needs_split=needs_split,
         )
         title = _extract_title(article)
         slug = _slugify(title)
@@ -374,7 +353,7 @@ class WikiContext:
         short = _short_hash(file_bytes)
         compiled_path = f"{COMPILED_PREFIX}{slug}-{short}.md"
         self.backend.write_bytes(compiled_path, file_bytes)
-        return compiled_path, needs_split
+        return compiled_path
 
     def _stamp_frontmatter(
         self,
@@ -382,10 +361,9 @@ class WikiContext:
         *,
         entry_id: str,
         source_hash: str,
-        needs_split: bool,
     ) -> str:
-        """Inject source / source_hash / compiled_at / user_edited / needs_split
-        into the LLM's frontmatter. Preserves model-authored tags + backlinks."""
+        """Inject source / source_hash / compiled_at into the LLM's
+        frontmatter. Preserves model-authored tags + backlinks."""
         end = article.find("\n---", 4)
         if end < 0:
             return article
@@ -412,8 +390,6 @@ class WikiContext:
                 f"source: {entry_id}",
                 f"source_hash: {source_hash}",
                 f"compiled_at: {_now_iso()}",
-                "user_edited: false",
-                f"needs_split: {str(needs_split).lower()}",
             ]
         )
         if tags_line:
