@@ -28,7 +28,7 @@ from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 
 from scout.context._shared import answer_from_run
-from scout.context.base import Answer, Entry, HealthStatus, Hit
+from scout.context.base import Answer, Entry, HealthStatus
 
 if TYPE_CHECKING:
     from scout.context.base import WikiBackend
@@ -69,9 +69,6 @@ class WikiState:
                 self.entries[i] = entry
                 return
         self.entries.append(entry)
-
-    def remove(self, entry_id: str) -> None:
-        self.entries = [e for e in self.entries if e.entry_id != entry_id]
 
     def to_json(self) -> str:
         return json.dumps(
@@ -492,4 +489,4 @@ class WikiContext:
         )
 
 
-__all__ = ["WikiContext", "Hit"]
+__all__ = ["WikiContext"]
