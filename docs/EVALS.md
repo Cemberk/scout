@@ -60,7 +60,7 @@ On FAIL, a per-case diagnostic is written to [`evals/results/<case_id>.md`](../e
 
 File: [`evals/judges.py`](../evals/judges.py).
 
-Small tier — cap at ten across voice + grounded-answer. If a case can be expressed deterministically, it belongs in `cases.py`; if it genuinely needs a judge, it lives here. Judge is `OpenAIResponses(id="gpt-5.4")`. Voice cases score numerically (≥7 passes); answer-quality cases score binary (1.0 passes).
+Small tier — cap at ten across voice + grounded-answer. If a case can be expressed deterministically, it belongs in `cases.py`; if it genuinely needs a judge, it lives here. Judge is `OpenAIResponses(id="gpt-5.4")`. Voice cases score numerically (≥7 passes); answer-quality cases are binary (judge sets `.passed`).
 
 ```bash
 python -m evals judges                # all judged cases
