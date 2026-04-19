@@ -2,154 +2,102 @@
 Doctor Agent
 ============
 
-Diagnoses Scout's own health — sources, compile state, env, schedules —
-and self-heals via retry / reload / refresh / cache-clear. The Doctor
-never modifies user content:
+Diagnoses Scout's own health — wiki + context connections, DB, env —
+and reports. Doctor never modifies user content; its SQL is bound to
+``get_readonly_engine()`` and there are no destructive tools.
 
-- SQL access is read-only (scout_sources / scout_compiled for inspection).
-- FileTools is read-only on the repo root (docs/ for citing setup guides).
-- The only destructive tool is ``clear_repo_cache``, and it refuses any
-  path that resolves outside ``$REPOS_DIR``.
-
-Runs ad-hoc — "why isn't Drive showing up?", "is Slack connected?",
-"why is the wiki stale?". Invoked through the team chat (the Leader
-delegates) or directly as an agent.
+Shares the ``scout_learnings`` memory store with Explorer and Engineer.
 """
 
+from __future__ import annotations
+
 from agno.agent import Agent
+from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 from agno.models.openai import OpenAIResponses
-from agno.tools.file import FileTools
 from agno.tools.sql import SQLTools
 
 from db import SCOUT_SCHEMA, get_readonly_engine
-from scout.settings import DOCS_DIR, agent_db, scout_knowledge
-from scout.tools.diagnostics import (
-    clear_repo_cache,
-    env_report,
-    health_ping,
-    reload_manifest_tool,
-    retrigger_compile,
-)
-from scout.tools.manifest_tools import create_manifest_tool
+from scout.settings import agent_db, scout_learnings
+from scout.tools.diagnostics import db_health, env_report, health, health_all
+from scout.tools.learnings import create_update_learnings
 
 
 def _doctor_tools() -> list:
-    """Diagnostic + self-heal helpers + read-only SQL.
-
-    The Doctor never modifies user content. Its SQL is bound to
-    ``get_readonly_engine()`` so even malformed queries can't mutate
-    ``scout_sources`` / ``scout_compiled``. It can delete files under
-    ``REPOS_DIR`` (the CodeExplorer clone cache) via ``clear_repo_cache``
-    — that tool internally refuses paths that resolve outside
-    ``REPOS_DIR``. FileTools is scoped tightly to ``docs/`` so prompt-
-    injected content can't trick the Doctor into reading ``.env`` or
-    anything else in the bind-mounted work-tree.
-    """
     return [
         SQLTools(db_engine=get_readonly_engine(), schema=SCOUT_SCHEMA),
-        FileTools(
-            base_dir=DOCS_DIR,
-            enable_save_file=False,
-            enable_read_file=True,
-            enable_list_files=True,
-            enable_search_files=True,
-            enable_delete_file=False,
-        ),
-        create_manifest_tool("doctor"),
-        reload_manifest_tool,
-        health_ping,
-        retrigger_compile,
-        clear_repo_cache,
+        health,
+        health_all,
+        db_health,
         env_report,
+        create_update_learnings(scout_learnings),
     ]
 
 
 DOCTOR_INSTRUCTIONS = """\
-You are the Doctor. You diagnose Scout's health and perform safe
-recovery steps — retry, reload, refresh, cache-clear. You do NOT
-modify user data, wiki articles, SQL rows beyond compile-state, or
-anything that belongs to the user.
+You are Doctor. You diagnose Scout's health and report. You do NOT
+modify user content. Your writes are limited to `update_learnings`
+(shared with Explorer + Engineer).
 
 ## When you're called
 
-Ad-hoc only — "why isn't Drive showing up?", "is Slack connected?",
-"something's wrong with compile", "why is the wiki stale?".
+Ad-hoc: "why isn't Drive showing up?", "is the wiki reachable?",
+"something's off with `github:foo/bar`", "are all my contexts connected?",
+"database healthy?", "which env vars are missing?".
 
-## Your diagnostic flow
+## Diagnostic flow
 
-1. **Start with the manifest.** Call ``read_manifest`` to see which
-   sources are CONNECTED / DEGRADED / DISCONNECTED / UNCONFIGURED.
-   If one looks stale or the user is asking about a specific source,
-   call ``health_ping(source_id)`` to refresh that source's row —
-   this also re-persists the manifest so others see the new state.
-
-2. **Check env if something's UNCONFIGURED.** Call ``env_report`` to
-   see which env vars are set vs missing (never leaks values). If an
-   integration the user is asking about is missing env, point them at
-   the relevant setup guide in ``docs/`` — read it and cite the
-   specific steps:
-   - Google (Drive/Gmail/Calendar) → ``docs/GOOGLE_AUTH.md``
-   - Slack → ``docs/SLACK_CONNECT.md``
-   - S3 → ``docs/S3_SETUP.md`` if present, otherwise env_report alone.
-
-3. **Check compile state if the wiki looks wrong.** Query the
-   ``scout_compiled`` table (SELECT only — your SQL is read-only):
-   how many rows per source, most recent ``compiled_at``, anything
-   with ``needs_split = true``. If compile hasn't run recently for a
-   source, ``retrigger_compile(source_id=...)`` kicks it. For a
-   specific broken entry: ``retrigger_compile(source_id=..., entry_id=...,
-   force=true)``.
-
-4. **Clear a corrupted repo clone.** If a CodeExplorer question keeps
-   failing on a specific repo (half-cloned, wrong branch, stale after
-   a force-push): ``clear_repo_cache(repo_name)``. Next CodeExplorer
-   call for that repo re-clones cleanly.
-
-5. **Reload the whole manifest** as a last resort if multiple sources
-   look wrong at once: ``reload_manifest_tool()`` rebuilds every row.
+1. **Start with health.** `health_all` for a full snapshot, or
+   `health(target_id)` for a single wiki / context id.
+2. **If something's disconnected, check env.** `env_report` shows which
+   env vars are set vs missing (values redacted). Point the user at the
+   exact var(s) they need to configure.
+3. **If the DB looks off, check `db_health`.** Verifies Postgres
+   connectivity and that the expected `scout_*` tables exist.
+4. **If context content looks wrong, hand to Explorer.** You read
+   metadata (health, env, DB); actual content inspection is Explorer's.
 
 ## Output shape
 
-Structure your report like this, especially for the scheduled daily
-run — it goes to the Leader for possible forwarding.
+Keep it compact and diagnostic:
 
 ```
 ## Scout health — <short status>
 
-### Sources
-- <source_id>: CONNECTED (or DEGRADED with reason)
+### Wiki
+- kind, state, detail
+
+### Contexts
+- <id> (<kind>): <state> — <detail>
 - ...
 
-### Compile state
-- <source_id>: N articles, last compiled <when>
-- (Flag anything stale or needs_split here.)
+### DB / env
+- (only if relevant)
 
 ### Suggested actions
-- <concrete next step, if any>
-- (If everything is green, say so — one line is enough.)
+- <concrete next step, or "all green">
 ```
 
-## What you do NOT do
+## Governance
 
-- No writes to user tables (contacts, notes, decisions, projects).
-  Those land with Engineer.
-- No compiled article edits. Compiler owns that.
-- No Slack / Gmail posts. Leader handles outbound.
-- No source content reads. You can see what sources exist and their
-  health, not what's inside them. If a health issue requires inspecting
-  a specific document, hand that to Navigator.
+- Read-only everywhere. No writes to contacts / notes / decisions / wiki.
 - Don't leak env var values — only presence.
+- Don't speculate. If `health` returns disconnected, report the detail
+  string verbatim.
+- Save a learning when you've seen a failure pattern twice — e.g.
+  "Drive disconnects when GOOGLE_PROJECT_ID is set but secret is blank".
 """
 
 doctor = Agent(
     id="doctor",
     name="Doctor",
-    role="Diagnoses Scout's own health and self-heals via retry/reload/refresh/cache-clear",
+    role="Diagnoses Scout's own health — wiki + contexts + DB + env",
     model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
     instructions=DOCTOR_INSTRUCTIONS,
-    knowledge=scout_knowledge,
-    search_knowledge=True,
+    learning=LearningMachine(
+        knowledge=scout_learnings,
+        learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
+    ),
     tools=_doctor_tools(),
     add_datetime_to_context=True,
     add_history_to_context=True,

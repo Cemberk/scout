@@ -1,24 +1,33 @@
-"""Diagnostic tools for the Doctor agent.
+"""Diagnostic tools for the Doctor agent (§7.1).
 
-The Doctor diagnoses Scout's own health and self-heals via retry / reload
-/ refresh / cache-clear. It never modifies user content — the only files
-it can delete are under ``REPOS_DIR`` (the CodeExplorer clone cache),
-and its SQL access is read-only.
+Doctor surface:
+- ``health(target_id)``  — one target, 'wiki' or a context id.
+- ``health_all()``       — wiki + every registered context.
+- ``db_health()``        — Postgres connectivity + table existence.
+- ``env_report()``       — env var presence (redacted, grouped by integration).
+
+The old manifest / compile / repo-cache tools are gone — the manifest
+itself is gone (§7.2), compile lives inside WikiContext, and the repo
+cache goes with the CodeExplorer agent.
 """
 
 from __future__ import annotations
 
 import json
-import shutil
-from pathlib import Path
+import logging
 
 from agno.tools import tool
+
+log = logging.getLogger(__name__)
+
 
 # Expected environment variables, grouped by integration. Values are
 # descriptions shown back to the user, not live env reads.
 _EXPECTED_ENV: dict[str, dict[str, str]] = {
     "core": {
         "OPENAI_API_KEY": "GPT-5.4 for every agent + embeddings",
+        "SCOUT_WIKI": "Wiki backend spec (default local:./context). Examples: github:owner/repo, s3:bucket/prefix",
+        "SCOUT_CONTEXTS": "Comma-separated live-read context specs (slack,gmail,drive,github:owner/repo,local:./docs,s3:bucket)",
     },
     "web": {
         "PARALLEL_API_KEY": "Premium web search (optional — keyless Exa fallback used otherwise)",
@@ -30,17 +39,17 @@ _EXPECTED_ENV: dict[str, dict[str, str]] = {
         "GOOGLE_PROJECT_ID": "Google OAuth",
     },
     "slack": {
-        "SLACK_BOT_TOKEN": "Scout's Slack bot token — enables SlackSource + Slack interface",
+        "SLACK_BOT_TOKEN": "Scout's Slack bot token — enables SlackContext + SlackTools",
         "SLACK_SIGNING_SECRET": "Verifies inbound Slack events",
     },
-    "code_explorer": {
+    "github": {
         "GITHUB_ACCESS_TOKEN": "Optional PAT — public repos clone tokenless",
-        "REPOS_DIR": "Clone cache (default .scout/repos; compose uses /repos)",
+        "REPOS_DIR": "Clone cache for GithubContext / GithubBackend",
     },
     "s3": {
-        "AWS_ACCESS_KEY_ID": "AWS credentials for S3Source",
-        "AWS_SECRET_ACCESS_KEY": "AWS credentials for S3Source",
-        "AWS_REGION": "AWS region for S3Source",
+        "AWS_ACCESS_KEY_ID": "AWS credentials for S3Context / S3Backend",
+        "AWS_SECRET_ACCESS_KEY": "AWS credentials for S3Context / S3Backend",
+        "AWS_REGION": "AWS region",
     },
     "db": {
         "DB_HOST": "Postgres host (default localhost)",
@@ -48,119 +57,98 @@ _EXPECTED_ENV: dict[str, dict[str, str]] = {
         "DB_USER": "Postgres user (default ai)",
         "DB_DATABASE": "Postgres database (default ai)",
     },
+    "outbound": {
+        "SCOUT_ALLOW_SENDS": "When true, Leader can send Gmail / modify Calendar; default drafts-only",
+    },
 }
 
 
 @tool
-def reload_manifest_tool() -> str:
-    """Rebuild the Manifest by health-checking every source.
+def health(target_id: str) -> str:
+    """Health-check one target by id.
 
-    Returns a summary of each source's status (``connected`` /
-    ``degraded`` / ``disconnected`` / ``unconfigured``) + the refreshed
-    count.
+    Args:
+        target_id: ``'wiki'`` for the wiki, or a context id from
+            ``list_contexts`` (e.g. ``'slack'``, ``'github:agno-agi/agno'``).
+
+    Returns:
+        JSON ``{"id": ..., "state": ..., "detail": ..., "kind": ...}``.
     """
-    from scout.manifest import reload_manifest
+    from scout.tools.ask_context import get_contexts, get_wiki
 
-    m = reload_manifest()
-    lines = [f"Manifest rebuilt. {len(m.sources)} sources:"]
-    for s in m.sources.values():
-        lines.append(f"- {s.id} ({s.kind}): {s.status} — {s.detail or 'ok'}")
-    return "\n".join(lines)
+    wiki = get_wiki()
+    if target_id == "wiki":
+        if wiki is None:
+            return json.dumps({"id": "wiki", "state": "disconnected", "detail": "wiki not configured"})
+        h = wiki.health()
+        return json.dumps({"id": "wiki", "kind": wiki.kind, "state": h.state.value, "detail": h.detail})
+
+    for ctx in get_contexts():
+        if ctx.id == target_id:
+            try:
+                h = ctx.health()
+            except Exception as exc:
+                return json.dumps({"id": target_id, "kind": ctx.kind, "state": "disconnected", "detail": f"{type(exc).__name__}: {exc}"})
+            return json.dumps({"id": target_id, "kind": ctx.kind, "state": h.state.value, "detail": h.detail})
+
+    return json.dumps({"error": f"unknown target {target_id!r}"})
 
 
 @tool
-def health_ping(source_id: str) -> str:
-    """Health-check one source and refresh its manifest row.
-
-    Args:
-        source_id: Source ID (e.g. "local:wiki", "drive", "slack").
+def health_all() -> str:
+    """Health-check the wiki + every registered context.
 
     Returns:
-        JSON string with state + detail.
+        JSON list of ``{id, kind, state, detail}``.
     """
-    from scout.manifest import reload_manifest
-    from scout.sources import get_source
+    from scout.tools.ask_context import get_contexts, get_wiki
 
-    s = get_source(source_id)
-    if s is None:
-        return json.dumps({"error": f"unknown source: {source_id}"})
-    h = s.health()
-    # Refresh the manifest so the new status is visible to everyone.
-    reload_manifest()
-    return json.dumps({"source_id": source_id, "state": h.state.value, "detail": h.detail})
+    rows: list[dict] = []
+    wiki = get_wiki()
+    if wiki is not None:
+        h = wiki.health()
+        rows.append({"id": "wiki", "kind": wiki.kind, "state": h.state.value, "detail": h.detail})
+
+    for ctx in get_contexts():
+        try:
+            h = ctx.health()
+            rows.append({"id": ctx.id, "kind": ctx.kind, "state": h.state.value, "detail": h.detail})
+        except Exception as exc:
+            rows.append({"id": ctx.id, "kind": ctx.kind, "state": "disconnected", "detail": f"{type(exc).__name__}: {exc}"})
+    return json.dumps(rows)
 
 
 @tool
-def retrigger_compile(source_id: str | None = None, entry_id: str | None = None, force: bool = False) -> str:
-    """Re-run the compile pipeline.
-
-    Args:
-        source_id: Restrict to one source. Omit to compile every compile-on source.
-        entry_id: Restrict to one entry within ``source_id``. Ignored if ``source_id`` is None.
-        force: Re-compile even if the source hash hasn't changed.
+def db_health() -> str:
+    """Check Postgres connectivity and scout_* table presence.
 
     Returns:
-        JSON string summarising per-source status counts.
+        JSON ``{"state": ..., "tables": {...}, "detail": ...}``.
     """
-    from collections import Counter
-    from dataclasses import asdict
+    from sqlalchemy import text
 
-    from scout.compile import compile_all, compile_entry, compile_source
-    from scout.settings import scout_knowledge
-    from scout.sources import get_source
+    from db import SCOUT_SCHEMA, get_readonly_engine
 
-    if entry_id and not source_id:
-        return json.dumps({"error": "entry_id requires source_id"})
-
-    if entry_id and source_id:
-        src = get_source(source_id)
-        if src is None:
-            return json.dumps({"error": f"unknown source: {source_id}"})
-        result = compile_entry(src, entry_id, knowledge=scout_knowledge, force=force)
-        return json.dumps(asdict(result))
-
-    if source_id:
-        results = compile_source(source_id, knowledge=scout_knowledge, force=force)
-        counts = Counter(r.status for r in results)
-        return json.dumps({"source_id": source_id, "counts": dict(counts)})
-
-    all_results = compile_all(knowledge=scout_knowledge, force=force)
-    summary = {sid: dict(Counter(r.status for r in rs)) for sid, rs in all_results.items()}
-    return json.dumps(summary)
-
-
-@tool
-def clear_repo_cache(repo_name: str) -> str:
-    """Delete one cloned repo under ``REPOS_DIR``.
-
-    Use when a CodeExplorer clone is corrupted (half-cloned, wrong branch,
-    stale after a force-push). Next CodeExplorer call for that repo
-    re-clones cleanly.
-
-    Args:
-        repo_name: Repo directory name under REPOS_DIR — usually "owner_repo"
-            or "owner__repo" depending on the clone_repo convention.
-
-    Returns:
-        Status string.
-    """
-    from scout.settings import REPOS_DIR
-
-    target = Path(REPOS_DIR) / repo_name
-    # Refuse to delete anything outside REPOS_DIR — tight containment.
+    expected = ("scout_contacts", "scout_projects", "scout_notes", "scout_decisions")
     try:
-        target_resolved = target.resolve()
-        repos_resolved = Path(REPOS_DIR).resolve()
-        target_resolved.relative_to(repos_resolved)
-    except (ValueError, OSError) as e:
-        return f"error: {repo_name} is not inside REPOS_DIR ({e})"
+        engine = get_readonly_engine()
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = :schema"
+                ),
+                {"schema": SCOUT_SCHEMA},
+            ).all()
+    except Exception as exc:
+        return json.dumps({"state": "disconnected", "detail": f"{type(exc).__name__}: {exc}"})
 
-    if not target.exists():
-        return f"nothing to clear: {target} does not exist"
-    if not target.is_dir():
-        return f"error: {target} is not a directory"
-    shutil.rmtree(target, ignore_errors=True)
-    return f"cleared: {target}"
+    present = {r[0] for r in rows}
+    table_status = {name: (name in present) for name in expected}
+    missing = [name for name, ok in table_status.items() if not ok]
+    state = "connected" if not missing else "degraded"
+    detail = "all expected tables present" if not missing else f"missing: {missing}"
+    return json.dumps({"state": state, "tables": table_status, "detail": detail})
 
 
 @tool
@@ -168,9 +156,7 @@ def env_report() -> str:
     """Report which environment variables are set, grouped by integration.
 
     Never leaks values — reports presence only ("set" / "missing") plus
-    the description of what the variable unlocks. Use this to answer
-    "why isn't Drive showing up?" / "is Slack configured?" without ever
-    revealing a secret.
+    the description of what the variable unlocks.
     """
     from os import getenv
 
