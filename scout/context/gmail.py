@@ -13,7 +13,7 @@ import logging
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
-from scout.context._shared import answer_from_run, google_env_missing
+from scout.context._shared import answer_from_run, google_auth_material_missing, google_env_missing
 from scout.context.base import Answer, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
@@ -47,12 +47,19 @@ class GmailContext:
         missing = google_env_missing()
         if missing:
             return HealthStatus(HealthState.DISCONNECTED, missing)
+        no_auth = google_auth_material_missing()
+        if no_auth:
+            # Without this short-circuit, Agno's _auth() falls through to
+            # flow.run_local_server() and tries to pop a browser inside
+            # the container.
+            return HealthStatus(HealthState.DISCONNECTED, no_auth)
         try:
             from agno.tools.gmail import GmailTools  # type: ignore[import-not-found]
 
             gt = GmailTools()
             # _auth runs on first tool call; do it up front so health
-            # surfaces OAuth issues honestly.
+            # surfaces OAuth issues honestly. Safe here because we
+            # already verified token material exists above.
             gt._auth()  # noqa: SLF001 — the intent is a real connection probe
             service = gt._build_service()  # noqa: SLF001
             profile = service.users().getProfile(userId="me").execute()

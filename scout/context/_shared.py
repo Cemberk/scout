@@ -8,6 +8,7 @@ depend on anything here.
 from __future__ import annotations
 
 from os import getenv
+from pathlib import Path
 from typing import Any
 
 from scout.context.base import Answer
@@ -38,3 +39,25 @@ def google_env_missing() -> str | None:
     if missing:
         return f"missing: {missing}"
     return None
+
+
+def google_auth_material_missing() -> str | None:
+    """Return a reason string if no Google auth material is available,
+    else ``None``.
+
+    Agno's GmailTools / GoogleDriveTools call ``flow.run_local_server()``
+    on first use when neither a service-account file nor a ``token.json``
+    exists — which opens a browser and blocks in a container. This
+    probe lets health checks return DISCONNECTED with a fixit hint
+    instead of hanging the startup probe on an OAuth dialog.
+
+    The check matches Agno's priority: service-account env first, then
+    ``token.json`` (or ``GMAIL_TOKEN_PATH`` / ``GOOGLE_TOKEN_PATH`` if
+    set).
+    """
+    if getenv("GOOGLE_SERVICE_ACCOUNT_FILE"):
+        return None
+    token_path = Path(getenv("GMAIL_TOKEN_PATH") or getenv("GOOGLE_TOKEN_PATH") or "token.json")
+    if token_path.exists():
+        return None
+    return f"no Google auth material; run `python scripts/google_auth.py` to create {token_path}"
