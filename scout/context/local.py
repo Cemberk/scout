@@ -12,6 +12,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.tools.coding import CodingTools
 
+from scout.context._shared import answer_from_run
 from scout.context.base import Answer, HealthState, HealthStatus
 
 
@@ -45,9 +46,7 @@ class LocalContext:
         paths already)."""
         del filters, limit  # not used by LocalContext today
         agent = self._ensure_agent()
-        output = agent.run(question)
-        text = output.get_content_as_string() if hasattr(output, "get_content_as_string") else str(output.content)
-        return Answer(text=text or "", hits=[])
+        return answer_from_run(agent.run(question))
 
     # Fresh-per-query today (spec §5.3). Instantiation is cheap; cache if
     # traffic warrants.

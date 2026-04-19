@@ -27,6 +27,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 
+from scout.context._shared import answer_from_run
 from scout.context.base import Answer, Entry, HealthStatus, Hit
 
 if TYPE_CHECKING:
@@ -205,9 +206,7 @@ class WikiContext:
     ) -> Answer:
         del filters, limit
         agent = self._ensure_query_agent()
-        output = agent.run(question)
-        text = output.get_content_as_string() if hasattr(output, "get_content_as_string") else str(output.content)
-        return Answer(text=text or "", hits=[])
+        return answer_from_run(agent.run(question))
 
     # ------------------------------------------------------------------
     # Ingest — writes into raw/ via the backend.

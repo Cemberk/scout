@@ -13,6 +13,7 @@ from os import getenv
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
+from scout.context._shared import answer_from_run
 from scout.context.base import Answer, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
@@ -56,9 +57,7 @@ class SlackContext:
         agent = self._ensure_agent()
         if agent is None:
             return Answer(text="Slack not configured (SLACK_BOT_TOKEN missing)", hits=[])
-        output = agent.run(question)
-        text = output.get_content_as_string() if hasattr(output, "get_content_as_string") else str(output.content)
-        return Answer(text=text or "", hits=[])
+        return answer_from_run(agent.run(question))
 
     def _ensure_agent(self) -> Agent | None:
         if self._agent is not None:

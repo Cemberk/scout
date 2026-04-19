@@ -20,6 +20,7 @@ from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 from agno.tools.coding import CodingTools
 
+from scout.context._shared import answer_from_run
 from scout.context.backends._git import clone_url, ensure_clone, repo_dir_name, run
 from scout.context.base import Answer, HealthState, HealthStatus
 
@@ -85,9 +86,7 @@ class GithubContext:
             log.exception("GithubContext.query: clone failed")
             return Answer(text=f"clone failed: {exc}", hits=[])
         agent = self._ensure_agent()
-        output = agent.run(question)
-        text = output.get_content_as_string() if hasattr(output, "get_content_as_string") else str(output.content)
-        return Answer(text=text or "", hits=[])
+        return answer_from_run(agent.run(question))
 
     # ------------------------------------------------------------------
     # Internals

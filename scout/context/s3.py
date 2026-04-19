@@ -15,6 +15,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 
+from scout.context._shared import answer_from_run
 from scout.context.backends._s3 import build_client, normalize_prefix
 from scout.context.base import Answer, HealthState, HealthStatus
 
@@ -51,9 +52,7 @@ class S3Context:
     ) -> Answer:
         del filters, limit
         agent = self._ensure_agent()
-        output = agent.run(question)
-        text = output.get_content_as_string() if hasattr(output, "get_content_as_string") else str(output.content)
-        return Answer(text=text or "", hits=[])
+        return answer_from_run(agent.run(question))
 
     def _ensure_agent(self) -> Agent:
         if self._agent is None:
