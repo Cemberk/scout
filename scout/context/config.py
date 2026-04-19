@@ -149,7 +149,7 @@ def _build_one(kind: str, params: dict) -> Context:
 
         return GmailContext()
     if kind == "drive":
-        from scout.context.drive import DriveContext  # type: ignore[import-not-found]
+        from scout.context.drive import DriveContext
 
         return DriveContext()
     raise ValueError(f"unknown context kind {kind!r}")
