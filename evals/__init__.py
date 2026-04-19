@@ -1,33 +1,31 @@
+"""Scout evals — one case registry, two transports, small judged tier.
+
+Structure:
+- ``cases.py``     — behavioral cases (Case dataclass + CASES tuple)
+- ``runner.py``    — in-process + SSE transport, fixtures, diagnostics
+- ``wiring.py``    — code-level invariants (no LLM, no team.run())
+- ``judges.py``    — LLM-scored quality tier (voice + grounded-answer)
+- ``__main__.py``  — CLI dispatch
+
+Entry points:
+    python -m evals                          # behavioral, in-process
+    python -m evals --live                   # behavioral via SSE
+    python -m evals --case <id>              # single case
+    python -m evals wiring                   # code-level invariants
+    python -m evals judges                   # LLM-scored tier
+    ./scripts/eval_loop.sh <case_id>         # Claude-driven fix loop
 """
-Scout Evaluations
-==================
 
-Eval framework for testing Scout's capabilities.
+from evals.cases import CASES, CASES_BY_ID, Case, get
+from evals.runner import RESULTS_DIR, CaseResult, run_case, write_diagnostic
 
-Usage:
-    python -m evals
-    python -m evals --category routing
-    python -m evals --verbose
-"""
-
-from agno.models.openai import OpenAIResponses
-
-JUDGE_MODEL = OpenAIResponses(id="gpt-5.4")
-
-CATEGORIES: dict[str, dict] = {
-    "security": {"type": "judge_binary", "module": "evals.cases.security"},
-    "routing": {"type": "reliability", "module": "evals.cases.routing"},
-    "governance": {"type": "judge_binary", "module": "evals.cases.governance"},
-    "knowledge": {"type": "accuracy", "module": "evals.cases.knowledge"},
-    "voice": {"type": "judge_numeric", "module": "evals.cases.voice"},
-    "wiki": {"type": "reliability", "module": "evals.cases.wiki"},
-    "wiki_compile": {"type": "judge_binary", "module": "evals.cases.wiki_compile"},
-    "manifest": {"type": "judge_binary", "module": "evals.cases.manifest"},
-    "isolation": {"type": "judge_binary", "module": "evals.cases.isolation"},
-    "drive_live": {"type": "judge_binary", "module": "evals.cases.drive_live"},
-    "slack": {"type": "judge_binary", "module": "evals.cases.slack"},
-    "code_explorer": {"type": "judge_binary", "module": "evals.cases.code_explorer"},
-    "s3_compile": {"type": "judge_binary", "module": "evals.cases.s3_compile"},
-    "engineer": {"type": "judge_binary", "module": "evals.cases.engineer"},
-    "doctor": {"type": "judge_binary", "module": "evals.cases.doctor"},
-}
+__all__ = [
+    "CASES",
+    "CASES_BY_ID",
+    "Case",
+    "CaseResult",
+    "RESULTS_DIR",
+    "get",
+    "run_case",
+    "write_diagnostic",
+]

@@ -34,7 +34,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["scout*", "scout.sources*", "scout.compile*", "db*", "app*", "evals*", "context*"]
+include = ["scout*", "db*", "app*", "evals*"]
 
 [tool.ruff]
 line-length = 120
