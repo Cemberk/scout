@@ -131,7 +131,7 @@ def _build_one(kind: str, params: dict) -> Context:
 
         return LocalContext(params["path"])
     if kind == "github":
-        from scout.context.github import GithubContext  # type: ignore[import-not-found]
+        from scout.context.github import GithubContext
 
         return GithubContext(params["repo"])
     if kind == "s3":
