@@ -2,8 +2,8 @@
 S3Source
 ========
 
-Compile-only source (spec §4.5). One instance per `bucket[:prefix]` entry
-in S3_BUCKETS.
+Compile-only source (spec §4.5). Instantiate with `bucket` + optional
+`prefix` directly when registering.
 
 - `list` → paginated list_objects_v2.
 - `read` → get_object + LocalFolder-style extraction (PDF/docx/html/text).

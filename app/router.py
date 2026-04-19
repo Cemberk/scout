@@ -143,12 +143,12 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         if not body.text and not body.url:
             return JSONResponse(content={"error": "Either url or text is required"}, status_code=400)
 
-        from scout.settings import SCOUT_RAW_DIR
+        from scout.settings import CONTEXT_RAW_DIR
         from scout.tools.ingest import _do_ingest_text, _do_ingest_url
 
         if body.text:
             result = _do_ingest_text(
-                raw_dir=SCOUT_RAW_DIR,
+                raw_dir=CONTEXT_RAW_DIR,
                 title=body.title,
                 content=body.text,
                 source=body.url or "api",
@@ -157,7 +157,7 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
             )
         else:
             result = _do_ingest_url(
-                raw_dir=SCOUT_RAW_DIR,
+                raw_dir=CONTEXT_RAW_DIR,
                 url=body.url,  # type: ignore[arg-type]  # validated above
                 title=body.title,
                 tags=body.tags or None,

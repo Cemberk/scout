@@ -2,7 +2,7 @@
 
 - Navigator: source dispatch (manifest-gated), SQL (READ-ONLY), files (read),
   Parallel/Exa web search, Gmail/Calendar (conditional on Google integration).
-  Navigator does NOT get a FileTools pointed at SCOUT_RAW_DIR — `local:raw`
+  Navigator does NOT get a FileTools pointed at CONTEXT_RAW_DIR — `local:raw`
   is compile-only and the Manifest refuses `source_read` on it from any
   non-Compiler role.
 - Compiler: compile dispatch + raw-source read + voice-guide reads + ingest
@@ -25,11 +25,13 @@ from agno.tools.sql import SQLTools
 # MCPTools opens a network handshake we don't want on import.
 from db import SCOUT_SCHEMA, db_url, get_readonly_engine, get_sql_engine
 from scout.settings import (
+    CONTEXT_DIR,
+    CONTEXT_RAW_DIR,
     EXA_MCP_URL,
-    GOOGLE_INTEGRATION_ENABLED,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_PROJECT_ID,
     PARALLEL_API_KEY,
-    SCOUT_CONTEXT_DIR,
-    SCOUT_RAW_DIR,
 )
 from scout.tools.compile_tools import create_compile_tools
 from scout.tools.ingest import create_ingest_tools
@@ -37,6 +39,8 @@ from scout.tools.introspect import create_introspect_schema_tool
 from scout.tools.knowledge import create_update_knowledge
 from scout.tools.manifest_tools import create_manifest_tool
 from scout.tools.sources import create_source_tools
+
+_GOOGLE_READY = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_PROJECT_ID)
 
 
 def _web_search_tools() -> list:
@@ -73,7 +77,7 @@ def build_navigator_tools(knowledge: Knowledge) -> list:
     tools: list = [
         SQLTools(db_engine=get_readonly_engine(), schema=SCOUT_SCHEMA),
         FileTools(
-            base_dir=SCOUT_CONTEXT_DIR,
+            base_dir=CONTEXT_DIR,
             enable_save_file=False,
             enable_read_file=True,
             enable_list_files=True,
@@ -86,7 +90,7 @@ def build_navigator_tools(knowledge: Knowledge) -> list:
         *_web_search_tools(),
     ]
 
-    if GOOGLE_INTEGRATION_ENABLED:
+    if _GOOGLE_READY:
         # Spec §9 governance: Gmail read-only + drafts, Calendar read-only.
         # Agno's Toolkit `exclude_tools=[...]` strips tool functions before
         # they reach the model.
@@ -119,9 +123,9 @@ def build_compiler_tools(knowledge: Knowledge) -> list:
     Ingest does NOT auto-trigger compile — the Compiler decides, usually
     on an explicit "compile now" request from the user.
     """
-    ingest_url, ingest_text, _read_manifest_legacy, _update_manifest_legacy = create_ingest_tools(SCOUT_RAW_DIR)
+    ingest_url, ingest_text, _read_manifest_legacy, _update_manifest_legacy = create_ingest_tools(CONTEXT_RAW_DIR)
     return [
-        FileTools(base_dir=SCOUT_CONTEXT_DIR, enable_delete_file=False),
+        FileTools(base_dir=CONTEXT_DIR, enable_delete_file=False),
         create_update_knowledge(knowledge),
         create_manifest_tool("compiler"),
         *create_source_tools("compiler"),
@@ -154,7 +158,7 @@ def build_doctor_tools() -> list:
     # tightly to ``docs/`` — NOT the repo root — so prompt-injected
     # content can't trick the Doctor into reading ``.env`` or anything
     # else in the bind-mounted work-tree.
-    docs_dir = (SCOUT_CONTEXT_DIR / ".." / "docs").resolve()
+    docs_dir = (CONTEXT_DIR / ".." / "docs").resolve()
 
     return [
         SQLTools(db_engine=get_readonly_engine(), schema=SCOUT_SCHEMA),
@@ -199,14 +203,12 @@ def build_leader_tools() -> list:
     """Leader tools — outbound communication (Slack / Gmail / Calendar) +
     voice-guide reads + read-only contact lookup SQL.
 
-    Outbound sends are gated by ``SCOUT_ALLOW_SENDS``: when it's false
-    (the default), Gmail and Calendar are wired as drafts-only via
-    ``exclude_tools=[...]`` so send functions never reach the model.
-    Slack posting is always send-capable when a token is present —
-    Slack's Scout integration is explicitly opt-in and the user
-    already consented by setting ``SLACK_BOT_TOKEN``.
+    Gmail and Calendar are wired as drafts-only via ``exclude_tools=[...]``
+    so send functions never reach the model. Slack posting is send-capable
+    when a token is present — Slack's Scout integration is explicitly
+    opt-in and the user already consented by setting ``SLACK_BOT_TOKEN``.
 
-    FileTools is read-only on ``SCOUT_VOICE_DIR`` so the Leader reads
+    FileTools is read-only on ``CONTEXT_VOICE_DIR`` so the Leader reads
     the matching voice guide (``voice/email.md``, ``voice/slack-message.md``,
     etc.) before drafting any outbound content.
 
@@ -214,16 +216,11 @@ def build_leader_tools() -> list:
     schema so the Leader can resolve a recipient name against
     ``scout_contacts`` without being able to write.
     """
-    from scout.settings import (
-        GOOGLE_INTEGRATION_ENABLED,
-        SCOUT_ALLOW_SENDS,
-        SCOUT_VOICE_DIR,
-        SLACK_BOT_TOKEN,
-    )
+    from scout.settings import CONTEXT_VOICE_DIR, SLACK_BOT_TOKEN
 
     tools: list = [
         FileTools(
-            base_dir=SCOUT_VOICE_DIR,
+            base_dir=CONTEXT_VOICE_DIR,
             enable_save_file=False,
             enable_read_file=True,
             enable_list_files=True,
@@ -238,6 +235,7 @@ def build_leader_tools() -> list:
 
         tools.append(
             SlackTools(
+                token=SLACK_BOT_TOKEN,
                 enable_send_message=True,
                 enable_list_channels=True,
                 enable_send_message_thread=True,
@@ -247,24 +245,18 @@ def build_leader_tools() -> list:
             )
         )
 
-    if GOOGLE_INTEGRATION_ENABLED:
+    if _GOOGLE_READY:
+        # Drafts-only: strip send functions so they never reach the model.
+        # The Leader drafts; the user approves and sends.
         from agno.tools.gmail import GmailTools  # type: ignore[import-not-found]
         from agno.tools.googlecalendar import GoogleCalendarTools  # type: ignore[import-not-found]
 
-        if SCOUT_ALLOW_SENDS:
-            # Send-capable: the model gets send_email / send_email_reply
-            # on Gmail, and create/update/delete on Calendar.
-            tools.append(GmailTools())
-            tools.append(GoogleCalendarTools(allow_update=True))
-        else:
-            # Drafts-only: strip the send functions so they never reach
-            # the model. The Leader drafts; the user approves and sends.
-            tools.append(GmailTools(exclude_tools=["send_email", "send_email_reply"]))
-            tools.append(
-                GoogleCalendarTools(
-                    allow_update=False,
-                    exclude_tools=["create_event", "update_event", "delete_event"],
-                )
+        tools.append(GmailTools(exclude_tools=["send_email", "send_email_reply"]))
+        tools.append(
+            GoogleCalendarTools(
+                allow_update=False,
+                exclude_tools=["create_event", "update_event", "delete_event"],
             )
+        )
 
     return tools

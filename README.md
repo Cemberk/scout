@@ -37,11 +37,11 @@ While Scout gets more useful with more context, it's designed to work out of the
 
 ### 1. Ask Scout about anything
 
-Scout ships with a web researcher, so you can start asking questions immediately with no setup beyond your OpenAI key.
+Scout's Navigator ships with web search built-in (Exa MCP by default; set `PARALLEL_API_KEY` for Parallel), so you can start asking questions immediately with no setup beyond your OpenAI key.
 
 > *Let's chat about Agno. Read the docs at https://docs.agno.com and tell me what it is.*
 
-The researcher navigates the web, reads the sources it finds, and answers with citations.
+Navigator fetches the page, reads the sources it finds, and answers with citations.
 
 ### 2. Ask Scout about Scout
 

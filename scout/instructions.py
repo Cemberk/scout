@@ -1,4 +1,4 @@
-from scout.settings import SCOUT_COMPILED_DIR, SCOUT_CONTEXT_DIR
+from scout.settings import CONTEXT_COMPILED_DIR, CONTEXT_DIR
 
 # ---------------------------------------------------------------------------
 # Manifest injection (spec §7)
@@ -46,7 +46,7 @@ now — their mode (compile / live-read), capabilities, and health. Sources
 not in your manifest are NOT callable; the system will refuse the call.
 Read this whenever you're unsure what's reachable.
 
-### 2. Wiki (the map) — `{SCOUT_COMPILED_DIR.name}/articles/`
+### 2. Wiki (the map) — `{CONTEXT_COMPILED_DIR.name}/articles/`
 The compiled, curated knowledge base, maintained by the Compiler. Read
 **this** for knowledge questions, not the raw sources behind it. Two
 ways to reach it:
@@ -68,7 +68,7 @@ query is targeted.
 Per-user operational memory. `Retrieval:`, `Pattern:`, `Correction:`.
 Search before saving — update, don't duplicate. `Correction:` always wins.
 
-### 5. Files (the territory) — `{SCOUT_CONTEXT_DIR}`
+### 5. Files (the territory) — `{CONTEXT_DIR}`
 Voice guides + the compiled wiki live here.
 - `voice/` — channel tone guides. Read the matching guide before drafting.
 - `compiled/` — the wiki (see above).
@@ -257,14 +257,14 @@ Do not attempt any calendar-related tool calls.\
 
 def build_navigator_instructions() -> str:
     """Build instructions for the Navigator agent."""
-    from scout.settings import GOOGLE_INTEGRATION_ENABLED
+    from scout.settings import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_PROJECT_ID
 
     parts = [sources_header("navigator"), BASE_INSTRUCTIONS, WEB_RESEARCH_INSTRUCTIONS]
 
     # Navigator never posts to Slack — that's the leader's job.
     parts.append(SLACK_DISABLED_INSTRUCTIONS)
 
-    if GOOGLE_INTEGRATION_ENABLED:
+    if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_PROJECT_ID:
         parts.append(GMAIL_INSTRUCTIONS)
         parts.append(CALENDAR_INSTRUCTIONS)
     else:

@@ -11,7 +11,7 @@ study the Compiler first."
 Boundary contract:
 - Reads from any source through the Source protocol (no direct fs reads
   beyond what LocalFolderSource exposes).
-- Writes only under SCOUT_COMPILED_DIR/articles/.
+- Writes only under CONTEXT_COMPILED_DIR/articles/.
 - Records every successful compile in scout.scout_compiled.
 - Inserts a Wiki: row in scout_knowledge for each new article.
 - Never overwrites an article whose record has user_edited=True or
@@ -37,12 +37,12 @@ from scout.compile_state import (
     list_records_for_source,
     upsert_record,
 )
-from scout.settings import SCOUT_COMPILED_DIR, SCOUT_VOICE_DIR
+from scout.settings import CONTEXT_COMPILED_DIR, CONTEXT_VOICE_DIR
 from scout.sources import get_source, get_sources
 from scout.sources.base import Source
 
-ARTICLES_DIR = SCOUT_COMPILED_DIR / "articles"
-INDEX_PATH = SCOUT_COMPILED_DIR / "index.md"
+ARTICLES_DIR = CONTEXT_COMPILED_DIR / "articles"
+INDEX_PATH = CONTEXT_COMPILED_DIR / "index.md"
 COMPILER_VERSION = "scout-compiler-v3"
 
 # Spec §5: "If content.text exceeds 20,000 characters, the Compiler still
@@ -87,7 +87,7 @@ def _now_iso() -> str:
 
 
 def _voice_guide() -> str:
-    p = SCOUT_VOICE_DIR / "wiki-article.md"
+    p = CONTEXT_VOICE_DIR / "wiki-article.md"
     if p.exists():
         return p.read_text()
     return ""
@@ -386,7 +386,7 @@ def _compile_and_write(
         path = ARTICLES_DIR / filename
         file_bytes = (article + "\n").encode("utf-8")
         path.write_bytes(file_bytes)
-        written.append(str(path.relative_to(SCOUT_COMPILED_DIR.parent)))
+        written.append(str(path.relative_to(CONTEXT_COMPILED_DIR.parent)))
         if primary_path is None:
             primary_path = path
             primary_output_hash = _sha256_bytes(file_bytes)
@@ -395,7 +395,7 @@ def _compile_and_write(
                 knowledge.insert(
                     name=f"Wiki: {title}",
                     text_content=(
-                        f"Compiled article at {path.relative_to(SCOUT_COMPILED_DIR.parent)}; "
+                        f"Compiled article at {path.relative_to(CONTEXT_COMPILED_DIR.parent)}; "
                         f"compiled from {source.id}:{entry_id}. Tags resolved from frontmatter."
                     ),
                 )
@@ -429,7 +429,7 @@ def _compile_and_write(
                 text_content=(
                     f"Source entry {source.id}:{entry_id} exceeded "
                     f"{NEEDS_SPLIT_THRESHOLD} chars. Emitted a single article "
-                    f"at {primary_path.relative_to(SCOUT_COMPILED_DIR.parent)}; "
+                    f"at {primary_path.relative_to(CONTEXT_COMPILED_DIR.parent)}; "
                     "Linter should surface for human follow-up."
                 ),
             )
@@ -544,7 +544,7 @@ def compile_all(
 
 def _refresh_index() -> None:
     ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
-    SCOUT_COMPILED_DIR.mkdir(parents=True, exist_ok=True)
+    CONTEXT_COMPILED_DIR.mkdir(parents=True, exist_ok=True)
     articles = sorted(ARTICLES_DIR.glob("*.md"))
 
     lines = [
@@ -558,7 +558,7 @@ def _refresh_index() -> None:
     ]
     for p in articles:
         title = _extract_title(p.read_text(errors="replace"))
-        rel = p.relative_to(SCOUT_COMPILED_DIR)
+        rel = p.relative_to(CONTEXT_COMPILED_DIR)
         lines.append(f"- [{title}](compiled/{rel})")
 
     INDEX_PATH.write_text("\n".join(lines) + "\n")

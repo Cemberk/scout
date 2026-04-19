@@ -45,12 +45,17 @@ interfaces: list = []
 if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
     from agno.os.interfaces.slack import Slack
 
-    # agno's Slack interface reads SLACK_TOKEN / SLACK_SIGNING_SECRET from
-    # env directly. scout.settings mirrors SLACK_BOT_TOKEN into SLACK_TOKEN
-    # at import time so this continues to work. Pass-through kwargs the
-    # current Slack class accepts: agent / team / workflow / prefix / tags
-    # / reply_to_mentions_only.
-    interfaces.append(Slack(team=scout, reply_to_mentions_only=False))
+    # Pass token + signing_secret explicitly — agno's Slack interface doesn't
+    # read them from env on its own, and the downstream router needs the
+    # signing secret to verify inbound events.
+    interfaces.append(
+        Slack(
+            team=scout,
+            token=SLACK_BOT_TOKEN,
+            signing_secret=SLACK_SIGNING_SECRET,
+            reply_to_mentions_only=False,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------

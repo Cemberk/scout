@@ -2,18 +2,24 @@
 Scout Settings
 ==============
 
-Environment-derived constants and DB-dependent runtime objects used
-across Scout. DB objects are created at import time so every agent
-shares the same instance.
+Environment-derived constants, repo paths, and DB-dependent runtime
+objects used across Scout. DB objects are created at import time so
+every agent shares the same instance.
 
-Paths live in ``scout.paths``. Feature/source-enablement is derived
-at call sites from the relevant env vars below.
+Feature/source-enablement is derived at call sites from the env vars
+below — no pre-computed ``*_ENABLED`` flags.
 """
 
 from os import getenv
 from pathlib import Path
 
 from db import create_knowledge, get_postgres_db
+
+# --- Paths ----------------------------------------------------------------
+CONTEXT_DIR = Path(__file__).parent.parent / "context"
+CONTEXT_RAW_DIR = CONTEXT_DIR / "raw"
+CONTEXT_COMPILED_DIR = CONTEXT_DIR / "compiled"
+CONTEXT_VOICE_DIR = CONTEXT_DIR / "voice"
 
 # --- Web research: Parallel (premium) or keyless Exa MCP fallback ----------
 PARALLEL_API_KEY = getenv("PARALLEL_API_KEY", "")
@@ -25,7 +31,7 @@ EXA_MCP_URL = (
 )
 
 # --- Slack (Scout's own bot identity) --------------------------------------
-SLACK_TOKEN = getenv("SLACK_TOKEN", "")
+SLACK_BOT_TOKEN = getenv("SLACK_BOT_TOKEN", "")
 SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET", "")
 
 # --- Google (Gmail + Calendar + Drive) -------------------------------------

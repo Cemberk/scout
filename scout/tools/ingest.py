@@ -197,7 +197,7 @@ def create_ingest_tools(raw_dir: Path):
     """Create ingest tools bound to the raw/ directory.
 
     Args:
-        raw_dir: Path to raw/ (resolved from SCOUT_CONTEXT_DIR).
+        raw_dir: Path to raw/ (CONTEXT_RAW_DIR).
 
     Returns:
         List of tool functions.

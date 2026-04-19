@@ -38,10 +38,9 @@ _EXPECTED_ENV: dict[str, dict[str, str]] = {
         "REPOS_DIR": "Clone cache (default .scout/repos; compose uses /repos)",
     },
     "s3": {
-        "S3_BUCKETS": "Comma-separated bucket[:prefix]",
-        "AWS_ACCESS_KEY_ID": "Required when S3_BUCKETS is set",
-        "AWS_SECRET_ACCESS_KEY": "Required when S3_BUCKETS is set",
-        "AWS_REGION": "Required when S3_BUCKETS is set",
+        "AWS_ACCESS_KEY_ID": "AWS credentials for S3Source",
+        "AWS_SECRET_ACCESS_KEY": "AWS credentials for S3Source",
+        "AWS_REGION": "AWS region for S3Source",
     },
     "db": {
         "DB_HOST": "Postgres host (default localhost)",
