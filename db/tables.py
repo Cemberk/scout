@@ -147,9 +147,7 @@ def create_tables() -> None:
     for table in _WORKSPACE_DROP_TABLES:
         try:
             with engine.begin() as conn:
-                conn.execute(
-                    text(f"ALTER TABLE {SCOUT_SCHEMA}.{table} DROP COLUMN IF EXISTS workspace_id CASCADE")
-                )
+                conn.execute(text(f"ALTER TABLE {SCOUT_SCHEMA}.{table} DROP COLUMN IF EXISTS workspace_id CASCADE"))
         except Exception:
             # Table doesn't exist yet (agno creates on first insert). Next
             # startup will handle the drop.

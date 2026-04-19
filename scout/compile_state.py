@@ -138,10 +138,7 @@ def list_records_for_source(source_id: str) -> list[CompileRecord]:
 def mark_user_edited(source_id: str, entry_id: str) -> None:
     with _engine_for_state().begin() as conn:
         conn.execute(
-            text(
-                f"UPDATE {_TABLE} SET user_edited = TRUE "
-                "WHERE source_id = :sid AND entry_id = :eid"
-            ),
+            text(f"UPDATE {_TABLE} SET user_edited = TRUE WHERE source_id = :sid AND entry_id = :eid"),
             {"sid": source_id, "eid": entry_id},
         )
 
