@@ -17,12 +17,14 @@ from agno.os import AgentOS
 from app.router import create_router
 from db import get_postgres_db
 from scout.agents import doctor, engineer, explorer
+from scout.context.config import build_contexts, build_wiki
 from scout.settings import (
     SLACK_BOT_TOKEN,
     SLACK_SIGNING_SECRET,
     scout_learnings,
 )
 from scout.team import scout
+from scout.tools.ask_context import set_runtime
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -39,7 +41,6 @@ interfaces: list = []
 if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
     from agno.os.interfaces.slack import Slack
 
-    # Pass token + signing_secret to Agno's Slack interface.
     interfaces.append(
         Slack(
             team=scout,
@@ -51,12 +52,12 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
 
 
 # ---------------------------------------------------------------------------
-# Lifespan
+# Lifespan — tables + wiki/contexts wire-up
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     _create_tables()
-    # Wiki + contexts wiring lands in 1m.
+    _wire_wiki_and_contexts()
     yield
 
 
@@ -95,6 +96,23 @@ def _create_tables() -> None:
         print("[scout] Tables: applied")
     except Exception as e:
         print(f"[scout] Tables: failed: {e}")
+
+
+def _wire_wiki_and_contexts() -> None:
+    """Build the WikiContext + Context list from env and publish them
+    via ``scout.tools.ask_context.set_runtime`` so the Explorer /
+    Engineer / Doctor tools can resolve the active instances.
+
+    Failures are logged but don't block startup — agents can still chat
+    even if a context is misconfigured; Doctor surfaces the issue.
+    """
+    try:
+        wiki = build_wiki()
+        contexts = build_contexts()
+        set_runtime(wiki, contexts)
+        print(f"[scout] Wiki: {wiki.id}; Contexts: {[c.id for c in contexts]}")
+    except Exception as e:
+        print(f"[scout] Wiki/contexts wiring failed: {e}")
 
 
 if __name__ == "__main__":
