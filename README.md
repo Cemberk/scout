@@ -147,33 +147,23 @@ python -m scout _smoke_gating                         # assert Navigator can't r
 
 ## API
 
+Three custom endpoints on top of AgentOS's defaults (`/teams/scout/runs`, `/health`, etc.):
+
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/teams/scout/runs` | POST | Run Scout (SSE streaming) |
 | `/manifest` | GET | Current manifest |
-| `/manifest/reload` | POST | Rebuild manifest |
 | `/sources/{id}/health` | GET | Per-source health ping |
 | `/compile/run` | POST | Run compile pass (no body / `source_id` / `source_id`+`entry_id`) |
-| `/wiki/compile` | POST | Legacy alias for `/compile/run` |
-| `/wiki/ingest` | POST | URL or text → `context/raw/` (JSON body only) |
-| `/doctor/run` | POST | Doctor diagnostic pass (returns JSON report) |
-| `/doctor/health` | GET | Liveness probe |
 
 ## Scheduled tasks
 
-Seven schedules, all registered idempotently on startup (orphans from older revisions get pruned):
+One schedule today — the hourly wiki compile:
 
 | Task | Schedule | Endpoint |
 |---|---|---|
 | `wiki-compile` | Hourly on :00 (UTC) | `/compile/run` |
-| `source-health-check` | Every 15 min (UTC) | `/manifest/reload` |
-| `daily-briefing` | Weekdays 8 AM (ET) | `/teams/scout/runs` |
-| `inbox-digest` | Weekdays 12 PM (ET) | `/teams/scout/runs` |
-| `learning-summary` | Monday 10 AM (ET) | `/teams/scout/runs` |
-| `weekly-review` | Friday 5 PM (ET) | `/teams/scout/runs` |
-| `doctor-daily` | Daily 9 AM (ET) | `/doctor/run` |
 
-A one-shot compile also fires in a background thread at container boot so the wiki is populated within ~30s of startup (no need to wait for the top of the hour). Configurable in `app/main.py` → `_register_schedules`. When `SLACK_BOT_TOKEN` is set, the team-routed schedules post their results to `#scout-updates`.
+A one-shot compile also fires in a background thread at container boot so the wiki is populated within ~30s of startup (no need to wait for the top of the hour). Configured in `app/main.py` → `_register_schedules`. Anything else (briefings, digests, weekly reviews, daily Doctor sweeps) was removed in favor of an explicit ad-hoc model — kick them off from the chat or schedule them externally.
 
 ## Environment
 

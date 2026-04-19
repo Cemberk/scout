@@ -80,7 +80,6 @@ scout/
 │   ├── engineer.py           # SQL writer — scout_* tables, introspect, update_knowledge
 │   └── doctor.py             # Self-diagnosis + retry/reload/refresh/cache-clear
 └── tools/
-    ├── build.py              # Tool assembly per agent role (+ build_engineer/doctor_tools)
     ├── manifest_tools.py     # read_manifest
     ├── sources.py            # list_sources / source_list / source_find / source_read
     ├── compile_tools.py      # list_compile_sources / compile_one / compile_one_source / ...
@@ -103,8 +102,8 @@ context/
     └── index.md              # Auto-regenerated after each compile pass
 
 app/
-├── main.py                   # AgentOS entry (lifespan: tables + manifest + schedules)
-├── router.py                 # /manifest, /compile/run, /sources/{id}/health, /wiki/ingest, /doctor/*
+├── main.py                   # AgentOS entry (lifespan: tables + manifest + wiki-compile schedule)
+├── router.py                 # /manifest, /sources/{id}/health, /compile/run
 └── config.yaml
 
 db/
@@ -225,27 +224,23 @@ All tool returns are passed through the redactor in `scout.tools.redactor` — s
 
 | Task | Schedule | Endpoint |
 |------|----------|----------|
-| Daily Briefing | Weekdays 8 AM | `/teams/scout/runs` |
-| **Wiki Compile** | **Hourly on :00** | `/compile/run` (lint runs inside each pass). A one-shot compile also fires at container boot so the wiki is populated within ~30s of startup. |
-| **Source Health Check** | **Every 15 min** | `/manifest/reload` |
-| **Doctor Daily** | **Daily 9 AM (local)** | `/doctor/run` — self-diagnostic report |
-| Inbox Digest | Weekdays 12 PM | `/teams/scout/runs` |
-| Learning Summary | Monday 10 AM | `/teams/scout/runs` |
-| Weekly Review | Friday 5 PM | `/teams/scout/runs` |
+| **Wiki Compile** | **Hourly on :00 (UTC)** | `/compile/run` (lint runs inside each pass). A one-shot compile also fires at container boot so the wiki is populated within ~30s of startup. |
+
+This is the only schedule Scout owns today. Briefings, digests, learning
+summaries, weekly reviews, daily Doctor runs, etc. were removed in favor
+of an explicit ad-hoc model — kick them off from the chat or schedule
+them externally if needed.
 
 ## API Endpoints
 
+Three custom endpoints on top of AgentOS's defaults (which include
+`/teams/scout/runs`, `/health`, etc.):
+
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/teams/scout/runs` | POST | Run the Scout team |
 | `/manifest` | GET | Current manifest |
-| `/manifest/reload` | POST | Rebuild manifest from sources |
 | `/sources/{id}/health` | GET | Per-source health ping |
 | `/compile/run` | POST | Run compile pipeline (no body / source_id / source_id+entry_id) |
-| `/wiki/compile` | POST | Legacy alias for /compile/run |
-| `/wiki/ingest` | POST | Ingest URL or text into context/raw/ |
-| `/doctor/run` | POST | Run a Doctor diagnostic pass — returns report JSON |
-| `/doctor/health` | GET | Liveness probe (DB reachable?) |
 
 ## Model
 

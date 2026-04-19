@@ -7,8 +7,7 @@ prompt which sources are reachable right now, in what mode, with what
 capabilities. It is rebuilt:
 
 - once at startup (lifespan hook in app.main)
-- on the source-health-check cron (every 15 min)
-- on demand via POST /manifest/reload
+- on demand via Doctor's ``reload_manifest`` tool
 
 The Manifest also gates tool registration: a Navigator never gets a tool
 that points at a `compile-only` source (e.g. `context/raw/`). That rule

@@ -8,7 +8,7 @@ responsibilities after every compile pass — broken backlinks, stale articles,
 `needs_split` flags, user-edit conflicts. There is no separate Linter agent.
 
 The runner in `scout/compile/runner.py` is also called directly by:
-- the every-10-min `wiki-compile` cron (POST /compile/run)
+- the hourly `wiki-compile` cron (POST /compile/run)
 - the CLI: `python -m scout compile ...`
 
 The Compiler agent itself remains useful for ad-hoc instructions like

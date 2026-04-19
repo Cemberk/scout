@@ -21,7 +21,6 @@ CATEGORIES: dict[str, dict] = {
     "knowledge": {"type": "accuracy", "module": "evals.cases.knowledge"},
     "voice": {"type": "judge_numeric", "module": "evals.cases.voice"},
     "wiki": {"type": "reliability", "module": "evals.cases.wiki"},
-    "documents": {"type": "accuracy", "module": "evals.cases.documents"},
     "wiki_compile": {"type": "judge_binary", "module": "evals.cases.wiki_compile"},
     "manifest": {"type": "judge_binary", "module": "evals.cases.manifest"},
     "isolation": {"type": "judge_binary", "module": "evals.cases.isolation"},

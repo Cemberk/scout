@@ -44,7 +44,6 @@ ALLOWED_FILES: dict[str, Path] = {
     "scout/agents/code_explorer.py": REPO_ROOT / "scout/agents/code_explorer.py",
     "scout/agents/engineer.py": REPO_ROOT / "scout/agents/engineer.py",
     "scout/agents/doctor.py": REPO_ROOT / "scout/agents/doctor.py",
-    "scout/tools/build.py": REPO_ROOT / "scout/tools/build.py",
 }
 
 RESULTS_DIR = REPO_ROOT / "evals/results"

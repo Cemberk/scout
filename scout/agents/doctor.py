@@ -11,8 +11,9 @@ never modifies user content:
 - The only destructive tool is ``clear_repo_cache``, and it refuses any
   path that resolves outside ``$REPOS_DIR``.
 
-Runs ad-hoc ("why isn't Drive showing up?") and on a daily cron at 9am
-local via ``POST /doctor/run``.
+Runs ad-hoc — "why isn't Drive showing up?", "is Slack connected?",
+"why is the wiki stale?". Invoked through the team chat (the Leader
+delegates) or directly as an agent.
 """
 
 from agno.agent import Agent
@@ -71,10 +72,8 @@ anything that belongs to the user.
 
 ## When you're called
 
-- Ad-hoc: "why isn't Drive showing up?", "is Slack connected?",
-  "something's wrong with compile", "why is the wiki stale?"
-- Scheduled: the daily 9am cron hits ``POST /doctor/run`` and asks for
-  a short summary of anything actionable.
+Ad-hoc only — "why isn't Drive showing up?", "is Slack connected?",
+"something's wrong with compile", "why is the wiki stale?".
 
 ## Your diagnostic flow
 
