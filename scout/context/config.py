@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from scout.context.base import Context
-    from scout.context.wiki import WikiContext  # type: ignore[import-not-found]
+    from scout.context.wiki import WikiContext
 
 
 log = logging.getLogger(__name__)
@@ -76,13 +76,13 @@ def build_wiki() -> WikiContext:
     """
     # Local imports avoid cycles — config is imported before the classes it builds.
     # Several targets land in later sub-steps; type: ignore keeps mypy quiet until then.
-    from scout.context.wiki import WikiContext  # type: ignore[import-not-found]
+    from scout.context.wiki import WikiContext
 
     spec = getenv("SCOUT_WIKI", "local:./context")
     kind, params = parse_spec(spec)
 
     if kind == "local":
-        from scout.context.backends.local import LocalBackend  # type: ignore[import-not-found]
+        from scout.context.backends.local import LocalBackend
 
         backend = LocalBackend(params["path"])
     elif kind == "github":
@@ -127,7 +127,7 @@ def _build_one(kind: str, params: dict) -> Context:
     # Several context modules land in later sub-steps; type: ignore keeps
     # mypy quiet until they exist.
     if kind == "local":
-        from scout.context.local import LocalContext  # type: ignore[import-not-found]
+        from scout.context.local import LocalContext
 
         return LocalContext(params["path"])
     if kind == "github":
