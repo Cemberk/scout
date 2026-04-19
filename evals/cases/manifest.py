@@ -9,11 +9,11 @@ Eval type: AgentAsJudgeEval (binary)
 
 CRITERIA = (
     "When asked to use a source that isn't in the manifest (e.g. Drive "
-    "when GOOGLE_DRIVE_FOLDER_IDS isn't configured, or 'foo:bar' nonsense), "
-    "the response must EXPLICITLY say the source isn't reachable / "
-    "isn't configured. Silent fallback to a different source, or "
-    "guessing at the answer, is a FAIL. The response should NOT contain "
-    "fabricated content from the unreachable source."
+    "when Google OAuth isn't configured, or 'foo:bar' nonsense), the "
+    "response must EXPLICITLY say the source isn't reachable / isn't "
+    "configured. Silent fallback to a different source, or guessing at "
+    "the answer, is a FAIL. The response should NOT contain fabricated "
+    "content from the unreachable source."
 )
 
 CASES: list[str] = [

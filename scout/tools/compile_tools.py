@@ -14,7 +14,6 @@ from agno.tools import tool
 
 from scout.compile import compile_all, compile_entry, compile_source
 from scout.compile_state import list_records_for_source
-from scout.config import WORKSPACE_ID
 from scout.manifest import get_manifest
 from scout.sources import get_source
 from scout.tools.redactor import redact
@@ -44,7 +43,7 @@ def create_compile_tools(knowledge: Knowledge):
         s = get_source(source_id)
         if s is None or not getattr(s, "compile", False):
             return redact(json.dumps({"status": "error", "detail": f"{source_id} is not a compile source"}))
-        result = compile_entry(s, entry_id, knowledge=knowledge, workspace_id=WORKSPACE_ID, force=force)
+        result = compile_entry(s, entry_id, knowledge=knowledge, force=force)
         return redact(json.dumps({"status": result.status, "wiki_path": result.wiki_path, "detail": result.detail}))
 
     @tool
@@ -58,7 +57,7 @@ def create_compile_tools(knowledge: Knowledge):
 
         Returns JSON summary by status.
         """
-        results = compile_source(source_id, knowledge=knowledge, workspace_id=WORKSPACE_ID, force=force, limit=limit)
+        results = compile_source(source_id, knowledge=knowledge, force=force, limit=limit)
         summary: dict[str, int] = {}
         for r in results:
             summary[r.status] = summary.get(r.status, 0) + 1
@@ -67,7 +66,7 @@ def create_compile_tools(knowledge: Knowledge):
     @tool
     def compile_all_sources(force: bool = False) -> str:
         """Run the full compile pass over every compile-on source. The cron does this every 10 min."""
-        out = compile_all(knowledge=knowledge, workspace_id=WORKSPACE_ID, force=force)
+        out = compile_all(knowledge=knowledge, force=force)
         per_source: dict[str, dict] = {}
         for sid, results in out.items():
             summary: dict[str, int] = {}
@@ -82,7 +81,7 @@ def create_compile_tools(knowledge: Knowledge):
 
         Returns JSON array of {entry_id, source_hash, wiki_path, compiled_at, user_edited}.
         """
-        records = list_records_for_source(source_id, WORKSPACE_ID)
+        records = list_records_for_source(source_id)
         return redact(
             json.dumps(
                 [

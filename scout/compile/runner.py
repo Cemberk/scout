@@ -37,7 +37,7 @@ from scout.compile_state import (
     list_records_for_source,
     upsert_record,
 )
-from scout.config import SCOUT_COMPILED_DIR, SCOUT_VOICE_DIR, WORKSPACE_ID
+from scout.settings import SCOUT_COMPILED_DIR, SCOUT_VOICE_DIR
 from scout.sources import get_source, get_sources
 from scout.sources.base import Source
 
@@ -258,7 +258,6 @@ def compile_entry(
     entry_id: str,
     *,
     knowledge=None,
-    workspace_id: str = WORKSPACE_ID,
     force: bool = False,
 ) -> CompileResult:
     """Compile a single entry from a source."""
@@ -275,7 +274,7 @@ def compile_entry(
 
     source_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
     needs_split = len(text) > NEEDS_SPLIT_THRESHOLD
-    record = get_record(source.id, entry_id, workspace_id)
+    record = get_record(source.id, entry_id)
 
     if record and not force and record.source_hash == source_hash:
         return CompileResult(source.id, entry_id, "skipped-unchanged", wiki_path=record.wiki_path)
@@ -292,7 +291,6 @@ def compile_entry(
             content.source_url,
             source_hash,
             knowledge,
-            workspace_id,
             needs_split=needs_split,
             sibling_of=record,
             prior_record=None,  # sibling-write; don't delete the user-edited original
@@ -305,7 +303,6 @@ def compile_entry(
         content.source_url,
         source_hash,
         knowledge,
-        workspace_id,
         needs_split=needs_split,
         prior_record=record,
     )
@@ -335,7 +332,6 @@ def _compile_and_write(
     source_url: str | None,
     source_hash: str,
     knowledge,
-    workspace_id: str,
     *,
     needs_split: bool = False,
     sibling_of: CompileRecord | None = None,
@@ -451,7 +447,6 @@ def _compile_and_write(
             compiled_by=COMPILER_VERSION,
             user_edited=False,
             needs_split=needs_split,
-            workspace_id=workspace_id,
         )
     )
 
@@ -467,7 +462,6 @@ def compile_source(
     source_id: str,
     *,
     knowledge=None,
-    workspace_id: str = WORKSPACE_ID,
     force: bool = False,
     limit: int | None = None,
 ) -> list[CompileResult]:
@@ -488,7 +482,7 @@ def compile_source(
         if limit is not None and i >= limit:
             break
         live_entry_ids.add(entry.id)
-        results.append(compile_entry(source, entry.id, knowledge=knowledge, workspace_id=workspace_id, force=force))
+        results.append(compile_entry(source, entry.id, knowledge=knowledge, force=force))
 
     # Prune orphans: compile_state rows whose entry_id is no longer in
     # the source's live entry list. Delete the DB row + the compiled
@@ -496,7 +490,7 @@ def compile_source(
     # Respect user-edited articles — if a human touched the file, keep
     # it and the state row so the Linter can surface the conflict.
     if limit is None:
-        for record in list_records_for_source(source.id, workspace_id):
+        for record in list_records_for_source(source.id):
             if record.entry_id in live_entry_ids:
                 continue
             if record.user_edited:
@@ -516,7 +510,7 @@ def compile_source(
                     wiki_file.unlink()
             except OSError:
                 pass
-            delete_record(source.id, record.entry_id, workspace_id)
+            delete_record(source.id, record.entry_id)
             results.append(
                 CompileResult(
                     source.id,
@@ -526,21 +520,20 @@ def compile_source(
                     detail="source entry removed; pruned article + state row",
                 )
             )
-    _refresh_index(workspace_id)
+    _refresh_index()
     return results
 
 
 def compile_all(
     *,
     knowledge=None,
-    workspace_id: str = WORKSPACE_ID,
     force: bool = False,
 ) -> dict[str, list[CompileResult]]:
     out: dict[str, list[CompileResult]] = {}
     for source in get_sources():
         if not getattr(source, "compile", False):
             continue
-        out[source.id] = compile_source(source.id, knowledge=knowledge, workspace_id=workspace_id, force=force)
+        out[source.id] = compile_source(source.id, knowledge=knowledge, force=force)
     return out
 
 
@@ -549,7 +542,7 @@ def compile_all(
 # ---------------------------------------------------------------------------
 
 
-def _refresh_index(workspace_id: str) -> None:
+def _refresh_index() -> None:
     ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
     SCOUT_COMPILED_DIR.mkdir(parents=True, exist_ok=True)
     articles = sorted(ARTICLES_DIR.glob("*.md"))

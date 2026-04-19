@@ -63,8 +63,8 @@ tmp
 .claude
 .conductor
 
-# CodeExplorer local clone cache (Docker uses the `repos` named volume)
-.scout-cache/
+# Scout local state (CodeExplorer clone cache, etc.) — Docker uses named volumes
+.scout/
 
 # Live-eval run artifacts (regenerated every run)
 evals/results/

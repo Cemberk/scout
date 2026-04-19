@@ -27,8 +27,8 @@ def _cmd_chat() -> None:
 
 
 def _cmd_compile(args: argparse.Namespace) -> None:
-    from scout.agents.settings import scout_knowledge
     from scout.compile import compile_all, compile_entry, compile_source
+    from scout.settings import scout_knowledge
     from scout.sources import get_source
 
     if args.entry:

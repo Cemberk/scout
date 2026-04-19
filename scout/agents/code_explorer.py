@@ -16,8 +16,7 @@ from agno.models.openai import OpenAIResponses
 from agno.tools.coding import CodingTools
 from agno.tools.reasoning import ReasoningTools
 
-from scout.agents.settings import agent_db
-from scout.config import REPOS_DIR
+from scout.settings import REPOS_DIR, agent_db
 from scout.tools.git import GitTools
 
 # ---------------------------------------------------------------------------

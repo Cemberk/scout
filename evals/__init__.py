@@ -30,4 +30,6 @@ CATEGORIES: dict[str, dict] = {
     "slack": {"type": "judge_binary", "module": "evals.cases.slack"},
     "code_explorer": {"type": "judge_binary", "module": "evals.cases.code_explorer"},
     "s3_compile": {"type": "judge_binary", "module": "evals.cases.s3_compile"},
+    "engineer": {"type": "judge_binary", "module": "evals.cases.engineer"},
+    "doctor": {"type": "judge_binary", "module": "evals.cases.doctor"},
 }

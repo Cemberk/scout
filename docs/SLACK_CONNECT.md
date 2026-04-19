@@ -103,21 +103,15 @@ Copy the `https://` URL (e.g., `https://abc123.ngrok-free.app`). This is your ba
 
 ## Step 4: Add Credentials to `.env`
 
-1. Copy the bot token from Step 3 → `SLACK_TOKEN`
+1. Copy the bot token from Step 3 → `SLACK_BOT_TOKEN`
 2. Go to **Basic Information** in the sidebar, under **App Credentials**, copy **Signing Secret** → `SLACK_SIGNING_SECRET`
 
 ```env
-SLACK_TOKEN="xoxb-your-bot-token"
+SLACK_BOT_TOKEN="xoxb-your-bot-token"
 SLACK_SIGNING_SECRET="your-signing-secret"
 ```
 
-Optional — restrict which channels Scout responds to:
-
-```env
-SLACK_CHANNEL_ALLOWLIST="C0123ABC456,C0789DEF012"
-```
-
-Empty or unset = every channel. Events from other channels are dropped at the middleware layer before reaching the team.
+Channel scope is managed on the Slack side: Scout only sees channels the bot has been invited into. There's no server-side allowlist — install the bot into the channels you want Scout to see, and leave it out of the rest.
 
 ## Step 5: Restart Scout
 
@@ -168,7 +162,7 @@ Scout uses [Agno's Slack interface](https://docs.agno.com) which handles:
 - **Streaming**: Responses stream to Slack in real time.
 - **User identity**: Scout knows who is asking via `users:read` scope.
 
-The Slack interface is registered conditionally in `app/main.py` — only when both `SLACK_TOKEN` and `SLACK_SIGNING_SECRET` are set. An additional channel-allowlist middleware in `app/main.py` drops inbound `/slack/events` from any channel not in `SLACK_CHANNEL_ALLOWLIST` before they reach the team.
+The Slack interface is registered conditionally in `app/main.py` — only when both `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` are set. Channel scope is governed by which channels the bot is invited into — no server-side allowlist middleware.
 
 ### Slack Channel for Scheduled Tasks
 
@@ -178,6 +172,6 @@ Scheduled tasks (daily briefing, inbox digest, weekly review, learning summary, 
 
 Three separate things — all off by default:
 
-- **Slack Interface** (`app/main.py`) — receives incoming events from Slack. Requires both `SLACK_TOKEN` and `SLACK_SIGNING_SECRET`.
-- **SlackTools** (`scout/team.py`) — lets the team Leader post into channels. Requires only `SLACK_TOKEN`. Enabled: `send_message`, `list_channels`, `send_message_thread`.
-- **SlackSource** (`scout/sources/slack.py`) — live-read source so the Navigator can answer questions by searching and reading Slack threads. Requires only `SLACK_TOKEN`. Capabilities: `LIST`, `READ`, `METADATA`, `FIND_NATIVE` (Slack's `search.messages`).
+- **Slack Interface** (`app/main.py`) — receives incoming events from Slack. Requires both `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`.
+- **SlackTools** (`scout/team.py`) — lets the team Leader post into channels. Requires only `SLACK_BOT_TOKEN`. Enabled: `send_message`, `list_channels`, `send_message_thread`.
+- **SlackSource** (`scout/sources/slack.py`) — live-read source so the Navigator can answer questions by searching and reading Slack threads. Requires only `SLACK_BOT_TOKEN`. Capabilities: `LIST`, `READ`, `METADATA`, `FIND_NATIVE` (Slack's `search.messages`).

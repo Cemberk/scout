@@ -66,8 +66,8 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         - source_id + entry_id → compile a single entry.
         - force=true → re-compile even if hash matches.
         """
-        from scout.agents.settings import scout_knowledge
         from scout.compile import compile_all, compile_entry, compile_source
+        from scout.settings import scout_knowledge
         from scout.sources import get_source
 
         if body.entry_id:
@@ -143,7 +143,7 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         if not body.text and not body.url:
             return JSONResponse(content={"error": "Either url or text is required"}, status_code=400)
 
-        from scout.config import SCOUT_RAW_DIR
+        from scout.settings import SCOUT_RAW_DIR
         from scout.tools.ingest import _do_ingest_text, _do_ingest_url
 
         if body.text:
@@ -168,6 +168,48 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         # per spec §5a. Surface both the raw result and the top-level status.
         status = result.get("status", "ingested") if isinstance(result, dict) else "ingested"
         return {"status": status, "result": result}
+
+    # ------------------------------------------------------------------
+    # Doctor — self-health + self-heal
+    # ------------------------------------------------------------------
+
+    @router.get("/doctor/health")
+    def doctor_health():
+        """Liveness ping — never delegates to the Doctor agent, just a
+        minimal "am I alive and can I reach the DB" probe."""
+        from sqlalchemy import text
+
+        from db import get_readonly_engine
+
+        try:
+            with get_readonly_engine().connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return {"status": "ok"}
+        except Exception as e:
+            return JSONResponse({"status": "degraded", "detail": str(e)[:200]}, status_code=503)
+
+    @router.post("/doctor/run")
+    def doctor_run():
+        """Run a diagnostic pass via the Doctor agent.
+
+        Returns the agent's report as JSON. Used by the daily cron and
+        available for ad-hoc UI calls. Delivery (Slack post, email) is
+        the Leader's job based on what's configured — this endpoint
+        just returns the report.
+        """
+        from scout.agents import doctor
+
+        response = doctor.run(
+            "Run a full diagnostic pass. Cover: manifest/source status, "
+            "compile state per source, env/integration gaps, anything "
+            "stale or broken. Finish with concrete suggested actions "
+            "(or 'all green' if everything's fine). Follow the output "
+            "shape in your instructions."
+        )
+        content = getattr(response, "content", None)
+        if content is None:
+            content = str(response)
+        return {"status": "ok", "report": content}
 
     return router
 

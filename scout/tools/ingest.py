@@ -114,7 +114,7 @@ def _do_ingest_url(
     doc_type: str = "article",
 ) -> dict:
     """Core ingest-URL logic. Spec §5a idempotent-by-content-hash."""
-    from scout.config import PARALLEL_API_KEY
+    from scout.settings import PARALLEL_API_KEY
 
     raw_dir.mkdir(parents=True, exist_ok=True)
 

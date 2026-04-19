@@ -1,4 +1,4 @@
-from scout.config import SCOUT_COMPILED_DIR, SCOUT_CONTEXT_DIR
+from scout.settings import SCOUT_COMPILED_DIR, SCOUT_CONTEXT_DIR
 
 # ---------------------------------------------------------------------------
 # Manifest injection (spec §7)
@@ -11,7 +11,7 @@ from scout.config import SCOUT_COMPILED_DIR, SCOUT_CONTEXT_DIR
 # it isn't allowed to touch.
 #
 # This helper is safe at import time: if the manifest can't build yet
-# (migrations haven't run, DB isn't up), we return a stub telling the model
+# (tables not bootstrapped, DB isn't up), we return a stub telling the model
 # to call `read_manifest` at runtime instead.
 
 
@@ -21,7 +21,7 @@ def sources_header(agent_role: str) -> str:
         from scout.manifest import get_manifest
 
         rendered = get_manifest().render_for_prompt(agent_role)
-    except Exception as exc:  # migrations not run yet / DB down / etc.
+    except Exception as exc:  # tables not bootstrapped / DB down / etc.
         rendered = f"(manifest not yet built: {exc!s}. Call `read_manifest` before dispatching.)"
     return f"## Sources you can call\n\n{rendered}\n\n--------------------------------\n\n"
 
@@ -257,7 +257,7 @@ Do not attempt any calendar-related tool calls.\
 
 def build_navigator_instructions() -> str:
     """Build instructions for the Navigator agent."""
-    from scout.config import GOOGLE_INTEGRATION_ENABLED
+    from scout.settings import GOOGLE_INTEGRATION_ENABLED
 
     parts = [sources_header("navigator"), BASE_INSTRUCTIONS, WEB_RESEARCH_INSTRUCTIONS]
 
@@ -285,10 +285,6 @@ def build_navigator_instructions() -> str:
 
 def build_compiler_instructions(role_body: str) -> str:
     return sources_header("compiler") + role_body
-
-
-def build_researcher_instructions(role_body: str) -> str:
-    return sources_header("researcher") + role_body
 
 
 def build_leader_instructions(role_body: str) -> str:

@@ -11,7 +11,6 @@ from threading import Lock
 from sqlalchemy import Engine, text
 
 from db.session import SCOUT_SCHEMA, get_sql_engine
-from scout.config import WORKSPACE_ID
 
 _TABLE = f"{SCOUT_SCHEMA}.scout_compiled"
 
@@ -47,20 +46,19 @@ class CompileRecord:
     # Set by the runner when raw content exceeds the §5 size threshold.
     # Linter surfaces these for the out-of-scope split work.
     needs_split: bool = False
-    workspace_id: str = WORKSPACE_ID
 
 
-def get_record(source_id: str, entry_id: str, workspace_id: str = WORKSPACE_ID) -> CompileRecord | None:
+def get_record(source_id: str, entry_id: str) -> CompileRecord | None:
     with _engine_for_state().connect() as conn:
         row = conn.execute(
             text(
                 f"""SELECT source_id, entry_id, source_hash, compiler_output_hash,
                           wiki_path, compiled_at, compiled_by, user_edited,
-                          needs_split, workspace_id
+                          needs_split
                    FROM {_TABLE}
-                   WHERE source_id = :sid AND entry_id = :eid AND workspace_id = :wid"""
+                   WHERE source_id = :sid AND entry_id = :eid"""
             ),
-            {"sid": source_id, "eid": entry_id, "wid": workspace_id},
+            {"sid": source_id, "eid": entry_id},
         ).fetchone()
     if not row:
         return None
@@ -74,7 +72,6 @@ def get_record(source_id: str, entry_id: str, workspace_id: str = WORKSPACE_ID) 
         compiled_by=row[6],
         user_edited=bool(row[7]),
         needs_split=bool(row[8]),
-        workspace_id=row[9],
     )
 
 
@@ -85,10 +82,10 @@ def upsert_record(record: CompileRecord) -> None:
                 f"""INSERT INTO {_TABLE}
                        (source_id, entry_id, source_hash, compiler_output_hash,
                         wiki_path, compiled_at, compiled_by, user_edited,
-                        needs_split, workspace_id)
+                        needs_split)
                    VALUES (:sid, :eid, :hash, :ohash, :wpath, NOW(), :by,
-                           :edited, :split, :wid)
-                   ON CONFLICT (source_id, entry_id, workspace_id) DO UPDATE
+                           :edited, :split)
+                   ON CONFLICT (source_id, entry_id) DO UPDATE
                        SET source_hash          = EXCLUDED.source_hash,
                            compiler_output_hash = EXCLUDED.compiler_output_hash,
                            wiki_path            = EXCLUDED.wiki_path,
@@ -106,22 +103,21 @@ def upsert_record(record: CompileRecord) -> None:
                 "by": record.compiled_by,
                 "edited": record.user_edited,
                 "split": record.needs_split,
-                "wid": record.workspace_id,
             },
         )
 
 
-def list_records_for_source(source_id: str, workspace_id: str = WORKSPACE_ID) -> list[CompileRecord]:
+def list_records_for_source(source_id: str) -> list[CompileRecord]:
     with _engine_for_state().connect() as conn:
         rows = conn.execute(
             text(
                 f"""SELECT source_id, entry_id, source_hash, compiler_output_hash,
                           wiki_path, compiled_at, compiled_by, user_edited,
-                          needs_split, workspace_id
+                          needs_split
                    FROM {_TABLE}
-                   WHERE source_id = :sid AND workspace_id = :wid"""
+                   WHERE source_id = :sid"""
             ),
-            {"sid": source_id, "wid": workspace_id},
+            {"sid": source_id},
         ).fetchall()
     return [
         CompileRecord(
@@ -134,31 +130,30 @@ def list_records_for_source(source_id: str, workspace_id: str = WORKSPACE_ID) ->
             compiled_by=r[6],
             user_edited=bool(r[7]),
             needs_split=bool(r[8]),
-            workspace_id=r[9],
         )
         for r in rows
     ]
 
 
-def mark_user_edited(source_id: str, entry_id: str, workspace_id: str = WORKSPACE_ID) -> None:
+def mark_user_edited(source_id: str, entry_id: str) -> None:
     with _engine_for_state().begin() as conn:
         conn.execute(
             text(
                 f"UPDATE {_TABLE} SET user_edited = TRUE "
-                "WHERE source_id = :sid AND entry_id = :eid AND workspace_id = :wid"
+                "WHERE source_id = :sid AND entry_id = :eid"
             ),
-            {"sid": source_id, "eid": entry_id, "wid": workspace_id},
+            {"sid": source_id, "eid": entry_id},
         )
 
 
-def delete_record(source_id: str, entry_id: str, workspace_id: str = WORKSPACE_ID) -> None:
+def delete_record(source_id: str, entry_id: str) -> None:
     """Drop a compile-state row — used by the orphan pruner when a raw
     entry is removed from the source. User-edited articles are handled
     by the caller, which checks `user_edited` before invoking this."""
     with _engine_for_state().begin() as conn:
         conn.execute(
-            text(f"DELETE FROM {_TABLE} WHERE source_id = :sid AND entry_id = :eid AND workspace_id = :wid"),
-            {"sid": source_id, "eid": entry_id, "wid": workspace_id},
+            text(f"DELETE FROM {_TABLE} WHERE source_id = :sid AND entry_id = :eid"),
+            {"sid": source_id, "eid": entry_id},
         )
 
 

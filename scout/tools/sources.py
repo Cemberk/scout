@@ -42,7 +42,9 @@ def _refuse(source_id: str, reason: str) -> str:
 def create_source_tools(agent_role: str):
     """Return a list of source-dispatch tools scoped to one agent role.
 
-    `agent_role` is one of: 'navigator', 'compiler', 'linter', 'researcher'.
+    `agent_role` is one of: 'navigator', 'compiler', 'leader'. (Engineer
+    and Doctor are metadata-only and don't get source-dispatch tools —
+    ``manifest.can_call`` returns False for them.)
     """
 
     @tool

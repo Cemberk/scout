@@ -16,10 +16,19 @@ from agno.os import AgentOS
 
 from app.router import create_router
 from db import get_postgres_db
-from scout.agents import compiler, navigator, researcher
-from scout.agents.settings import scout_knowledge, scout_learnings
-from scout.config import SLACK_SIGNING_SECRET, SLACK_TOKEN
+from scout.agents import code_explorer, compiler, doctor, engineer, navigator
+from scout.settings import (
+    SLACK_BOT_TOKEN,
+    SLACK_SIGNING_SECRET,
+    scout_knowledge,
+    scout_learnings,
+)
 from scout.team import scout
+
+# Default user_id stamped onto /runs requests that don't carry one (see
+# form-fixup middleware below). Phase 1 is single-user; "default" is the
+# fallback that lets agent instructions' `{user_id}` template resolve.
+_DEFAULT_USER_ID = "default"
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -33,12 +42,14 @@ scheduler_base_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
 # Channel scoping is configured via the Slack app (install to channels).
 # No server-side allowlist middleware.
 interfaces: list = []
-if SLACK_TOKEN and SLACK_SIGNING_SECRET:
+if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
     from agno.os.interfaces.slack import Slack
 
     # agno's Slack interface reads SLACK_TOKEN / SLACK_SIGNING_SECRET from
-    # env directly. Pass-through kwargs the current Slack class accepts:
-    # agent / team / workflow / prefix / tags / reply_to_mentions_only.
+    # env directly. scout.settings mirrors SLACK_BOT_TOKEN into SLACK_TOKEN
+    # at import time so this continues to work. Pass-through kwargs the
+    # current Slack class accepts: agent / team / workflow / prefix / tags
+    # / reply_to_mentions_only.
     interfaces.append(Slack(team=scout, reply_to_mentions_only=False))
 
 
@@ -47,7 +58,7 @@ if SLACK_TOKEN and SLACK_SIGNING_SECRET:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
-    _run_migrations()
+    _create_tables()
     _build_initial_manifest()
     _register_schedules()
     _kick_initial_compile()
@@ -57,7 +68,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
 # ---------------------------------------------------------------------------
 # Create AgentOS
 # ---------------------------------------------------------------------------
-agents: list = [navigator, researcher, compiler]
+agents: list = [navigator, compiler, code_explorer, engineer, doctor]
 
 agent_os = AgentOS(
     name="Scout",
@@ -79,18 +90,30 @@ app.include_router(create_router(agent_os.settings))
 
 
 # ---------------------------------------------------------------------------
-# Empty-prompt middleware
+# Form-fixup middleware
 # ---------------------------------------------------------------------------
-# AgentOS's /teams/*/runs form validator rejects empty `message` as missing.
-# We want the Leader to respond to an empty prompt gracefully (asking for
-# clarification) rather than surfacing a 422. This middleware rewrites the
-# form body so the validator sees a non-empty placeholder.
+# Two fixes applied on POST /teams/*/runs and /agents/*/runs:
+#
+# 1. **Empty-prompt rewrite.** AgentOS's form validator rejects empty
+#    `message` as missing; we want the Leader to ask for clarification
+#    instead of surfacing a 422.
+# 2. **Default user_id.** Agent instructions reference ``{user_id}`` which
+#    Agno's ``format_message_with_state_variables`` only substitutes when
+#    ``run_context.user_id`` is set. Callers (AgentOS UI, curl scripts)
+#    often don't pass it, so the literal ``{user_id}`` leaked into tool
+#    calls (e.g. Navigator writing ``WHERE user_id = '{user_id}'``).
+#    Default it to ``_DEFAULT_USER_ID`` so Phase-1 single-user installs work
+#    without the caller having to remember.
+#
+# Only ``application/x-www-form-urlencoded`` is handled — AgentOS's UI
+# and the scheduler use that shape. ``multipart/form-data`` callers can
+# pass ``user_id`` explicitly.
 
 
 @app.middleware("http")
-async def _rewrite_empty_prompt(request, call_next):  # type: ignore[no-untyped-def]
+async def _fixup_run_form(request, call_next):  # type: ignore[no-untyped-def]
     path = request.url.path
-    if request.method == "POST" and path.endswith("/runs") and "/teams/" in path:
+    if request.method == "POST" and path.endswith("/runs") and ("/teams/" in path or "/agents/" in path):
         ctype = request.headers.get("content-type", "")
         if "application/x-www-form-urlencoded" in ctype:
             body = await request.body()
@@ -98,48 +121,52 @@ async def _rewrite_empty_prompt(request, call_next):  # type: ignore[no-untyped-
             from urllib.parse import parse_qsl, urlencode
 
             pairs = parse_qsl(form_text, keep_blank_values=True)
+            changed = False
+
+            # Fix 1: empty message → placeholder
             msg = next((v for k, v in pairs if k == "message"), None)
             if not msg or not msg.strip():
                 placeholder = "(the user submitted an empty prompt — ask them what they need)"
                 pairs = [(k, v) for k, v in pairs if k != "message"]
                 pairs.append(("message", placeholder))
+                changed = True
+
+            # Fix 2: absent user_id → default so {user_id} template resolves
+            user_id = next((v for k, v in pairs if k == "user_id"), None)
+            if not user_id or not user_id.strip():
+                pairs = [(k, v) for k, v in pairs if k != "user_id"]
+                pairs.append(("user_id", _DEFAULT_USER_ID))
+                changed = True
+
+            if changed:
                 new_body = urlencode(pairs).encode("utf-8")
 
-                # Rebuild scope with corrected content-length and inject receive.
                 async def _receive():  # type: ignore[no-untyped-def]
                     return {"type": "http.request", "body": new_body, "more_body": False}
 
                 new_headers = [(k, v) for k, v in request.scope.get("headers", []) if k.lower() != b"content-length"]
                 new_headers.append((b"content-length", str(len(new_body)).encode()))
-                new_scope = dict(request.scope)
-                new_scope["headers"] = new_headers
-                from starlette.requests import Request as StarletteRequest
-
-                new_request = StarletteRequest(new_scope, _receive)
-                # call_next respects Request object, not the passed-in one, so
-                # we build our own mini-ASGI cycle by re-dispatching via app.
-                # Simpler: monkey-patch the existing request.
+                # Monkey-patch the request object in place — call_next reads
+                # body via request._body / request._receive.
                 request._body = new_body  # type: ignore[attr-defined]
                 request._receive = _receive  # type: ignore[attr-defined]
                 request.scope["headers"] = new_headers
-                # Also clear any cached form state.
                 if hasattr(request, "_form"):
                     delattr(request, "_form")
-                del new_request  # unused
     return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
 # Startup helpers
 # ---------------------------------------------------------------------------
-def _run_migrations() -> None:
+def _create_tables() -> None:
     try:
-        from db.migrations import run_migrations
+        from db.tables import create_tables
 
-        run_migrations()
-        print("[scout] Migrations: applied")
+        create_tables()
+        print("[scout] Tables: applied")
     except Exception as e:
-        print(f"[scout] Migrations: failed: {e}")
+        print(f"[scout] Tables: failed: {e}")
 
 
 def _build_initial_manifest() -> None:
@@ -170,8 +197,8 @@ def _kick_initial_compile() -> None:
 
     def _run() -> None:
         try:
-            from scout.agents.settings import scout_knowledge
             from scout.compile import compile_all
+            from scout.settings import scout_knowledge
 
             results = compile_all(knowledge=scout_knowledge)
             counts = {sid: len(r) for sid, r in results.items()}
@@ -193,6 +220,7 @@ _OWNED_SCHEDULES = frozenset(
         "inbox-digest",
         "learning-summary",
         "weekly-review",
+        "doctor-daily",
     }
 )
 
@@ -225,7 +253,7 @@ def _register_schedules() -> None:
     except Exception as exc:
         print(f"[scout] Schedule prune skipped: {exc}")
 
-    slack_post = "\n\nWhen done, post the results to the #scout-updates Slack channel." if SLACK_TOKEN else ""
+    slack_post = "\n\nWhen done, post the results to the #scout-updates Slack channel." if SLACK_BOT_TOKEN else ""
 
     mgr.create(
         name="daily-briefing",
@@ -318,6 +346,18 @@ def _register_schedules() -> None:
         },
         timezone="America/New_York",
         description="Friday afternoon weekly review draft",
+        if_exists="update",
+    )
+
+    # Daily Doctor sweep — diagnostic report only. Delivery (Slack, email)
+    # is up to downstream handlers; this just produces the report.
+    mgr.create(
+        name="doctor-daily",
+        cron="0 9 * * *",
+        endpoint="/doctor/run",
+        payload={},
+        timezone="America/New_York",
+        description="Daily Scout self-diagnostic — sources, compile state, env",
         if_exists="update",
     )
 

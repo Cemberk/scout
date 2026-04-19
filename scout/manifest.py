@@ -30,7 +30,6 @@ from threading import Lock
 from sqlalchemy import Engine, text
 
 from db.session import SCOUT_SCHEMA, get_sql_engine
-from scout.config import WORKSPACE_ID
 from scout.sources import get_sources, reload_sources
 from scout.sources.base import HealthState, Source
 
@@ -71,7 +70,6 @@ class SourceState:
 
 @dataclass
 class Manifest:
-    workspace_id: str
     sources: dict[str, SourceState] = field(default_factory=dict)
     built_at: str = ""
 
@@ -80,7 +78,7 @@ class Manifest:
     # ------------------------------------------------------------------
 
     @classmethod
-    def build(cls, workspace_id: str = WORKSPACE_ID, *, reload: bool = False) -> "Manifest":
+    def build(cls, *, reload: bool = False) -> "Manifest":
         srcs: tuple[Source, ...] = reload_sources() if reload else get_sources()
         states: dict[str, SourceState] = {}
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -112,16 +110,16 @@ class Manifest:
                 detail=health.detail,
                 last_health_at=now,
             )
-        m = cls(workspace_id=workspace_id, sources=states, built_at=now)
+        m = cls(sources=states, built_at=now)
         # Persist() is a side-effect for observability (GET /manifest reads
         # from the mirror table). Gating is authoritative from the in-memory
         # Manifest and must not depend on the DB being reachable — otherwise
         # the _smoke_gating CLI and any dev environment without Postgres
         # would lose the safety rail.
         #
-        # At import-time this often runs before migrations have created
+        # At import-time this often runs before tables.py has created
         # scout.scout_sources, so we log the skip at DEBUG only to keep
-        # startup logs clean. The next reload (post-migration) persists fine.
+        # startup logs clean. The next reload (post-bootstrap) persists fine.
         try:
             m.persist()
         except Exception as exc:
@@ -142,9 +140,9 @@ class Manifest:
                     text(
                         f"""INSERT INTO {_TABLE}
                                (id, kind, config_json, compile, live_read,
-                                status, detail, last_health_at, workspace_id)
+                                status, detail, last_health_at)
                            VALUES (:id, :kind, CAST(:cfg AS jsonb), :compile, :live_read,
-                                   :status, :detail, NOW(), :wid)
+                                   :status, :detail, NOW())
                            ON CONFLICT (id) DO UPDATE
                                SET kind = EXCLUDED.kind,
                                    compile = EXCLUDED.compile,
@@ -152,7 +150,6 @@ class Manifest:
                                    status = EXCLUDED.status,
                                    detail = EXCLUDED.detail,
                                    last_health_at = EXCLUDED.last_health_at,
-                                   workspace_id = EXCLUDED.workspace_id,
                                    config_json = EXCLUDED.config_json"""
                     ),
                     {
@@ -163,7 +160,6 @@ class Manifest:
                         "live_read": state.live_read,
                         "status": state.status,
                         "detail": state.detail,
-                        "wid": self.workspace_id,
                     },
                 )
 
@@ -187,6 +183,11 @@ class Manifest:
             return False
         if agent_role == "compiler":
             return s.compile
+        if agent_role in ("engineer", "doctor"):
+            # Metadata-only agents — they can see the manifest rendered
+            # by role (so they know what exists) but cannot call
+            # `source_find` / `source_read` against anything.
+            return False
         # navigator / linter / leader / researcher
         return s.live_read
 
@@ -219,7 +220,6 @@ class Manifest:
 
     def as_dict(self) -> dict:
         return {
-            "workspace_id": self.workspace_id,
             "built_at": self.built_at,
             "sources": [s.as_dict() for s in self.sources.values()],
         }

@@ -79,7 +79,7 @@ For the full argument, read [Context Agents: Navigation over Search](https://agn
 
 ## How it works
 
-Scout has two execution modes and a team of three specialists.
+Scout has two execution modes and a team of five specialists.
 
 ### Compile vs live-read
 
@@ -98,13 +98,15 @@ Compiled sources get turned into a cross-linked markdown wiki that lives in `con
 
 ### The team
 
-Three specialists coordinated by a Leader:
+Five specialists coordinated by a Leader:
 
-- **Navigator** answers the question. Reads the compiled wiki and live sources. Handles SQL, files, mail drafts, calendar, web search.
-- **Compiler** iterates over compile-mode sources, writes Obsidian-compatible markdown into `context/compiled/`, lints for broken backlinks and stale articles after each pass.
-- **Researcher** runs web search and URL extraction. Ingests new content into `context/raw/` for the Compiler to pick up.
+- **Navigator** answers the question. Read-only everywhere: compiled wiki, live sources (Drive/Slack/Gmail inbox/Calendar), SQL SELECT, web search. Never writes.
+- **Compiler** owns every wiki write path. Ingests URLs and text into `context/raw/`, compiles into `context/compiled/`, lints for broken backlinks and stale articles after each pass.
+- **CodeExplorer** clones any git repo on demand into `$REPOS_DIR` and answers code questions (grep, read, blame, log). Read-only.
+- **Engineer** owns SQL writes. Creates `scout_*` tables on demand, inserts user-provided notes / facts / contacts / decisions, records every schema change back to Knowledge so Navigator can find it.
+- **Doctor** diagnoses Scout's own health (sources, compile state, env) and self-heals via retry / reload / refresh / cache-clear. Never touches user data.
 
-Scout drafts, you send. Gmail send is disabled at the code level. Calendar is read-only. No deletes outside `context/raw/`.
+The **Leader** handles all outbound: Slack posting when `SLACK_BOT_TOKEN` is set; Gmail send and Calendar write when `SCOUT_ALLOW_SENDS=true`. The default is drafts-only — the send functions aren't even wired to the model. You approve before anything leaves Scout.
 
 ## Connect your sources
 
@@ -113,7 +115,7 @@ Scout ships with local folders on day one. Each row below activates when you add
 | Integration | Env | What it does |
 |---|---|---|
 | **Gmail + Calendar + Drive** | `GOOGLE_*` ([setup](docs/GOOGLE_AUTH.md)) | Search mail, draft replies, read events, query Drive |
-| **Slack** | `SLACK_TOKEN` + `SLACK_SIGNING_SECRET` ([setup](docs/SLACK_CONNECT.md)) | @mention in channels, search threads, post |
+| **Slack** | `SLACK_BOT_TOKEN` + `SLACK_SIGNING_SECRET` ([setup](docs/SLACK_CONNECT.md)) | @mention in channels, search threads, post |
 | **Code exploration** | built-in (+ optional `GITHUB_ACCESS_TOKEN`) | `CodeExplorer` clones any public repo on demand and answers code questions — grep, read, blame, log. Add a PAT for private repos or higher rate limits. |
 | **S3** | `S3_BUCKETS` + `AWS_*` | Compile PDFs and docs from buckets into the wiki |
 | **Web research** | built-in (Exa MCP, keyless); `PARALLEL_API_KEY` for premium | Web search + URL extraction. Scout ships with Exa MCP so research works on day one; set `PARALLEL_API_KEY` to switch to Parallel for better extraction and higher rate limits. |
@@ -148,6 +150,8 @@ python -m scout compile --force       # re-compile everything
 | `/sources/{id}/health` | GET | Per-source health ping |
 | `/compile/run` | POST | Run compile pass |
 | `/wiki/ingest` | POST | URL or text → `context/raw/` |
+| `/doctor/run` | POST | Doctor diagnostic pass (returns JSON report) |
+| `/doctor/health` | GET | Liveness probe |
 
 ## Scheduled tasks
 
@@ -160,11 +164,11 @@ Compile runs every hour. Source health refresh every 15 minutes. Scout also send
 | `OPENAI_API_KEY` | **Yes** | Model and embeddings |
 | `PARALLEL_API_KEY` | No | Premium web search + URL extraction. Without it, Scout uses Exa's keyless MCP server — research still works. |
 | `EXA_API_KEY` | No | Optional. Raises rate limits on the Exa MCP fallback; not needed to use it. |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Gmail + Calendar + Drive |
-| `GOOGLE_DRIVE_FOLDER_IDS` | No | Enables Drive as a live source |
-| `SLACK_TOKEN` / `SLACK_SIGNING_SECRET` | No | Slack interface and source |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Scout's own Google app — Gmail + Calendar + Drive. Drive scope is managed by sharing folders with Scout's account. |
+| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` | No | Scout's own Slack bot (xoxb-…) — interface and source |
+| `SCOUT_ALLOW_SENDS` | No | `true` to let the Leader actually send Gmail / modify Calendar. Default `false` = drafts-only. |
 | `GITHUB_ACCESS_TOKEN` | No | Optional PAT for CodeExplorer. Public repos clone tokenless; set this for private repos or to raise the API rate ceiling. |
-| `REPOS_DIR` | No | Where CodeExplorer clones repos. Compose sets `/repos` (the `repos` named volume); local defaults to `.scout-cache/repos`. |
+| `REPOS_DIR` | No | Where CodeExplorer clones repos. Compose sets `/repos` (the `repos` named volume); local defaults to `.scout/repos`. |
 | `S3_BUCKETS` / `AWS_*` | No | S3 compile |
 | `DB_*` | No | Postgres (compose defaults work) |
 

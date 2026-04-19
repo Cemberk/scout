@@ -13,8 +13,8 @@ from agno.agent import Agent
 from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 from agno.models.openai import OpenAIResponses
 
-from scout.agents.settings import agent_db, scout_knowledge, scout_learnings
 from scout.instructions import build_navigator_instructions
+from scout.settings import agent_db, scout_knowledge, scout_learnings
 from scout.tools import build_navigator_tools
 
 navigator = Agent(

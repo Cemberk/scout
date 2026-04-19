@@ -10,7 +10,7 @@ Live-read source over Slack.
   `conversations.replies`, with citation = `slack://<channel>/<ts>` and
   source_url = the message permalink.
 - `find(kind=NATIVE)` uses `search.messages`. Returns top 20.
-- `health` = `auth.test`. `UNCONFIGURED` without `SLACK_TOKEN`.
+- `health` = `auth.test`. `UNCONFIGURED` without `SLACK_BOT_TOKEN`.
 - Read-only: no send tools. Posting is the Leader's job via agno's
   SlackTools, not this source.
 - Channel scope is configured via the Slack app (install the bot only
@@ -147,7 +147,7 @@ class SlackSource:
 
     def health(self) -> HealthStatus:
         if not self.token:
-            return HealthStatus(HealthState.UNCONFIGURED, "SLACK_TOKEN not set")
+            return HealthStatus(HealthState.UNCONFIGURED, "SLACK_BOT_TOKEN not set")
         client = self._client_or_none()
         if client is None:
             return HealthStatus(HealthState.UNCONFIGURED, "slack_sdk not installed")

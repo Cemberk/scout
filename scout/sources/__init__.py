@@ -9,7 +9,8 @@ The two always-present sources are:
 - `local:wiki`   — `context/compiled/` (compile=False, live_read=True)
 
 Drive is added when `DRIVE_SOURCE_ENABLED` is true (Google integration set
-up + at least one folder ID configured).
+up). Folder scope is managed on the Google side by sharing folders with
+Scout's account — no server-side folder allowlist.
 
 The registry is module-level cached. Call `reload_sources()` from the
 manifest API to pick up env changes without restarting.
@@ -19,18 +20,17 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from scout.config import (
+from scout.settings import (
     AWS_ACCESS_KEY_ID,
     AWS_REGION,
     AWS_SECRET_ACCESS_KEY,
     DRIVE_SOURCE_ENABLED,
-    GOOGLE_DRIVE_FOLDER_IDS,
     S3_BUCKETS,
     S3_SOURCE_ENABLED,
     SCOUT_COMPILED_DIR,
     SCOUT_RAW_DIR,
+    SLACK_BOT_TOKEN,
     SLACK_SOURCE_ENABLED,
-    SLACK_TOKEN,
 )
 from scout.sources.base import Source
 from scout.sources.drive import GoogleDriveSource
@@ -64,7 +64,6 @@ def get_sources() -> tuple[Source, ...]:
     if DRIVE_SOURCE_ENABLED:
         sources.append(
             GoogleDriveSource(
-                folder_ids=GOOGLE_DRIVE_FOLDER_IDS,
                 id="drive",
                 name="Google Drive",
                 compile=False,
@@ -75,7 +74,7 @@ def get_sources() -> tuple[Source, ...]:
     if SLACK_SOURCE_ENABLED:
         sources.append(
             SlackSource(
-                token=SLACK_TOKEN,
+                token=SLACK_BOT_TOKEN,
                 id="slack",
                 name="Slack",
                 compile=False,

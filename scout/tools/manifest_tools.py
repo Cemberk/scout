@@ -27,7 +27,6 @@ def create_manifest_tool(agent_role: str):
         return redact(
             json.dumps(
                 {
-                    "workspace_id": m.workspace_id,
                     "built_at": m.built_at,
                     "agent_role": agent_role,
                     "callable_sources": [s.as_dict() for s in callable_rows],

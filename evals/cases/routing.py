@@ -16,11 +16,12 @@ CASES: list[dict] = [
     # Navigator — Files (enterprise documents)
     {"input": "What's our PTO policy?", "expected_tools": ["read_file"]},
     {"input": "What voice guides do we have?", "expected_tools": ["list_files"]},
-    # Navigator — Wiki
-    {"input": "What does our knowledge base say about context engineering?", "expected_tools": ["read_wiki_index"]},
-    # Navigator — Exa (web search fallback when Researcher not configured)
+    # Navigator — Wiki (via source dispatch — read_wiki_index is retired,
+    # wiki access is uniform with every other source).
+    {"input": "What does our knowledge base say about context engineering?", "expected_tools": ["source_find"]},
+    # Navigator — Exa web search (keyless fallback) / Parallel (when configured)
     {"input": "Research the latest trends in AI agent frameworks", "expected_tools": ["web_search_exa"]},
-    # Researcher — Ingest (requires PARALLEL_API_KEY; skipped when Researcher not configured)
+    # Compiler — Ingest (moved from Researcher; Compiler owns raw/ writes)
     {"input": "Ingest this article: https://example.com/article-on-rag", "expected_tools": ["ingest_url"]},
     # Compiler
     {"input": "Compile any new sources into the wiki", "expected_tools": ["read_manifest"]},

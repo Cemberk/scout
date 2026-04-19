@@ -23,7 +23,6 @@ from __future__ import annotations
 import io
 import mimetypes
 from pathlib import Path
-from typing import Iterable
 
 from scout.sources.base import (
     Capability,
@@ -51,7 +50,11 @@ _GOOGLE_EXPORT_MIME = {
 
 
 class GoogleDriveSource:
-    """Live-read Google Drive, scoped to a configured set of folder IDs.
+    """Live-read Google Drive scoped to Scout's own Google account.
+
+    Scope is managed on the Google side — share folders with Scout's
+    account to expose them; unshare to hide them. No server-side folder
+    allowlist.
 
     Lazy: the Drive client is built on first call, not at __init__ time.
     Health checks are cheap — `about.get` if a client exists, otherwise an
@@ -60,14 +63,12 @@ class GoogleDriveSource:
 
     def __init__(
         self,
-        folder_ids: Iterable[str],
         *,
         id: str = "drive",
         name: str = "Google Drive",
         compile: bool = False,
         live_read: bool = True,
     ) -> None:
-        self.folder_ids = tuple(folder_ids)
         self.id = id
         self.name = name
         self.compile = compile
@@ -112,12 +113,6 @@ class GoogleDriveSource:
     # Helpers
     # ------------------------------------------------------------------
 
-    def _q_in_scope(self) -> str:
-        if not self.folder_ids:
-            return "trashed = false"
-        parents = " or ".join(f"'{fid}' in parents" for fid in self.folder_ids)
-        return f"({parents}) and trashed = false"
-
     def _entry_from_file(self, f: dict) -> Entry:
         return Entry(
             id=f["id"],
@@ -140,7 +135,7 @@ class GoogleDriveSource:
         if path:
             q = f"'{path}' in parents and trashed = false"
         else:
-            q = self._q_in_scope()
+            q = "trashed = false"
         out: list[Entry] = []
         page_token = None
         while True:
@@ -241,8 +236,7 @@ class GoogleDriveSource:
             svc.about().get(fields="user(emailAddress)").execute()
         except Exception as e:  # network / auth / quota
             return HealthStatus(HealthState.DEGRADED, str(e)[:160])
-        scope = f"{len(self.folder_ids)} folder(s)" if self.folder_ids else "all accessible files"
-        return HealthStatus(HealthState.CONNECTED, scope)
+        return HealthStatus(HealthState.CONNECTED, "all accessible files")
 
     def capabilities(self) -> set[Capability]:
         return {Capability.LIST, Capability.READ, Capability.METADATA, Capability.FIND_NATIVE}
@@ -255,8 +249,7 @@ class GoogleDriveSource:
             raise SourceError("Drive client not configured (no token)")
         # Drive's q DSL: fullText for body, name for filename
         escaped = query.replace("'", r"\'")
-        scope = self._q_in_scope()
-        q = f"({scope}) and (fullText contains '{escaped}' or name contains '{escaped}')"
+        q = f"trashed = false and (fullText contains '{escaped}' or name contains '{escaped}')"
         resp = (
             svc.files()
             .list(

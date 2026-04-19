@@ -1,8 +1,8 @@
 # Google Authentication (Gmail + Calendar + Drive)
 
-Google OAuth gives Scout access to Gmail, Google Calendar, and Google Drive. You need three values: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_PROJECT_ID`.
+Google OAuth gives Scout access to Gmail, Google Calendar, and Google Drive via Scout's own Google account. You need three values: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_PROJECT_ID` — one Google app, used by Scout for all three services.
 
-This setup is a one-time process. After completing it, Scout can search email, read threads, create drafts, view your calendar, and list/read files from shared Drive folders.
+This setup is a one-time process. After completing it, Scout can search email, read threads, create drafts, view its calendar, and list/read any Drive file the account can see. Drive scope is managed on the Google side: share folders with Scout's Google account to expose them; unshare to hide them.
 
 ## What Scout Can Do
 
@@ -10,7 +10,7 @@ This setup is a one-time process. After completing it, Scout can search email, r
 |---------|---------|----------|
 | **Gmail** | Search, read threads, create/list drafts, manage labels | Send email, send replies |
 | **Calendar** | View events, fetch by date, find available slots, list calendars | Create events, update events, delete events |
-| **Drive** (as a live-read `Source`) | Native Drive search (`fullText contains`), read files, export Workspace docs to markdown/CSV | Any write — Drive is read-only |
+| **Drive** (as a live-read `Source`) | Native Drive search (`fullText contains`) across everything Scout's account can see, read files, export Workspace docs to markdown/CSV | Any write — Drive is read-only |
 
 Sending email is disabled at the code level. Scout always creates drafts: "Draft created in Gmail. Review and send when ready."
 
@@ -57,13 +57,7 @@ GOOGLE_CLIENT_SECRET="your-google-client-secret"
 GOOGLE_PROJECT_ID="your-google-project-id"
 ```
 
-If you want Scout to live-read specific Drive folders, also add:
-
-```env
-GOOGLE_DRIVE_FOLDER_IDS="1abc...,1def..."
-```
-
-Comma-separated folder IDs. Empty = Gmail + Calendar only, no Drive source.
+Drive scope is managed on the Google side: share the folders you want Scout to see with Scout's Google account, and leave the rest alone. No env-var allowlist.
 
 ## Step 6: Generate `token.json`
 
@@ -82,7 +76,7 @@ This opens a browser for Google consent and saves `token.json` to the project ro
 docker compose up -d --build
 ```
 
-Gmail, Calendar, and (if `GOOGLE_DRIVE_FOLDER_IDS` is set) Drive are now configured. `GET /manifest` should show `drive` as `connected`.
+Gmail, Calendar, and Drive are now configured. `GET /manifest` should show `drive` as `connected`.
 
 ## Troubleshooting
 
@@ -118,7 +112,7 @@ All three values are required together. If any are missing, Scout disables Gmail
 - `gmail.modify` — manage labels, mark read/unread
 - `gmail.compose` — create drafts
 - `calendar` — calendar access (Scout only uses read operations in this build)
-- `drive.readonly` (optional, added when `GOOGLE_DRIVE_FOLDER_IDS` is set)
+- `drive.readonly` — read-only access to anything shared with Scout's account
 
 ## How It Works
 
@@ -127,6 +121,6 @@ All three values are required together. If any are missing, Scout disables Gmail
 3. At startup, `scout/tools/build.py` checks `GOOGLE_INTEGRATION_ENABLED` (all three env vars set).
 4. If yes: `GmailTools` is loaded with `exclude_tools=['send_email','send_email_reply']`, and `GoogleCalendarTools` with `allow_update=False` plus `exclude_tools=['create_event','update_event','delete_event']`.
 5. If no: the disabled-instruction blocks are appended to the Navigator's prompt, and no Google tool calls are attempted.
-6. `GoogleDriveSource` is registered separately — it depends on the Google env **and** `GOOGLE_DRIVE_FOLDER_IDS`. It reuses the same `token.json`.
+6. `GoogleDriveSource` is registered whenever the Google env is configured. It reuses the same `token.json`. Folder scope is managed on the Google side — share folders with Scout's account to expose them.
 
 `token.json` is picked up from the project root inside the Docker container via the `.:/app` bind mount in `compose.yaml`. It contains OAuth tokens — do not commit it to version control (it's in `.gitignore`).
