@@ -16,10 +16,12 @@ from pathlib import Path
 from db import create_knowledge, get_postgres_db
 
 # --- Paths ----------------------------------------------------------------
+# context/compiled/ is gone — the active WikiContext's backend is the
+# source of truth for compiled articles now (LocalBackend root is
+# configured via SCOUT_WIKI, default local:./context).
 _REPO_ROOT = Path(__file__).parent.parent
 CONTEXT_DIR = _REPO_ROOT / "context"
 CONTEXT_RAW_DIR = CONTEXT_DIR / "raw"
-CONTEXT_COMPILED_DIR = CONTEXT_DIR / "compiled"
 CONTEXT_VOICE_DIR = CONTEXT_DIR / "voice"
 DOCS_DIR = _REPO_ROOT / "docs"
 
