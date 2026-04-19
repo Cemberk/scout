@@ -25,11 +25,6 @@ from scout.settings import (
 )
 from scout.team import scout
 
-# Default user_id stamped onto /runs requests that don't carry one (see
-# form-fixup middleware below). Single-user installs fall back to "default"
-# so agent instructions' `{user_id}` template resolves.
-_DEFAULT_USER_ID = "default"
-
 # ---------------------------------------------------------------------------
 # Environment
 # ---------------------------------------------------------------------------
@@ -45,9 +40,7 @@ interfaces: list = []
 if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
     from agno.os.interfaces.slack import Slack
 
-    # Pass token + signing_secret explicitly — agno's Slack interface doesn't
-    # read them from env on its own, and the downstream router needs the
-    # signing secret to verify inbound events.
+    # Pass token + signing_secret to Agno's Slack interface.
     interfaces.append(
         Slack(
             team=scout,
@@ -95,73 +88,6 @@ app.include_router(create_router(agent_os.settings))
 
 
 # ---------------------------------------------------------------------------
-# Form-fixup middleware
-# ---------------------------------------------------------------------------
-# Two fixes applied on POST /teams/*/runs and /agents/*/runs:
-#
-# 1. **Empty-prompt rewrite.** AgentOS's form validator rejects empty
-#    `message` as missing; we want the Leader to ask for clarification
-#    instead of surfacing a 422.
-# 2. **Default user_id.** Agent instructions reference ``{user_id}`` which
-#    Agno's ``format_message_with_state_variables`` only substitutes when
-#    ``run_context.user_id`` is set. Callers (AgentOS UI, curl scripts)
-#    often don't pass it, so the literal ``{user_id}`` leaked into tool
-#    calls (e.g. Navigator writing ``WHERE user_id = '{user_id}'``).
-#    Default it to ``_DEFAULT_USER_ID`` so single-user installs work
-#    without the caller having to remember.
-#
-# Only ``application/x-www-form-urlencoded`` is handled — AgentOS's UI
-# and the scheduler use that shape. ``multipart/form-data`` callers can
-# pass ``user_id`` explicitly.
-
-
-@app.middleware("http")
-async def _fixup_run_form(request, call_next):  # type: ignore[no-untyped-def]
-    path = request.url.path
-    if request.method == "POST" and path.endswith("/runs") and ("/teams/" in path or "/agents/" in path):
-        ctype = request.headers.get("content-type", "")
-        if "application/x-www-form-urlencoded" in ctype:
-            body = await request.body()
-            form_text = body.decode("utf-8", errors="ignore")
-            from urllib.parse import parse_qsl, urlencode
-
-            pairs = parse_qsl(form_text, keep_blank_values=True)
-            changed = False
-
-            # Fix 1: empty message → placeholder
-            msg = next((v for k, v in pairs if k == "message"), None)
-            if not msg or not msg.strip():
-                placeholder = "(the user submitted an empty prompt — ask them what they need)"
-                pairs = [(k, v) for k, v in pairs if k != "message"]
-                pairs.append(("message", placeholder))
-                changed = True
-
-            # Fix 2: absent user_id → default so {user_id} template resolves
-            user_id = next((v for k, v in pairs if k == "user_id"), None)
-            if not user_id or not user_id.strip():
-                pairs = [(k, v) for k, v in pairs if k != "user_id"]
-                pairs.append(("user_id", _DEFAULT_USER_ID))
-                changed = True
-
-            if changed:
-                new_body = urlencode(pairs).encode("utf-8")
-
-                async def _receive():  # type: ignore[no-untyped-def]
-                    return {"type": "http.request", "body": new_body, "more_body": False}
-
-                new_headers = [(k, v) for k, v in request.scope.get("headers", []) if k.lower() != b"content-length"]
-                new_headers.append((b"content-length", str(len(new_body)).encode()))
-                # Monkey-patch the request object in place — call_next reads
-                # body via request._body / request._receive.
-                request._body = new_body  # type: ignore[attr-defined]
-                request._receive = _receive  # type: ignore[attr-defined]
-                request.scope["headers"] = new_headers
-                if hasattr(request, "_form"):
-                    delattr(request, "_form")
-    return await call_next(request)
-
-
-# ---------------------------------------------------------------------------
 # Startup helpers
 # ---------------------------------------------------------------------------
 def _create_tables() -> None:
@@ -191,8 +117,7 @@ def _kick_initial_compile() -> None:
     does `docker compose up` at 10:05 would otherwise wait until 11:00
     for the first wiki to appear. We run one compile pass immediately
     in a daemon thread so the wiki is populated within ~30 seconds of
-    boot — Demo 3 ("give Scout your context") then works without
-    anyone having to run `docker exec ... compile` by hand.
+    boot.
 
     Daemon thread so a slow compile doesn't block shutdown. We swallow
     exceptions; if OPENAI_API_KEY is bad, the hourly cron surfaces the
@@ -217,26 +142,17 @@ def _kick_initial_compile() -> None:
 # Canonical set of schedules this build owns. Anything else in
 # agno_schedules is an orphan from an older revision and gets
 # removed on every startup to keep the scheduler surface clean.
-_OWNED_SCHEDULES = frozenset(
-    {
-        "daily-briefing",
-        "wiki-compile",
-        "source-health-check",
-        "inbox-digest",
-        "learning-summary",
-        "weekly-review",
-        "doctor-daily",
-    }
-)
+_OWNED_SCHEDULES = frozenset({"wiki-compile"})
 
 
 def _register_schedules() -> None:
-    """Register all scheduled tasks (idempotent — safe to run on every startup).
+    """Register Scout's scheduled tasks (idempotent — safe to run on every startup).
 
-    Also prunes orphan schedules left behind by older revisions — e.g.
-    `context-refresh` and `wiki-lint` from earlier code that pointed at
-    endpoints that no longer exist. Without pruning, the scheduler
-    fires 404s on the old cron slots.
+    Only one schedule today: the hourly wiki compile. Any other entry in
+    agno_schedules is an orphan from an older revision (e.g. the
+    daily-briefing / inbox-digest / weekly-review tasks the previous
+    code wrote) and gets pruned here so the scheduler doesn't keep
+    firing 404s on stale cron slots.
     """
     from agno.scheduler import ScheduleManager
 
@@ -258,31 +174,11 @@ def _register_schedules() -> None:
     except Exception as exc:
         print(f"[scout] Schedule prune skipped: {exc}")
 
-    slack_post = "\n\nWhen done, post the results to the #scout-updates Slack channel." if SLACK_BOT_TOKEN else ""
-
-    mgr.create(
-        name="daily-briefing",
-        cron="0 8 * * 1-5",
-        endpoint="/teams/scout/runs",
-        payload={
-            "message": (
-                "Good morning. Give me a quick briefing to start the day:\n"
-                "1. Check today's calendar — list events with times, flag any that need prep.\n"
-                "2. Summarize unread or flagged emails (if Gmail is enabled).\n"
-                "3. List open priorities and action items from recent conversations.\n"
-                "Keep it short — a morning scan, not a full report." + slack_post
-            ),
-        },
-        timezone="America/New_York",
-        description="Weekday morning briefing — calendar, emails, priorities",
-        if_exists="update",
-    )
-
-    # Hourly: hits /compile/run directly (no team round-trip). The
-    # Compiler runs lint checks as part of each full compile pass, so there
-    # is no separate wiki-lint schedule. Users can always run
-    # `docker exec -it scout-api python -m scout compile` for an
-    # immediate recompile.
+    # Hourly wiki compile. Hits /compile/run directly (no team round-trip).
+    # The Compiler runs lint checks as part of each full compile pass, so
+    # there is no separate wiki-lint schedule. Users can always run
+    # `docker exec -it scout-api python -m scout compile` for an immediate
+    # recompile.
     mgr.create(
         name="wiki-compile",
         cron="0 * * * *",
@@ -290,79 +186,6 @@ def _register_schedules() -> None:
         payload={"force": False},
         timezone="UTC",
         description="Iterate compile-on sources every hour (includes lint pass)",
-        if_exists="update",
-    )
-
-    # Source health refresh.
-    mgr.create(
-        name="source-health-check",
-        cron="*/15 * * * *",
-        endpoint="/manifest/reload",
-        payload={},
-        timezone="UTC",
-        description="Refresh manifest by health-checking every source",
-        if_exists="update",
-    )
-
-    mgr.create(
-        name="inbox-digest",
-        cron="0 12 * * 1-5",
-        endpoint="/teams/scout/runs",
-        payload={
-            "message": (
-                "Midday inbox digest:\n"
-                "1. Summarize emails from this morning — group by sender or thread.\n"
-                "2. Flag anything that needs a response today.\n"
-                "3. Note any action items with owners and deadlines." + slack_post
-            ),
-        },
-        timezone="America/New_York",
-        description="Weekday midday email digest (requires Gmail)",
-        if_exists="update",
-    )
-
-    mgr.create(
-        name="learning-summary",
-        cron="0 10 * * 1",
-        endpoint="/teams/scout/runs",
-        payload={
-            "message": (
-                "Monday learning check-in:\n"
-                "1. Query what you've learned recently from scout_learnings.\n"
-                "2. Summarize patterns, preferences, and insights you've picked up.\n"
-                "3. Note anything that seems wrong or worth revisiting." + slack_post
-            ),
-        },
-        timezone="America/New_York",
-        description="Monday morning learning system summary",
-        if_exists="update",
-    )
-
-    mgr.create(
-        name="weekly-review",
-        cron="0 17 * * 5",
-        endpoint="/teams/scout/runs",
-        payload={
-            "message": (
-                "It's Friday — time for a weekly review. Summarize this "
-                "week's conversations, decisions, and open action items. "
-                "Cite any compiled wiki articles you reference." + slack_post
-            ),
-        },
-        timezone="America/New_York",
-        description="Friday afternoon weekly review draft",
-        if_exists="update",
-    )
-
-    # Daily Doctor sweep — diagnostic report only. Delivery (Slack, email)
-    # is up to downstream handlers; this just produces the report.
-    mgr.create(
-        name="doctor-daily",
-        cron="0 9 * * *",
-        endpoint="/doctor/run",
-        payload={},
-        timezone="America/New_York",
-        description="Daily Scout self-diagnostic — sources, compile state, env",
         if_exists="update",
     )
 
