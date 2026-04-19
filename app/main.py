@@ -139,46 +139,11 @@ def _kick_initial_compile() -> None:
     threading.Thread(target=_run, name="scout-initial-compile", daemon=True).start()
 
 
-# Canonical set of schedules this build owns. Anything else in
-# agno_schedules is an orphan from an older revision and gets
-# removed on every startup to keep the scheduler surface clean.
-_OWNED_SCHEDULES = frozenset({"wiki-compile"})
-
-
 def _register_schedules() -> None:
-    """Register Scout's scheduled tasks (idempotent — safe to run on every startup).
-
-    Only one schedule today: the hourly wiki compile. Any other entry in
-    agno_schedules is an orphan from an older revision (e.g. the
-    daily-briefing / inbox-digest / weekly-review tasks the previous
-    code wrote) and gets pruned here so the scheduler doesn't keep
-    firing 404s on stale cron slots.
-    """
+    """Register Scout's scheduled tasks (idempotent on every startup)."""
     from agno.scheduler import ScheduleManager
 
     mgr = ScheduleManager(get_postgres_db())
-
-    # Prune orphans first so a subsequent create can't collide with
-    # a stale row (if_exists="update" would otherwise re-activate them).
-    try:
-        existing = mgr.list()
-        for sched in existing or []:
-            name = getattr(sched, "name", None) or (sched.get("name") if isinstance(sched, dict) else None)
-            sched_id = getattr(sched, "id", None) or (sched.get("id") if isinstance(sched, dict) else None)
-            if name and sched_id and name not in _OWNED_SCHEDULES:
-                try:
-                    mgr.delete(sched_id)
-                    print(f"[scout] Schedule pruned: {name}")
-                except Exception as exc:
-                    print(f"[scout] Schedule prune failed for {name}: {exc}")
-    except Exception as exc:
-        print(f"[scout] Schedule prune skipped: {exc}")
-
-    # Hourly wiki compile. Hits /compile/run directly (no team round-trip).
-    # The Compiler runs lint checks as part of each full compile pass, so
-    # there is no separate wiki-lint schedule. Users can always run
-    # `docker exec -it scout-api python -m scout compile` for an immediate
-    # recompile.
     mgr.create(
         name="wiki-compile",
         cron="0 * * * *",

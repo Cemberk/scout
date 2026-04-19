@@ -1,6 +1,6 @@
 # Scout Wiki Index
 
-_Generated: 2026-04-19T10:45:51Z_  
+_Generated: 2026-04-19T10:47:44Z_  
 _Articles: 4_
 
 ## Articles
