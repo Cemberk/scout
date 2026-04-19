@@ -157,7 +157,9 @@ All three of `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_PROJECT_ID` are
 1. `scripts/google_auth.py` runs an OAuth flow. You sign in as Scout; Google hands back a refresh token.
 2. The script writes `token.json` to the repo root.
 3. In Docker, `token.json` is available to the container via the `.:/app` bind mount in `compose.yaml`. It is not baked into the image (`.dockerignore` excludes it).
-4. At startup, `scout/tools/build.py` checks whether the three Google env vars are all set. If yes, it loads `GmailTools` (with send functions stripped), `GoogleCalendarTools` (read-only), and registers `GoogleDriveSource`.
-5. `GoogleDriveSource` uses the same `token.json` — Scout gets Drive access automatically once Google auth is configured.
+4. At startup:
+   - If the three Google env vars are set, `scout/team.py` loads `GmailTools` (send functions excluded unless `SCOUT_ALLOW_SENDS=true`) and `GoogleCalendarTools` (read-only unless `SCOUT_ALLOW_SENDS=true`) on the **Leader**.
+   - If you register `gmail` and/or `drive` in `SCOUT_CONTEXTS`, `GmailContext` and `DriveContext` come up as live-read contexts for **Explorer** and share the same `token.json`.
+5. Health probes (`health("gmail")` / `health("drive")`) short-circuit to `DISCONNECTED` with a fixit hint when `token.json` is missing — so a fresh container won't hang on a browser-opening OAuth flow.
 
 `token.json` contains OAuth tokens — it's in `.gitignore` and `.dockerignore`. Don't commit it.

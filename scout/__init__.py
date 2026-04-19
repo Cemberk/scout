@@ -1,8 +1,9 @@
 """Scout — Enterprise context agent.
 
-The `scout` attribute (Team) is imported lazily so that entry points which
-only need manifest / tool-gating surface (e.g. `python -m scout _smoke_gating`)
-don't drag in optional dependencies (Parallel, Slack, Google) transitively.
+The `scout` attribute (Team) is imported lazily so that entry points
+which only need a light subset of the package (e.g. `python -m scout
+contexts` hitting just `scout.context.config`) don't drag in optional
+dependencies (Parallel, Slack, Google) transitively.
 """
 
 from __future__ import annotations
