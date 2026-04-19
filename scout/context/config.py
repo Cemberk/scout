@@ -92,7 +92,7 @@ def build_wiki() -> WikiContext:
 
         backend = GithubBackend(params["repo"])
     elif kind == "s3":
-        from scout.context.backends.s3 import S3Backend  # type: ignore[import-not-found]
+        from scout.context.backends.s3 import S3Backend
 
         backend = S3Backend(params["bucket"], params["prefix"])
     else:
