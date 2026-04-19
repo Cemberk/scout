@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Scout v3 is an **enterprise context agent** — a team of specialists that navigates your company's knowledge graph through a uniform `Source` protocol. The wiki is the map: dumb stores compile into a curated, navigable, user-editable artifact; smart sources are queried live.
+Scout is an **enterprise context agent** — a team of specialists that navigates your company's knowledge graph through a uniform `Source` protocol. The wiki is the map: dumb stores compile into a curated, navigable, user-editable artifact; smart sources are queried live.
 
 ## Architecture
 
@@ -158,6 +158,16 @@ python -m evals.live run --case greeting
 python -m scout _smoke_gating                # assert Navigator can't read local:raw
 ./scripts/validate.sh                        # ruff + mypy + smoke
 ```
+
+### Environment loading for CLI work
+
+Secrets live in `.env` (and `.envrc` for direnv). If you're running anything that hits OpenAI or Google directly (`python -m evals`, `python -m evals smoke`, `python -m evals improve`, `python -m scout`, `python -m scout compile`, etc.) and the shell reports `OPENAI_API_KEY not set`, the fix is to load the env file — don't ask the user, don't skip, don't fabricate a key. In order:
+
+1. **Prefer direnv:** `direnv allow .` once per repo. After that every shell in this directory has the env.
+2. **Fallback (single command):** `set -a; source .env; set +a; python -m evals smoke`
+3. **Per-invocation (Bash tool):** prefix the command with `set -a && source .env && set +a && ...`
+
+Docker picks up `.env` automatically via `docker compose`, so code running inside `scout-api` already has everything. Only direct host-shell invocations need the explicit source.
 
 ## Sources
 

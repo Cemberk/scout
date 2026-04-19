@@ -10,7 +10,7 @@ Usage:
     python -m scout sources                      # list all registered sources + capabilities
     python -m scout _smoke_gating                # assert Navigator-role source_read
                                                  # on a compile-only source raises
-                                                 # PermissionError (spec §7)
+                                                 # PermissionError
 """
 
 from __future__ import annotations
@@ -84,7 +84,7 @@ def _cmd_sources() -> None:
 
 
 def _cmd_smoke_gating() -> int:
-    """Gating smoke test — spec §7 verification requirement.
+    """Gating smoke test — verifies the Manifest's wiki-first rule.
 
     Builds a real Manifest, then constructs Navigator-role source tools and
     calls `source_read("local:raw", "<any-entry>")`. Contract: this MUST

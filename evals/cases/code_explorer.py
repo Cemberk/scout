@@ -20,4 +20,8 @@ CRITERIA = (
 CASES: list[str] = [
     "In the agno-agi/agno repo, find where Team.coordinate is defined. Cite the file and line.",
     "What does the agno-agi/agno README say this repo is for? Quote one short sentence.",
+    # Recent history — exercises git log / git show
+    "In agno-agi/agno, what was the most recent commit touching the Team class? Give the short SHA and subject.",
+    # Multi-file trace — forces grep + read across files
+    "In agno-agi/agno, trace how a Team delegates a prompt to a member agent. Name the two or three files involved.",
 ]

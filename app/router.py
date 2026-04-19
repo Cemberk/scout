@@ -1,4 +1,4 @@
-"""Custom API routes for Scout v3."""
+"""Custom API routes for Scout."""
 
 from agno.os.auth import get_authentication_dependency
 from agno.os.settings import AgnoAPISettings

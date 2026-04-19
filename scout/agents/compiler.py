@@ -17,11 +17,38 @@ Leader to delegate compile/lint requests to.
 """
 
 from agno.agent import Agent
+from agno.knowledge import Knowledge
 from agno.models.openai import OpenAIResponses
+from agno.tools.file import FileTools
 
-from scout.instructions import build_compiler_instructions
-from scout.settings import agent_db, scout_knowledge
-from scout.tools import build_compiler_tools
+from scout.instructions import sources_header
+from scout.settings import CONTEXT_DIR, CONTEXT_RAW_DIR, agent_db, scout_knowledge
+from scout.tools.compile_tools import create_compile_tools
+from scout.tools.ingest import create_ingest_tools
+from scout.tools.knowledge import create_update_knowledge
+from scout.tools.manifest_tools import create_manifest_tool
+from scout.tools.sources import create_source_tools
+
+
+def _compiler_tools(knowledge: Knowledge) -> list:
+    """Compiler owns every write path for the wiki: ingest raw inputs
+    (``ingest_url`` / ``ingest_text`` → ``context/raw/``), compile them
+    into ``context/compiled/``, run lint checks at the end of every pass.
+
+    Ingest does NOT auto-trigger compile — the Compiler decides, usually
+    on an explicit "compile now" request.
+    """
+    ingest_url, ingest_text = create_ingest_tools(CONTEXT_RAW_DIR)
+    return [
+        FileTools(base_dir=CONTEXT_DIR, enable_delete_file=False),
+        create_update_knowledge(knowledge),
+        create_manifest_tool("compiler"),
+        *create_source_tools("compiler"),
+        *create_compile_tools(knowledge),
+        ingest_url,
+        ingest_text,
+    ]
+
 
 COMPILER_INSTRUCTIONS = """\
 You are the Compiler. You convert raw sources into a curated, navigable
@@ -117,10 +144,10 @@ compiler = Agent(
     role="Iterates compile-on sources, produces wiki articles, and runs wiki lint checks",
     model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
-    instructions=build_compiler_instructions(COMPILER_INSTRUCTIONS),
+    instructions=sources_header("compiler") + COMPILER_INSTRUCTIONS,
     knowledge=scout_knowledge,
     search_knowledge=True,
-    tools=build_compiler_tools(scout_knowledge),
+    tools=_compiler_tools(scout_knowledge),
     add_datetime_to_context=True,
     markdown=True,
 )

@@ -170,7 +170,7 @@ class Manifest:
     def can_call(self, source_id: str, agent_role: str) -> bool:
         """Is this source legal for this agent right now?
 
-        Rules (Phase 1):
+        Rules:
           - Source must be CONNECTED (or DEGRADED — agents can try)
           - Compile-only sources are invisible to non-Compiler agents
           - Live-read=False sources are invisible to Navigator/Linter

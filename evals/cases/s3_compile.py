@@ -1,6 +1,6 @@
 """
-S3 Compile Cases — Phase 1
-==========================
+S3 Compile Cases
+================
 
 Per spec §13: two cases — object dropped into bucket compiles within
 one forced run; dedup by `content_sha` on re-run.

@@ -2,7 +2,7 @@
 LocalFolderSource
 =================
 
-A folder on disk. Entries are files, recursively. Used in two modes in v3.0:
+A folder on disk. Entries are files, recursively. Used in two modes:
 - `compile=True, live_read=False` for `context/raw/` — user dump zone the
   Compiler iterates over.
 - `compile=False, live_read=True` for `context/compiled/` — the Obsidian
@@ -29,18 +29,11 @@ from scout.sources.base import (
     Capability,
     Content,
     Entry,
-    FindKind,
     HealthState,
     HealthStatus,
     Hit,
-    Meta,
-    NotSupported,
     SourceError,
 )
-
-# Alias builtins.list — the class body below defines `def list`, which shadows
-# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
-_list = list
 
 # File extensions we'll attempt to extract text from. Anything else is
 # returned as bytes only.
@@ -144,7 +137,7 @@ class LocalFolderSource:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> _list[Entry]:
+    def list_entries(self, path: str = "") -> list[Entry]:
         base = self._entry_path(path) if path else self.root
         if not base.exists():
             return []
@@ -179,21 +172,6 @@ class LocalFolderSource:
             citation_hint=str(p.relative_to(self.root)),
         )
 
-    def metadata(self, entry_id: str) -> Meta:
-        p = self._entry_path(entry_id)
-        if not p.exists():
-            raise SourceError(f"Entry not found: {entry_id}")
-        stat = p.stat()
-        mime, _ = mimetypes.guess_type(p.name)
-        return Meta(
-            name=p.name,
-            mime=mime,
-            size=stat.st_size,
-            modified_at=_iso(stat.st_mtime),
-            source_url=p.as_uri(),
-            extra={"path": str(p.relative_to(self.root))},
-        )
-
     def health(self) -> HealthStatus:
         if not self.root.exists():
             return HealthStatus(HealthState.DISCONNECTED, f"{self.root} does not exist")
@@ -202,14 +180,12 @@ class LocalFolderSource:
         return HealthStatus(HealthState.CONNECTED, str(self.root))
 
     def capabilities(self) -> set[Capability]:
-        caps = {Capability.LIST, Capability.READ, Capability.METADATA}
-        if shutil.which("rg"):
-            caps.add(Capability.FIND_LEXICAL)
-        return caps
+        # LocalFolder always supports FIND — if ripgrep is missing we fall
+        # back to a naive scan inside find(). Advertising FIND unconditionally
+        # means the model won't refuse to try.
+        return {Capability.LIST, Capability.READ, Capability.FIND}
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
-        if kind != FindKind.LEXICAL:
-            raise NotSupported(f"LocalFolderSource only supports lexical find, got {kind}")
+    def find(self, query: str) -> list[Hit]:
         if not shutil.which("rg"):
             # Fall back to a naive Python scan so the source still answers.
             return self._naive_find(query)
@@ -261,7 +237,7 @@ class LocalFolderSource:
                 break
         return list(hits.values())
 
-    def _naive_find(self, query: str) -> _list[Hit]:
+    def _naive_find(self, query: str) -> list[Hit]:
         needle = query.lower()
         hits: list[Hit] = []
         for p in self._walk(self.root):

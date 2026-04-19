@@ -18,10 +18,33 @@ not analytics views.
 """
 
 from agno.agent import Agent
+from agno.knowledge import Knowledge
 from agno.models.openai import OpenAIResponses
+from agno.tools.reasoning import ReasoningTools
+from agno.tools.sql import SQLTools
 
+from db import SCOUT_SCHEMA, db_url, get_sql_engine
 from scout.settings import agent_db, scout_knowledge
-from scout.tools.build import build_engineer_tools
+from scout.tools.introspect import create_introspect_schema_tool
+from scout.tools.knowledge import create_update_knowledge
+
+
+def _engineer_tools(knowledge: Knowledge) -> list:
+    """DDL + DML on ``scout``, schema introspection, Knowledge writes.
+
+    The Engineer's SQLTools is bound to ``get_sql_engine()`` so it can
+    CREATE / ALTER / INSERT / UPDATE / DELETE — but the session-level
+    write guard rejects any statement that targets ``public`` or ``ai``.
+    ReasoningTools is included because DDL work benefits from explicit
+    plan → introspect → act → verify steps.
+    """
+    return [
+        SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
+        create_introspect_schema_tool(db_url, engine=get_sql_engine()),
+        create_update_knowledge(knowledge),
+        ReasoningTools(),
+    ]
+
 
 ENGINEER_INSTRUCTIONS = """\
 You are the Engineer. You maintain Scout's structured memory — the
@@ -112,7 +135,7 @@ engineer = Agent(
     instructions=ENGINEER_INSTRUCTIONS,
     knowledge=scout_knowledge,
     search_knowledge=True,
-    tools=build_engineer_tools(scout_knowledge),
+    tools=_engineer_tools(scout_knowledge),
     add_datetime_to_context=True,
     add_history_to_context=True,
     num_history_runs=5,

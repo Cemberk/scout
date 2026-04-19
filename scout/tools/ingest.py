@@ -1,17 +1,12 @@
 """Ingest tools — fetch URLs and save text to raw/ with frontmatter.
 
-Spec §5a filename convention:
+Filename convention:
 
     context/raw/<slug>-<short-content-sha>.md
 
 where `short-content-sha = sha256(body)[:8]`. Idempotency comes from the
 hash: the same URL ingested on two different days yields the same
-`content_sha` and is skipped as a duplicate. No date in the filename —
-date-in-filename was what produced the "same source_hash, two raw files,
-one orphan compiled article" drift in the prior build.
-
-We still maintain `context/raw/.manifest.json` as extra bookkeeping;
-it is not load-bearing for dedup.
+`content_sha` and is skipped as a duplicate.
 """
 
 import hashlib
@@ -58,18 +53,6 @@ def _find_duplicate(raw_dir: Path, short: str) -> Path | None:
     return None
 
 
-def _read_manifest(raw_dir: Path) -> list[dict]:
-    manifest_path = raw_dir / ".manifest.json"
-    if manifest_path.exists():
-        return json.loads(manifest_path.read_text())  # type: ignore[no-any-return]
-    return []
-
-
-def _write_manifest(raw_dir: Path, manifest: list[dict]) -> None:
-    manifest_path = raw_dir / ".manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-
-
 def _build_frontmatter(
     title: str,
     source: str,
@@ -92,20 +75,6 @@ def _build_frontmatter(
     )
 
 
-def _record_ingest(raw_dir: Path, filename: str, title: str, source: str) -> None:
-    manifest = _read_manifest(raw_dir)
-    manifest.append(
-        {
-            "file": filename,
-            "title": title,
-            "source": source,
-            "ingested": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "compiled": False,
-        }
-    )
-    _write_manifest(raw_dir, manifest)
-
-
 def _do_ingest_url(
     raw_dir: Path,
     url: str,
@@ -113,7 +82,7 @@ def _do_ingest_url(
     tags: list[str] | None = None,
     doc_type: str = "article",
 ) -> dict:
-    """Core ingest-URL logic. Spec §5a idempotent-by-content-hash."""
+    """Core ingest-URL logic. Idempotent by content hash."""
     from scout.settings import PARALLEL_API_KEY
 
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -149,7 +118,6 @@ def _do_ingest_url(
     file_path = raw_dir / filename
     frontmatter = _build_frontmatter(display_title, url, tags or [], doc_type)
     file_path.write_text(frontmatter + body + "\n")
-    _record_ingest(raw_dir, filename, display_title, url)
     return {
         "status": "ingested",
         "path": str(file_path.relative_to(raw_dir)),
@@ -166,7 +134,7 @@ def _do_ingest_text(
     tags: list[str] | None = None,
     doc_type: str = "notes",
 ) -> dict:
-    """Core ingest-text logic. Spec §5a idempotent-by-content-hash."""
+    """Core ingest-text logic. Idempotent by content hash."""
     if not title:
         return {"status": "error", "reason": "title required for ingest_text"}
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -184,7 +152,6 @@ def _do_ingest_text(
     file_path = raw_dir / filename
     frontmatter = _build_frontmatter(title, source, tags or [], doc_type)
     file_path.write_text(frontmatter + body + "\n")
-    _record_ingest(raw_dir, filename, title, source)
     return {
         "status": "ingested",
         "path": str(file_path.relative_to(raw_dir)),
@@ -200,7 +167,7 @@ def create_ingest_tools(raw_dir: Path):
         raw_dir: Path to raw/ (CONTEXT_RAW_DIR).
 
     Returns:
-        List of tool functions.
+        Tuple of (ingest_url, ingest_text) tool functions.
     """
 
     @tool
@@ -247,36 +214,4 @@ def create_ingest_tools(raw_dir: Path):
         """
         return json.dumps(_do_ingest_text(raw_dir, title, content, source, tags, doc_type))
 
-    @tool
-    def read_manifest() -> str:
-        """Read the raw/ manifest to see all ingested documents and their compile status.
-
-        Returns:
-            JSON string of the manifest entries.
-        """
-        manifest = _read_manifest(raw_dir)
-        if not manifest:
-            return "No documents ingested yet. The raw/ directory is empty."
-        return json.dumps(manifest, indent=2)
-
-    @tool
-    def update_manifest_compiled(filename: str) -> str:
-        """Mark a raw document as compiled in the manifest.
-
-        Call this after successfully compiling a raw document into wiki articles.
-
-        Args:
-            filename: The filename in raw/ to mark as compiled.
-
-        Returns:
-            Confirmation message.
-        """
-        manifest = _read_manifest(raw_dir)
-        for entry in manifest:
-            if entry["file"] == filename:
-                entry["compiled"] = True
-                _write_manifest(raw_dir, manifest)
-                return f"Marked as compiled: {filename}"
-        return f"Not found in manifest: {filename}"
-
-    return [ingest_url, ingest_text, read_manifest, update_manifest_compiled]
+    return ingest_url, ingest_text

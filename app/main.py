@@ -26,8 +26,8 @@ from scout.settings import (
 from scout.team import scout
 
 # Default user_id stamped onto /runs requests that don't carry one (see
-# form-fixup middleware below). Phase 1 is single-user; "default" is the
-# fallback that lets agent instructions' `{user_id}` template resolve.
+# form-fixup middleware below). Single-user installs fall back to "default"
+# so agent instructions' `{user_id}` template resolves.
 _DEFAULT_USER_ID = "default"
 
 # ---------------------------------------------------------------------------
@@ -107,7 +107,7 @@ app.include_router(create_router(agent_os.settings))
 #    ``run_context.user_id`` is set. Callers (AgentOS UI, curl scripts)
 #    often don't pass it, so the literal ``{user_id}`` leaked into tool
 #    calls (e.g. Navigator writing ``WHERE user_id = '{user_id}'``).
-#    Default it to ``_DEFAULT_USER_ID`` so Phase-1 single-user installs work
+#    Default it to ``_DEFAULT_USER_ID`` so single-user installs work
 #    without the caller having to remember.
 #
 # Only ``application/x-www-form-urlencoded`` is handled — AgentOS's UI
@@ -234,7 +234,7 @@ def _register_schedules() -> None:
     """Register all scheduled tasks (idempotent — safe to run on every startup).
 
     Also prunes orphan schedules left behind by older revisions — e.g.
-    `context-refresh` and `wiki-lint` from pre-v3 code that pointed at
+    `context-refresh` and `wiki-lint` from earlier code that pointed at
     endpoints that no longer exist. Without pruning, the scheduler
     fires 404s on the old cron slots.
     """

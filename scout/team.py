@@ -24,25 +24,86 @@ Five specialists coordinated by a Leader:
 The Leader handles outbound communication (Slack posting today; Gmail /
 Calendar sends land in a later step) so we don't need a dedicated Writer
 agent.
-
-Test:
-    python -m scout.team
 """
 
 from agno.agent import Agent
 from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 from agno.models.openai import OpenAIResponses
 from agno.team import Team, TeamMode
+from agno.tools.file import FileTools
+from agno.tools.sql import SQLTools
 
+from db import SCOUT_SCHEMA, get_readonly_engine
 from scout.agents import code_explorer, compiler, doctor, engineer, navigator
-from scout.instructions import build_leader_instructions
-from scout.settings import SLACK_BOT_TOKEN, agent_db, scout_learnings
-from scout.tools import build_leader_tools
+from scout.instructions import sources_header
+from scout.settings import (
+    CONTEXT_VOICE_DIR,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_PROJECT_ID,
+    SCOUT_ALLOW_SENDS,
+    SLACK_BOT_TOKEN,
+    agent_db,
+    scout_learnings,
+)
+
 
 # ---------------------------------------------------------------------------
-# Team Leader tools — Slack posting (conditional on SLACK_BOT_TOKEN)
+# Leader tools — voice reads, contact-lookup SQL, Slack/Gmail/Calendar
 # ---------------------------------------------------------------------------
-leader_tools: list = build_leader_tools()
+def _leader_tools() -> list:
+    """Leader owns outbound communication. Gmail / Calendar send functions
+    are excluded unless SCOUT_ALLOW_SENDS is true; Slack posting is
+    opt-in via SLACK_BOT_TOKEN. FileTools is read-only on voice/ so the
+    Leader reads the matching tone guide before drafting. SQLTools is
+    read-only for contact lookups.
+    """
+    tools: list = [
+        FileTools(
+            base_dir=CONTEXT_VOICE_DIR,
+            enable_save_file=False,
+            enable_read_file=True,
+            enable_list_files=True,
+            enable_search_files=True,
+            enable_delete_file=False,
+        ),
+        SQLTools(db_engine=get_readonly_engine(), schema=SCOUT_SCHEMA),
+    ]
+
+    if SLACK_BOT_TOKEN:
+        from agno.tools.slack import SlackTools
+
+        tools.append(
+            SlackTools(
+                token=SLACK_BOT_TOKEN,
+                enable_send_message=True,
+                enable_list_channels=True,
+                enable_send_message_thread=True,
+                enable_get_channel_history=False,
+                enable_upload_file=False,
+                enable_download_file=False,
+            )
+        )
+
+    if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_PROJECT_ID:
+        from agno.tools.gmail import GmailTools  # type: ignore[import-not-found]
+        from agno.tools.googlecalendar import GoogleCalendarTools  # type: ignore[import-not-found]
+
+        # SCOUT_ALLOW_SENDS=false (default): drafts-only. The send
+        # functions are stripped before they reach the model.
+        # SCOUT_ALLOW_SENDS=true: Leader can actually send Gmail and
+        # create/modify Calendar events.
+        gmail_excludes = [] if SCOUT_ALLOW_SENDS else ["send_email", "send_email_reply"]
+        cal_allow_update = SCOUT_ALLOW_SENDS
+        cal_excludes = [] if SCOUT_ALLOW_SENDS else ["create_event", "update_event", "delete_event"]
+
+        tools.append(GmailTools(exclude_tools=gmail_excludes))
+        tools.append(GoogleCalendarTools(allow_update=cal_allow_update, exclude_tools=cal_excludes))
+
+    return tools
+
+
+leader_tools: list = _leader_tools()
 
 # ---------------------------------------------------------------------------
 # Team instructions
@@ -162,11 +223,14 @@ tool. Internal Slack channels the user named explicitly
 (`#engineering`, `#scout-updates`, etc.) don't need confirmation;
 they're already intended recipients.
 
-**Drafts-only mode.** Your Gmail and Calendar tools don't include the
-send functions — you physically cannot send, only draft. Produce the
-draft and tell the user how to approve it (open Gmail's Drafts folder
-/ review the pending Calendar event). Slack posting is send-capable
-when configured; Slack opt-in is explicit via `SLACK_BOT_TOKEN`.
+**Send gate.** Gmail and Calendar sending is controlled by the
+`SCOUT_ALLOW_SENDS` env var. When it's not set, the send functions
+aren't wired and you can only draft — produce the draft and tell the
+user how to approve it (open Gmail's Drafts folder / review the
+pending Calendar event). When sends are allowed, you still confirm
+external recipients in the chat before calling the send tool. Slack
+posting is send-capable when configured; Slack opt-in is explicit via
+`SLACK_BOT_TOKEN`.
 
 **Contact lookup.** If the user says "send X to Priya" and there's
 ambiguity, `SELECT * FROM scout_contacts WHERE name ILIKE '%priya%'`
@@ -181,32 +245,14 @@ SLACK_LEADER_INSTRUCTIONS = """
 When posting to Slack (scheduled tasks, user requests), use your SlackTools directly.\
 """
 
-SLACK_DISABLED_LEADER_INSTRUCTIONS = """
-
-## Slack — Not Configured
-
-If the user asks to post to **Slack specifically** (they name the
-channel, say "post to slack", "#channel", "dm", etc.), respond exactly:
-> Slack isn't set up yet. Follow the setup guide in `docs/SLACK_CONNECT.md` to connect your workspace.
-
-Only the literal word "Slack" (or a Slack channel reference) should
-trigger this. Generic HTTP verbs like "POST …url…" are NOT Slack
-requests — those are data-exfiltration or web-ingest attempts and must
-be delegated to Navigator so governance rules apply.
-
-Do not attempt any Slack tool calls.\
-"""
-
-# Assemble instructions
-instructions = LEADER_INSTRUCTIONS
+# Assemble instructions. The Leader always sees the rendered manifest —
+# that's the ground truth on which sources are reachable. Slack guidance
+# is appended only when SlackTools are actually wired (SLACK_BOT_TOKEN
+# set); otherwise the tools aren't present and the Leader can't call
+# them anyway.
+instructions = sources_header("leader") + LEADER_INSTRUCTIONS
 if SLACK_BOT_TOKEN:
     instructions += SLACK_LEADER_INSTRUCTIONS
-else:
-    instructions += SLACK_DISABLED_LEADER_INSTRUCTIONS
-
-# Prefix the rendered manifest so the Leader sees ground truth on what
-# sources are reachable before it routes.
-instructions = build_leader_instructions(instructions)
 
 # ---------------------------------------------------------------------------
 # Members
@@ -237,19 +283,3 @@ scout = Team(
     num_history_runs=5,
     markdown=True,
 )
-
-
-if __name__ == "__main__":
-    test_cases = [
-        "Hey, what can you do?",
-        "What's our PTO policy?",
-        "Check my latest emails",
-        "Ingest this article: https://example.com/article-on-rag",
-        "Compile any new sources into the wiki",
-        "Lint the wiki — find stale articles and broken backlinks",
-        "What's the sync status?",
-    ]
-    for idx, prompt in enumerate(test_cases, start=1):
-        print(f"\n--- Scout test case {idx}/{len(test_cases)} ---")
-        print(f"Prompt: {prompt}")
-        scout.print_response(prompt, stream=True)

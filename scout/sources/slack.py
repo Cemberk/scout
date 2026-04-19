@@ -15,7 +15,7 @@ Live-read source over Slack.
   SlackTools, not this source.
 - Channel scope is configured via the Slack app (install the bot only
   into the channels you want Scout to see). No server-side allowlist.
-- Capabilities: LIST, READ, METADATA, FIND_NATIVE.
+- Capabilities: LIST, READ, FIND.
 """
 
 from __future__ import annotations
@@ -24,18 +24,11 @@ from scout.sources.base import (
     Capability,
     Content,
     Entry,
-    FindKind,
     HealthState,
     HealthStatus,
     Hit,
-    Meta,
-    NotSupported,
     SourceError,
 )
-
-# Alias builtins.list — the class body below defines `def list`, which shadows
-# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
-_list = list
 
 # Keep recent-message surfacing cheap — Slack API is rate-limited.
 _CHANNEL_HISTORY_LIMIT = 25
@@ -90,7 +83,7 @@ class SlackSource:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> _list[Entry]:
+    def list_entries(self, path: str = "") -> list[Entry]:
         client = self._client_or_none()
         if client is None:
             raise SourceError("Slack client not configured")
@@ -130,21 +123,6 @@ class SlackSource:
             citation_hint=f"slack://{channel}/{ts}",
         )
 
-    def metadata(self, entry_id: str) -> Meta:
-        client = self._client_or_none()
-        if client is None:
-            raise SourceError("Slack client not configured")
-        if ":" not in entry_id:
-            raise SourceError(f"entry_id must be '<channel>:<ts>', got {entry_id!r}")
-        channel, ts = entry_id.split(":", 1)
-        permalink = self._permalink(client, channel, ts)
-        return Meta(
-            name=f"Slack message {ts}",
-            mime="text/plain",
-            source_url=permalink,
-            extra={"channel": channel, "ts": ts},
-        )
-
     def health(self) -> HealthStatus:
         if not self.token:
             return HealthStatus(HealthState.UNCONFIGURED, "SLACK_BOT_TOKEN not set")
@@ -158,11 +136,9 @@ class SlackSource:
         return HealthStatus(HealthState.CONNECTED, f"{resp.get('team', '?')}: visible channels")
 
     def capabilities(self) -> set[Capability]:
-        return {Capability.LIST, Capability.READ, Capability.METADATA, Capability.FIND_NATIVE}
+        return {Capability.LIST, Capability.READ, Capability.FIND}
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
-        if kind not in (FindKind.LEXICAL, FindKind.NATIVE):
-            raise NotSupported(f"SlackSource does not support {kind}")
+    def find(self, query: str) -> list[Hit]:
         client = self._client_or_none()
         if client is None:
             raise SourceError("Slack client not configured")

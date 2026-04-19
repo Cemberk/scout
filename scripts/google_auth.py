@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Generate token.json for Gmail + Calendar OAuth.
+# Generate token.json for Gmail + Calendar + Drive OAuth.
 # Run on the HOST (not inside Docker) — opens a browser for Google consent.
 #
 # Usage:
@@ -17,6 +17,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/drive.readonly",
 ]
 
 TOKEN_PATH = Path(__file__).parent.parent / "token.json"
@@ -45,4 +46,4 @@ creds = flow.run_local_server(port=8080, bind_addr="localhost", prompt="consent"
 
 TOKEN_PATH.write_text(creds.to_json())
 print(f"\nToken saved to: {TOKEN_PATH}")
-print("Gmail + Calendar scopes authorized.")
+print("Gmail + Calendar + Drive scopes authorized.")

@@ -25,7 +25,10 @@ CASES: list[dict] = [
     {"input": "Ingest this article: https://example.com/article-on-rag", "expected_tools": ["ingest_url"]},
     # Compiler
     {"input": "Compile any new sources into the wiki", "expected_tools": ["read_manifest"]},
-    # Syncer
-    {"input": "What's the sync status?", "expected_tools": ["sync_status"]},
-    {"input": "Push the latest changes to GitHub", "expected_tools": ["sync_push"]},
+    # Engineer — SQL writes (scout_* tables)
+    {"input": "Track a new project called 'Mobile Relaunch' — status planning.", "expected_tools": ["run_sql_query"]},
+    # Doctor — self-diagnosis
+    {"input": "Why isn't Drive showing up as a source?", "expected_tools": ["health_ping"]},
+    # CodeExplorer — repo-qualified code questions
+    {"input": "In agno-agi/scout, where is the compile pipeline defined?", "expected_tools": ["clone_repo"]},
 ]

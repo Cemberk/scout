@@ -1,11 +1,3 @@
-from scout.tools.build import (
-    build_compiler_tools,
-    build_leader_tools,
-    build_navigator_tools,
-)
-
-__all__ = [
-    "build_compiler_tools",
-    "build_leader_tools",
-    "build_navigator_tools",
-]
+"""Tool modules. Each module creates a specific tool or tool-family;
+agents import from the modules directly rather than through a central
+builder. See scout/agents/*.py for per-agent tool assembly."""

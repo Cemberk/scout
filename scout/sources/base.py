@@ -1,31 +1,20 @@
 """
-Source protocol — Scout-local v3.0
-===================================
+Source protocol
+===============
 
-A `Source` is anything Scout can navigate: local folders, Drive, S3, Slack,
-GitHub. Each source declares its capabilities and is invoked through a tiny
-uniform interface. The protocol lives in Scout for now; once validated under
-real use it will be extracted into agno.knowledge.source.
+A `Source` is anything Scout can navigate: local folders, Drive, S3, Slack.
+Each source declares its capabilities and is invoked through a tiny
+uniform interface.
 
-Two principles encoded:
-- `find`, not `search`. Search has come to mean "vector search". `find` is
-  honest — the source locates entries however it can. Lexical by default,
-  semantic as opt-in. Each source declares which kinds it supports.
-- Capabilities declared, not assumed. Slack has `find` but not `list`.
-  S3 has no native `find`. Callers check `capabilities()` before dispatching.
+Every source supports LIST and READ. FIND is optional — callers check
+`capabilities()` before dispatching.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, runtime_checkable
-
-# Sources define a `def list(...)` method, which shadows `builtins.list` inside
-# every class body. Alias the built-in once at module scope so annotations like
-# `-> _list[Entry]` resolve cleanly under mypy.
-_list = list
-
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -35,16 +24,7 @@ _list = list
 class Capability(str, Enum):
     LIST = "list"
     READ = "read"
-    METADATA = "metadata"
-    FIND_LEXICAL = "find_lexical"
-    FIND_NATIVE = "find_native"
-    FIND_SEMANTIC = "find_semantic"
-
-
-class FindKind(str, Enum):
-    LEXICAL = "lexical"
-    NATIVE = "native"
-    SEMANTIC = "semantic"
+    FIND = "find"
 
 
 class HealthState(str, Enum):
@@ -80,18 +60,6 @@ class Content:
     mime: str = "application/octet-stream"
     source_url: str | None = None  # e.g. https://drive.google.com/file/d/...
     citation_hint: str | None = None  # e.g. "ACME/HR/Handbook.pdf §4"
-
-
-@dataclass
-class Meta:
-    """Lightweight metadata, separate from full Content."""
-
-    name: str
-    mime: str | None = None
-    size: int | None = None
-    modified_at: str | None = None
-    source_url: str | None = None
-    extra: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -136,7 +104,7 @@ class SourceError(Exception):
 
 @runtime_checkable
 class Source(Protocol):
-    """The Scout-local Source protocol.
+    """The Scout Source protocol.
 
     Implementations should be cheap to instantiate and stateful only with
     respect to caches/clients. They must NOT perform network I/O at __init__
@@ -148,16 +116,12 @@ class Source(Protocol):
     compile: bool
     live_read: bool
 
-    def list(self, path: str = "") -> _list[Entry]:
+    def list_entries(self, path: str = "") -> list[Entry]:
         """Enumerate entries. May raise NotSupported."""
         ...
 
     def read(self, entry_id: str) -> Content:
         """Read one entry's content. Includes source_url + citation_hint."""
-        ...
-
-    def metadata(self, entry_id: str) -> Meta:
-        """Lightweight metadata for one entry."""
         ...
 
     def health(self) -> HealthStatus:
@@ -168,6 +132,6 @@ class Source(Protocol):
         """Declared capabilities — Manifest gates tool registration on this."""
         ...
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
-        """Locate entries. Raises NotSupported if `kind` isn't supported."""
+    def find(self, query: str) -> list[Hit]:
+        """Locate entries. Raises NotSupported if the source has no find."""
         ...

@@ -233,7 +233,11 @@ def _extract_tool_names(run_result) -> list[str]:
 
     def _names_from(obj) -> list[str]:
         out: list[str] = []
-        tools = getattr(obj, "tools", None) or []
+        tools = getattr(obj, "tools", None)
+        # When the team errors out early, `.tools` can be a bound method or
+        # something else non-iterable. Guard against that.
+        if not isinstance(tools, (list, tuple)):
+            return out
         for t in tools:
             # dict form
             if isinstance(t, dict):
@@ -252,8 +256,10 @@ def _extract_tool_names(run_result) -> list[str]:
         return out
 
     names.extend(_names_from(run_result))
-    for member_run in getattr(run_result, "add_member_run", None) or []:
-        names.extend(_names_from(member_run))
+    member_runs = getattr(run_result, "add_member_run", None)
+    if isinstance(member_runs, (list, tuple)):
+        for member_run in member_runs:
+            names.extend(_names_from(member_run))
     return names
 
 

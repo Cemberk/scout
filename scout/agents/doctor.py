@@ -17,9 +17,51 @@ local via ``POST /doctor/run``.
 
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
+from agno.tools.file import FileTools
+from agno.tools.sql import SQLTools
 
-from scout.settings import agent_db, scout_knowledge
-from scout.tools.build import build_doctor_tools
+from db import SCOUT_SCHEMA, get_readonly_engine
+from scout.settings import DOCS_DIR, agent_db, scout_knowledge
+from scout.tools.diagnostics import (
+    clear_repo_cache,
+    env_report,
+    health_ping,
+    reload_manifest_tool,
+    retrigger_compile,
+)
+from scout.tools.manifest_tools import create_manifest_tool
+
+
+def _doctor_tools() -> list:
+    """Diagnostic + self-heal helpers + read-only SQL.
+
+    The Doctor never modifies user content. Its SQL is bound to
+    ``get_readonly_engine()`` so even malformed queries can't mutate
+    ``scout_sources`` / ``scout_compiled``. It can delete files under
+    ``REPOS_DIR`` (the CodeExplorer clone cache) via ``clear_repo_cache``
+    — that tool internally refuses paths that resolve outside
+    ``REPOS_DIR``. FileTools is scoped tightly to ``docs/`` so prompt-
+    injected content can't trick the Doctor into reading ``.env`` or
+    anything else in the bind-mounted work-tree.
+    """
+    return [
+        SQLTools(db_engine=get_readonly_engine(), schema=SCOUT_SCHEMA),
+        FileTools(
+            base_dir=DOCS_DIR,
+            enable_save_file=False,
+            enable_read_file=True,
+            enable_list_files=True,
+            enable_search_files=True,
+            enable_delete_file=False,
+        ),
+        create_manifest_tool("doctor"),
+        reload_manifest_tool,
+        health_ping,
+        retrigger_compile,
+        clear_repo_cache,
+        env_report,
+    ]
+
 
 DOCTOR_INSTRUCTIONS = """\
 You are the Doctor. You diagnose Scout's health and perform safe
@@ -109,7 +151,7 @@ doctor = Agent(
     instructions=DOCTOR_INSTRUCTIONS,
     knowledge=scout_knowledge,
     search_knowledge=True,
-    tools=build_doctor_tools(),
+    tools=_doctor_tools(),
     add_datetime_to_context=True,
     add_history_to_context=True,
     num_history_runs=5,

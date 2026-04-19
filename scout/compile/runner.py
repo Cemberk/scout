@@ -5,8 +5,8 @@ Compile pipeline runner
 Iterates `[s for s in sources if s.compile]`, diffs against `scout_compiled`,
 and produces Obsidian-compatible markdown under `context/compiled/articles/`.
 
-Per spec §3 — "the heart of Scout. A developer reading the repo should
-study the Compiler first."
+The compile pipeline is the heart of Scout — a developer reading the
+repo should study this file first.
 
 Boundary contract:
 - Reads from any source through the Source protocol (no direct fs reads
@@ -43,13 +43,11 @@ from scout.sources.base import Source
 
 ARTICLES_DIR = CONTEXT_COMPILED_DIR / "articles"
 INDEX_PATH = CONTEXT_COMPILED_DIR / "index.md"
-COMPILER_VERSION = "scout-compiler-v3"
+COMPILER_VERSION = "scout-compiler"
 
-# Spec §5: "If content.text exceeds 20,000 characters, the Compiler still
-# emits a single article, adds needs_split: true to the article's
-# frontmatter, and writes a `Linter:` row so the Sunday lint pass flags
-# it." We use `Discovery:` (existing prefix in scout_knowledge) rather
-# than invent a new one — see tmp/spec-diff.md A3.
+# Oversized raw entries still emit a single article; we add
+# needs_split: true to its frontmatter and insert a `Discovery:` row so
+# the Linter can surface it for human follow-up.
 NEEDS_SPLIT_THRESHOLD = 20_000
 
 
@@ -279,7 +277,7 @@ def compile_entry(
     if record and not force and record.source_hash == source_hash:
         return CompileResult(source.id, entry_id, "skipped-unchanged", wiki_path=record.wiki_path)
 
-    # Two-signal user-edit protection (spec §5):
+    # Two-signal user-edit protection:
     #  1. Frontmatter `user_edited: true` on disk, OR
     #  2. Disk sha256 of the article ≠ the compiler_output_hash we recorded
     #     when we last wrote it (means the file has been touched since compile).
@@ -420,8 +418,8 @@ def _compile_and_write(
         except OSError:
             pass
 
-    # Linter surface row for oversized raw entries. `Discovery:` is the
-    # spec-§8 prefix we're reusing here (tmp/spec-diff.md A3).
+    # Linter surface row for oversized raw entries — uses the same
+    # `Discovery:` prefix Navigator searches for cross-source patterns.
     if needs_split and knowledge is not None:
         try:
             knowledge.insert(
@@ -472,7 +470,7 @@ def compile_source(
         return [CompileResult(source_id, "", "error", detail="source is not compile=True")]
 
     try:
-        entries = source.list()
+        entries = source.list_entries()
     except Exception as e:
         return [CompileResult(source_id, "", "error", detail=f"list failed: {e}")]
 

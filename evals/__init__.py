@@ -22,7 +22,6 @@ CATEGORIES: dict[str, dict] = {
     "voice": {"type": "judge_numeric", "module": "evals.cases.voice"},
     "wiki": {"type": "reliability", "module": "evals.cases.wiki"},
     "documents": {"type": "accuracy", "module": "evals.cases.documents"},
-    # v3 Phase 1 additions
     "wiki_compile": {"type": "judge_binary", "module": "evals.cases.wiki_compile"},
     "manifest": {"type": "judge_binary", "module": "evals.cases.manifest"},
     "isolation": {"type": "judge_binary", "module": "evals.cases.isolation"},

@@ -4,10 +4,9 @@ GoogleDriveSource
 
 Live-read source backed by the Google Drive v3 API.
 
-Per spec §3.1.5: Drive in Phase 1 is `compile=False, live_read=True`.
-Drive's own search is excellent — compiling creates a drifting mirror users
-can't edit back into Drive. Users who want Obsidian copies can flip the
-flag manually.
+Drive is `compile=False, live_read=True`. Drive's own search is excellent —
+compiling creates a drifting mirror users can't edit back into Drive. Users
+who want Obsidian copies can flip the flag manually.
 
 Auth: per-user OAuth, reusing the credentials produced by Agno's existing
 Google integration. We rely on `agno.tools.google.calendar` /
@@ -15,31 +14,23 @@ Google integration. We rely on `agno.tools.google.calendar` /
 just borrow it. If Google integration isn't configured the source is
 unhealthy and the manifest hides it.
 
-Capabilities: LIST, READ, METADATA, FIND_NATIVE.
+Capabilities: LIST, READ, FIND.
 """
 
 from __future__ import annotations
 
 import io
-import mimetypes
 from pathlib import Path
 
 from scout.sources.base import (
     Capability,
     Content,
     Entry,
-    FindKind,
     HealthState,
     HealthStatus,
     Hit,
-    Meta,
-    NotSupported,
     SourceError,
 )
-
-# Alias builtins.list — the class body below defines `def list`, which shadows
-# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
-_list = list
 
 # Google's "export as plain text" mime types for Workspace files
 _GOOGLE_EXPORT_MIME = {
@@ -127,7 +118,7 @@ class GoogleDriveSource:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> _list[Entry]:
+    def list_entries(self, path: str = "") -> list[Entry]:
         svc = self._service_or_none()
         if svc is None:
             raise SourceError("Drive client not configured (no token)")
@@ -206,28 +197,6 @@ class GoogleDriveSource:
             _, done = downloader.next_chunk()
         return buf.getvalue()
 
-    def metadata(self, entry_id: str) -> Meta:
-        svc = self._service_or_none()
-        if svc is None:
-            raise SourceError("Drive client not configured (no token)")
-        meta = (
-            svc.files()
-            .get(
-                fileId=entry_id,
-                fields="id, name, mimeType, size, modifiedTime, webViewLink",
-                supportsAllDrives=True,
-            )
-            .execute()
-        )
-        return Meta(
-            name=meta.get("name", entry_id),
-            mime=meta.get("mimeType") or mimetypes.guess_type(meta.get("name", ""))[0],
-            size=int(meta["size"]) if meta.get("size") else None,
-            modified_at=meta.get("modifiedTime"),
-            source_url=meta.get("webViewLink"),
-            extra={"id": entry_id},
-        )
-
     def health(self) -> HealthStatus:
         svc = self._service_or_none()
         if svc is None:
@@ -239,11 +208,9 @@ class GoogleDriveSource:
         return HealthStatus(HealthState.CONNECTED, "all accessible files")
 
     def capabilities(self) -> set[Capability]:
-        return {Capability.LIST, Capability.READ, Capability.METADATA, Capability.FIND_NATIVE}
+        return {Capability.LIST, Capability.READ, Capability.FIND}
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
-        if kind not in (FindKind.LEXICAL, FindKind.NATIVE):
-            raise NotSupported(f"GoogleDriveSource does not support {kind}")
+    def find(self, query: str) -> list[Hit]:
         svc = self._service_or_none()
         if svc is None:
             raise SourceError("Drive client not configured (no token)")

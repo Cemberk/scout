@@ -4,7 +4,7 @@ Tables
 
 Idempotent SQL bootstrap for Scout's own tables. Called from app startup.
 
-We deliberately don't pull in Alembic — the v3 surface is small and the
+We deliberately don't pull in Alembic — the surface is small and the
 agno framework owns the heavy schema (sessions, knowledge vectors). The
 DDL here is ``CREATE TABLE IF NOT EXISTS`` + ``ADD COLUMN IF NOT EXISTS``
 so reruns are safe.
@@ -45,7 +45,7 @@ DDL = [
         compiler_output_hash    TEXT NOT NULL DEFAULT '',
         wiki_path               TEXT NOT NULL,
         compiled_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        compiled_by             TEXT NOT NULL DEFAULT 'scout-compiler-v3',
+        compiled_by             TEXT NOT NULL DEFAULT 'scout-compiler',
         user_edited             BOOLEAN NOT NULL DEFAULT FALSE,
         needs_split             BOOLEAN NOT NULL DEFAULT FALSE,
         UNIQUE (source_id, entry_id)
@@ -120,7 +120,7 @@ DDL = [
 # Drop any lingering workspace_id columns from older installs. Idempotent:
 # runs on every startup, CASCADE removes the old 3-column UNIQUE constraint
 # on scout_compiled so the new 2-column one (source_id, entry_id) works.
-# Safe because Phase 1 only ever wrote 'default' into these columns.
+# Safe because these columns only ever held the value 'default'.
 _WORKSPACE_DROP_TABLES = (
     "scout_compiled",
     "scout_sources",

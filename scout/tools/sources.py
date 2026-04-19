@@ -5,7 +5,7 @@ Source-backed tools
 A small set of dispatch tools the agents call to talk to any registered
 Source. The Manifest gates which sources each agent can reach.
 
-Contract (spec §7):
+Contract:
 - When `manifest.can_call(source_id, agent_role)` returns False, the tool
   MUST raise `PermissionError(f"{source_id} not callable for {agent_role}")`.
   This is the only signal the gating smoke test checks, and it is the
@@ -25,7 +25,7 @@ from agno.tools import tool
 
 from scout.manifest import get_manifest
 from scout.sources import get_source
-from scout.sources.base import FindKind, NotSupported
+from scout.sources.base import NotSupported
 from scout.tools.redactor import redact
 
 
@@ -74,7 +74,7 @@ def create_source_tools(agent_role: str):
         if s is None:
             return _refuse(source_id, "unknown source id")
         try:
-            entries = s.list(path)
+            entries = s.list_entries(path)
         except Exception as e:
             return _refuse(source_id, f"list failed: {e}")
         return redact(
@@ -94,11 +94,11 @@ def create_source_tools(agent_role: str):
         )
 
     @tool
-    def source_find(source_id: str, query: str, kind: str = "lexical") -> str:
+    def source_find(source_id: str, query: str) -> str:
         """Locate entries inside a source.
 
-        `kind` is one of: lexical, native, semantic. Each source declares
-        what it supports — check capabilities via list_sources first.
+        Each source declares whether it supports find via its capabilities
+        — check list_sources first if you're unsure.
 
         Returns JSON array of {entry_id, name, score, snippet, source_url, citation_hint}.
         """
@@ -107,11 +107,7 @@ def create_source_tools(agent_role: str):
         if s is None:
             return _refuse(source_id, "unknown source id")
         try:
-            find_kind = FindKind(kind)
-        except ValueError:
-            return _refuse(source_id, f"unknown find kind {kind!r}")
-        try:
-            hits = s.find(query, find_kind)
+            hits = s.find(query)
         except NotSupported as e:
             return _refuse(source_id, str(e))
         except Exception as e:

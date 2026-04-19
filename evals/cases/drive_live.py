@@ -1,6 +1,6 @@
 """
-Drive Live-Read Cases — Phase 1
-===============================
+Drive Live-Read Cases
+=====================
 
 Per spec §10: Drive-backed queries cite Drive permalinks with section info.
 

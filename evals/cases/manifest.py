@@ -1,6 +1,6 @@
 """
-Manifest Cases — Phase 1 must-pass
-==================================
+Manifest Cases — must-pass
+==========================
 
 Per spec §10: disabled source → explicit refusal, not silent fallback.
 

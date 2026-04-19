@@ -166,7 +166,7 @@ The Slack interface is registered conditionally in `app/main.py` — only when b
 
 ### Slack Channel for Scheduled Tasks
 
-Scheduled tasks (daily briefing, inbox digest, weekly review, learning summary, wiki compile/lint) post results to `#scout-updates` by default. Create this channel in your workspace, or update the channel name in the task prompts in `app/main.py` (`_register_schedules`).
+Scheduled tasks (daily briefing, inbox digest, weekly review, learning summary, daily doctor report) post results to `#scout-updates` by default. Create this channel in your workspace, or update the channel name in the task prompts in `app/main.py` (`_register_schedules`). The hourly wiki compile and 15-minute source health check run headlessly (no Slack post).
 
 ### SlackTools vs Slack Interface vs SlackSource
 

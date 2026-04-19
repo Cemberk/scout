@@ -2,17 +2,16 @@
 S3Source
 ========
 
-Compile-only source (spec §4.5). Instantiate with `bucket` + optional
-`prefix` directly when registering.
+Compile-only source. Instantiate with `bucket` + optional `prefix`
+directly when registering.
 
-- `list` → paginated list_objects_v2.
+- `list_entries` → paginated list_objects_v2.
 - `read` → get_object + LocalFolder-style extraction (PDF/docx/html/text).
   Objects >25 MB skip text extraction and return bytes only — the
-  Compiler will log `skipped-empty` for them (tmp/spec-diff.md A7).
-- `metadata` → head_object.
+  Compiler logs `skipped-empty` for them.
 - `health` → head_bucket.
 - `find` → not supported; rely on compile → local:wiki.
-- capabilities: LIST, READ, METADATA. No find.
+- capabilities: LIST, READ. No find.
 
 Auth comes from AWS_* env; boto3 is imported lazily so S3 being off
 doesn't pull boto3 in at startup.
@@ -26,18 +25,12 @@ from scout.sources.base import (
     Capability,
     Content,
     Entry,
-    FindKind,
     HealthState,
     HealthStatus,
     Hit,
-    Meta,
     NotSupported,
     SourceError,
 )
-
-# Alias builtins.list — the class body below defines `def list`, which shadows
-# `list` in class scope and breaks mypy on `-> list[...]` return annotations.
-_list = list
 
 _MAX_TEXT_EXTRACT_BYTES = 25 * 1024 * 1024  # 25 MB
 _PRESIGN_TTL_S = 900  # 15 min
@@ -134,7 +127,7 @@ class S3Source:
     # Protocol surface
     # ------------------------------------------------------------------
 
-    def list(self, path: str = "") -> _list[Entry]:
+    def list_entries(self, path: str = "") -> list[Entry]:
         client = self._client_or_none()
         if client is None:
             raise SourceError("S3 client not configured (missing boto3 or credentials)")
@@ -185,23 +178,6 @@ class S3Source:
             citation_hint=f"s3://{self.bucket}/{entry_id}",
         )
 
-    def metadata(self, entry_id: str) -> Meta:
-        client = self._client_or_none()
-        if client is None:
-            raise SourceError("S3 client not configured")
-        try:
-            resp = client.head_object(Bucket=self.bucket, Key=entry_id)
-        except Exception as e:
-            raise SourceError(f"head_object failed: {e}") from e
-        return Meta(
-            name=entry_id.split("/")[-1],
-            mime=resp.get("ContentType") or mimetypes.guess_type(entry_id)[0],
-            size=resp.get("ContentLength"),
-            modified_at=resp["LastModified"].isoformat() if resp.get("LastModified") else None,
-            source_url=None,
-            extra={"key": entry_id, "etag": resp.get("ETag")},
-        )
-
     def health(self) -> HealthStatus:
         if not self.bucket:
             return HealthStatus(HealthState.UNCONFIGURED, "bucket not set")
@@ -218,9 +194,9 @@ class S3Source:
         return HealthStatus(HealthState.CONNECTED, scope)
 
     def capabilities(self) -> set[Capability]:
-        return {Capability.LIST, Capability.READ, Capability.METADATA}
+        return {Capability.LIST, Capability.READ}
 
-    def find(self, query: str, kind: FindKind = FindKind.LEXICAL) -> _list[Hit]:
+    def find(self, query: str) -> list[Hit]:
         raise NotSupported("S3Source has no native find. Compile the bucket and search via local:wiki.")
 
 

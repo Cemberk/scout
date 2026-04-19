@@ -2,8 +2,8 @@
 Redactor — strips secret-shaped strings from tool output strings.
 
 Wraps any agno @tool function so its return value is run through a
-small set of regex patterns before reaching the model. Per spec §7
-governance: "Secrets never echoed."
+small set of regex patterns before reaching the model. Secrets must
+never be echoed back to the model.
 
 Patterns are deliberately conservative — false positives (e.g. masking
 something that looks like a token but isn't) are preferred to leaks.

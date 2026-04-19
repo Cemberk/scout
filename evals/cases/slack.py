@@ -1,6 +1,6 @@
 """
-Slack Interface Cases — Phase 1
-===============================
+Slack Interface Cases
+=====================
 
 Per spec §10: @scout in thread produces threaded reply with citations.
 

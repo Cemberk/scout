@@ -1,6 +1,6 @@
 """
-Isolation Cases — Phase 1 must-pass
-===================================
+Isolation Cases — must-pass
+===========================
 
 Per spec §10: User A's Learnings never surface in User B's recall.
 This is judged at the response level. The harness drives the same team
