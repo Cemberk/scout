@@ -11,11 +11,11 @@ Scout bot account — this code does not filter further.
 from __future__ import annotations
 
 import logging
-from os import getenv
 
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
+from scout.context._shared import answer_from_run, google_env_missing
 from scout.context.base import Answer, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
@@ -38,20 +38,9 @@ class DriveContext:
         self._agent: Agent | None = None
 
     def health(self) -> HealthStatus:
-        cid = getenv("GOOGLE_CLIENT_ID", "")
-        secret = getenv("GOOGLE_CLIENT_SECRET", "")
-        project = getenv("GOOGLE_PROJECT_ID", "")
-        if not (cid and secret and project):
-            missing = [
-                n
-                for n, v in (
-                    ("GOOGLE_CLIENT_ID", cid),
-                    ("GOOGLE_CLIENT_SECRET", secret),
-                    ("GOOGLE_PROJECT_ID", project),
-                )
-                if not v
-            ]
-            return HealthStatus(HealthState.DISCONNECTED, f"missing: {missing}")
+        missing = google_env_missing()
+        if missing:
+            return HealthStatus(HealthState.DISCONNECTED, missing)
         try:
             from agno.tools.google.drive import GoogleDriveTools  # type: ignore[import-not-found]
 
@@ -75,14 +64,12 @@ class DriveContext:
         agent = self._ensure_agent()
         if agent is None:
             return Answer(text="Drive not configured (GOOGLE_* env missing)", hits=[])
-        output = agent.run(question)
-        text = output.get_content_as_string() if hasattr(output, "get_content_as_string") else str(output.content)
-        return Answer(text=text or "", hits=[])
+        return answer_from_run(agent.run(question))
 
     def _ensure_agent(self) -> Agent | None:
         if self._agent is not None:
             return self._agent
-        if not (getenv("GOOGLE_CLIENT_ID") and getenv("GOOGLE_CLIENT_SECRET") and getenv("GOOGLE_PROJECT_ID")):
+        if google_env_missing():
             return None
         self._agent = self._build_agent()
         return self._agent
