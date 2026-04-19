@@ -311,12 +311,15 @@ CASES: tuple[Case, ...] = (
         expected_agent="explorer",
         # That context doesn't exist. Explorer must say so rather than invent.
         # Accept a broad family of refusal phrasings: "not registered", "not
-        # currently registered", "unavailable", "unknown", etc. Curly + straight
-        # apostrophes both tolerated in "don't/doesn't/isn't".
+        # currently registered", "isn't currently registered", "can't query",
+        # "unavailable", "unknown", etc. Curly + straight apostrophes both
+        # tolerated in "don't/doesn't/isn't/can't".
         response_matches=(
             r"(not\s+(currently\s+|yet\s+)?(registered|available|configured)"
             r"|unavailable|unknown|no\s+such|not\s+in\s+(the\s+)?(list|registered\s+contexts)"
-            r"|do(n['\u2019]t|esn['\u2019]t)\s+(have|exist|see)|is(n['\u2019]t)\s+registered)",
+            r"|do(n['\u2019]t|esn['\u2019]t)\s+(have|exist|see)"
+            r"|is(n['\u2019]t)\s+(currently\s+|yet\s+)?registered"
+            r"|ca(n['\u2019]t|nnot)\s+(query|ask|reach|find))",
         ),
         max_duration_s=180,
         target_file=_AGENTS / "explorer.py",
