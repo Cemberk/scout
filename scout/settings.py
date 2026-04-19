@@ -57,6 +57,8 @@ AWS_SECRET_ACCESS_KEY = getenv("AWS_SECRET_ACCESS_KEY", "")
 AWS_REGION = getenv("AWS_REGION", "")
 
 # --- Runtime objects (DB-dependent) ----------------------------------------
+# scout_knowledge is gone per §7.2 — routing content folds into
+# scout_learnings (one operational-memory store, shared by Explorer /
+# Engineer / Doctor).
 agent_db = get_postgres_db()
-scout_knowledge = create_knowledge("Scout Knowledge", "scout_knowledge")
 scout_learnings = create_knowledge("Scout Learnings", "scout_learnings")

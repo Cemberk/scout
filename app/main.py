@@ -16,11 +16,10 @@ from agno.os import AgentOS
 
 from app.router import create_router
 from db import get_postgres_db
-from scout.agents import code_explorer, compiler, doctor, engineer, navigator
+from scout.agents import doctor, engineer, explorer
 from scout.settings import (
     SLACK_BOT_TOKEN,
     SLACK_SIGNING_SECRET,
-    scout_knowledge,
     scout_learnings,
 )
 from scout.team import scout
@@ -57,16 +56,14 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     _create_tables()
-    _build_initial_manifest()
-    _register_schedules()
-    _kick_initial_compile()
+    # Wiki + contexts wiring lands in 1m.
     yield
 
 
 # ---------------------------------------------------------------------------
 # Create AgentOS
 # ---------------------------------------------------------------------------
-agents: list = [navigator, compiler, code_explorer, engineer, doctor]
+agents: list = [explorer, engineer, doctor]
 
 agent_os = AgentOS(
     name="Scout",
@@ -78,7 +75,7 @@ agent_os = AgentOS(
     db=get_postgres_db(),
     teams=[scout],
     agents=agents,
-    knowledge=[scout_knowledge, scout_learnings],
+    knowledge=[scout_learnings],
     interfaces=interfaces,
     config=str(Path(__file__).parent / "config.yaml"),
 )
@@ -98,61 +95,6 @@ def _create_tables() -> None:
         print("[scout] Tables: applied")
     except Exception as e:
         print(f"[scout] Tables: failed: {e}")
-
-
-def _build_initial_manifest() -> None:
-    try:
-        from scout.manifest import reload_manifest
-
-        m = reload_manifest()
-        print(f"[scout] Manifest: {len(m.sources)} source(s)")
-    except Exception as e:
-        print(f"[scout] Manifest build failed: {e}")
-
-
-def _kick_initial_compile() -> None:
-    """Fire a one-shot compile in a background thread at startup.
-
-    The hourly `wiki-compile` cron only runs on the hour, so a user who
-    does `docker compose up` at 10:05 would otherwise wait until 11:00
-    for the first wiki to appear. We run one compile pass immediately
-    in a daemon thread so the wiki is populated within ~30 seconds of
-    boot.
-
-    Daemon thread so a slow compile doesn't block shutdown. We swallow
-    exceptions; if OPENAI_API_KEY is bad, the hourly cron surfaces the
-    failure on its own schedule.
-    """
-    import threading
-
-    def _run() -> None:
-        try:
-            from scout.compile import compile_all
-            from scout.settings import scout_knowledge
-
-            results = compile_all(knowledge=scout_knowledge)
-            counts = {sid: len(r) for sid, r in results.items()}
-            print(f"[scout] Initial compile: {counts}")
-        except Exception as e:
-            print(f"[scout] Initial compile failed: {e}")
-
-    threading.Thread(target=_run, name="scout-initial-compile", daemon=True).start()
-
-
-def _register_schedules() -> None:
-    """Register Scout's scheduled tasks (idempotent on every startup)."""
-    from agno.scheduler import ScheduleManager
-
-    mgr = ScheduleManager(get_postgres_db())
-    mgr.create(
-        name="wiki-compile",
-        cron="0 * * * *",
-        endpoint="/compile/run",
-        payload={"force": False},
-        timezone="UTC",
-        description="Iterate compile-on sources every hour (includes lint pass)",
-        if_exists="update",
-    )
 
 
 if __name__ == "__main__":

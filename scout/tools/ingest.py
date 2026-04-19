@@ -4,19 +4,12 @@
 act on **the wiki** (the one WikiContext). They resolve the active
 WikiContext through ``scout.tools.ask_context.get_wiki()`` which is
 populated at startup from the ``SCOUT_WIKI`` env.
-
-The old filesystem-based ``_do_ingest_url`` / ``_do_ingest_text`` helpers
-and the ``create_ingest_tools(raw_dir)`` factory are gone; the wiki
-backend handles raw bytes now. A compat shim keeps the
-``create_ingest_tools`` name resolvable for ``scout/agents/compiler.py``
-until that agent is deleted in sub-step 1l.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
 
 from agno.tools import tool
 
@@ -104,14 +97,3 @@ def trigger_compile(force: bool = False) -> str:
     return json.dumps({"status": "ok", "counts": counts})
 
 
-# ---------------------------------------------------------------------------
-# Legacy shim — delete with scout/agents/compiler.py in 1l.
-# ---------------------------------------------------------------------------
-
-
-def create_ingest_tools(raw_dir: Path):
-    """Legacy factory. Kept so ``scout/agents/compiler.py``'s import still
-    resolves; the body redirects to the new wiki-backed tools. Delete
-    alongside the Compiler agent in 1l."""
-    del raw_dir
-    return ingest_url, ingest_text
