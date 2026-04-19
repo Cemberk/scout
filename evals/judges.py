@@ -198,19 +198,26 @@ def run_judged(case: Judged) -> JudgedResult:
             )
 
         first = eval_result.results[0]
-        score = float(getattr(first, "score", 0.0))
+        # agno's AgentAsJudgeResult uses different fields per scoring mode:
+        #   numeric → .score is a float, .passed is None
+        #   binary  → .passed is a bool, .score is None
         if case.scoring == "binary":
-            passed = score >= 1.0
+            passed_flag = bool(getattr(first, "passed", False))
+            score_val: float | None = None
+            fail_msg = "judge returned passed=False"
         else:
-            passed = score >= case.passing_score
+            raw_score = getattr(first, "score", None)
+            score_val = float(raw_score) if raw_score is not None else 0.0
+            passed_flag = score_val >= case.passing_score
+            fail_msg = f"score {score_val} < threshold {case.passing_score}"
         return JudgedResult(
             id=case.id,
-            status="PASS" if passed else "FAIL",
+            status="PASS" if passed_flag else "FAIL",
             duration_s=duration,
-            score=score,
+            score=score_val,
             reason=str(getattr(first, "reason", "")),
             response=response,
-            failures=[] if passed else [f"score {score} < threshold {case.passing_score}"],
+            failures=[] if passed_flag else [fail_msg],
         )
     except Exception as exc:
         return JudgedResult(

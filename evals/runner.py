@@ -75,8 +75,13 @@ class _StubWiki:
     name: str = "Wiki (stub)"
     kind: str = "wiki"
 
-    def __init__(self, answer: str = "(stub wiki)") -> None:
+    def __init__(
+        self,
+        answer: str = "(stub wiki)",
+        hits: list[Any] | None = None,
+    ) -> None:
         self._answer = answer
+        self._hits = hits or []
 
     def health(self):
         from scout.context.base import HealthState, HealthStatus
@@ -86,7 +91,7 @@ class _StubWiki:
     def query(self, question: str, *, limit: int = 10, filters: dict | None = None):
         from scout.context.base import Answer
 
-        return Answer(text=self._answer, hits=[])
+        return Answer(text=self._answer, hits=list(self._hits))
 
     def ingest_url(self, url: str, *, title: str, tags: list[str] | None = None):
         from scout.context.base import Entry
@@ -124,8 +129,8 @@ class _StubContext:
         return Answer(text=self._answer, hits=[])
 
 
-def _stub_wiki(answer: str = "(stub wiki)") -> _StubWiki:
-    return _StubWiki(answer)
+def _stub_wiki(answer: str = "(stub wiki)", hits: list[Any] | None = None) -> _StubWiki:
+    return _StubWiki(answer, hits)
 
 
 def _stub_context(ctx_id: str, kind: str, display_name: str, answer_text: str) -> _StubContext:
@@ -139,7 +144,23 @@ def _build_fixture(case: Case) -> Fixture:
         return Fixture(wiki=_stub_wiki(), contexts=[])
 
     if name == "default":
-        wiki = _stub_wiki("The onboarding article describes the first-week checklist.")
+        from scout.context.base import Hit
+
+        wiki_hits = [
+            Hit(
+                entry_id="compiled/onboarding-3f7a.md",
+                name="Onboarding",
+                snippet="First-week checklist: access, intros, paired code review.",
+                source_url="wiki:compiled/onboarding-3f7a.md",
+            ),
+        ]
+        wiki = _stub_wiki(
+            (
+                "The onboarding article describes the first-week checklist. "
+                "Source: compiled/onboarding-3f7a.md"
+            ),
+            hits=wiki_hits,
+        )
         contexts = [
             _stub_context(
                 "sample-local",
