@@ -122,14 +122,7 @@ def _slug_from_url(url: str) -> str:
 
 def _build_raw_frontmatter(title: str, source: str, tags: list[str] | None) -> str:
     tag_str = ", ".join(tags or [])
-    return (
-        f"---\n"
-        f'title: "{title}"\n'
-        f"source: {source}\n"
-        f"fetched_at: {_now_iso()}\n"
-        f"tags: [{tag_str}]\n"
-        f"---\n\n"
-    )
+    return f'---\ntitle: "{title}"\nsource: {source}\nfetched_at: {_now_iso()}\ntags: [{tag_str}]\n---\n\n'
 
 
 def _extract_title(markdown: str) -> str:

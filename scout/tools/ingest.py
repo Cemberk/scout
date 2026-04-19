@@ -95,5 +95,3 @@ def trigger_compile(force: bool = False) -> str:
         log.exception("trigger_compile failed")
         return json.dumps({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
     return json.dumps({"status": "ok", "counts": counts})
-
-

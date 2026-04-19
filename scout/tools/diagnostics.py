@@ -88,7 +88,14 @@ def health(target_id: str) -> str:
             try:
                 h = ctx.health()
             except Exception as exc:
-                return json.dumps({"id": target_id, "kind": ctx.kind, "state": "disconnected", "detail": f"{type(exc).__name__}: {exc}"})
+                return json.dumps(
+                    {
+                        "id": target_id,
+                        "kind": ctx.kind,
+                        "state": "disconnected",
+                        "detail": f"{type(exc).__name__}: {exc}",
+                    }
+                )
             return json.dumps({"id": target_id, "kind": ctx.kind, "state": h.state.value, "detail": h.detail})
 
     return json.dumps({"error": f"unknown target {target_id!r}"})
@@ -114,7 +121,9 @@ def health_all() -> str:
             h = ctx.health()
             rows.append({"id": ctx.id, "kind": ctx.kind, "state": h.state.value, "detail": h.detail})
         except Exception as exc:
-            rows.append({"id": ctx.id, "kind": ctx.kind, "state": "disconnected", "detail": f"{type(exc).__name__}: {exc}"})
+            rows.append(
+                {"id": ctx.id, "kind": ctx.kind, "state": "disconnected", "detail": f"{type(exc).__name__}: {exc}"}
+            )
     return json.dumps(rows)
 
 
@@ -134,10 +143,7 @@ def db_health() -> str:
         engine = get_readonly_engine()
         with engine.connect() as conn:
             rows = conn.execute(
-                text(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_schema = :schema"
-                ),
+                text("SELECT table_name FROM information_schema.tables WHERE table_schema = :schema"),
                 {"schema": SCOUT_SCHEMA},
             ).all()
     except Exception as exc:

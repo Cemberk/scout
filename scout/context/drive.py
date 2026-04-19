@@ -42,7 +42,15 @@ class DriveContext:
         secret = getenv("GOOGLE_CLIENT_SECRET", "")
         project = getenv("GOOGLE_PROJECT_ID", "")
         if not (cid and secret and project):
-            missing = [n for n, v in (("GOOGLE_CLIENT_ID", cid), ("GOOGLE_CLIENT_SECRET", secret), ("GOOGLE_PROJECT_ID", project)) if not v]
+            missing = [
+                n
+                for n, v in (
+                    ("GOOGLE_CLIENT_ID", cid),
+                    ("GOOGLE_CLIENT_SECRET", secret),
+                    ("GOOGLE_PROJECT_ID", project),
+                )
+                if not v
+            ]
             return HealthStatus(HealthState.DISCONNECTED, f"missing: {missing}")
         try:
             from agno.tools.google.drive import GoogleDriveTools  # type: ignore[import-not-found]
