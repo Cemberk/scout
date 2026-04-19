@@ -37,25 +37,30 @@ While Scout gets more useful with more context, it's designed to work out of the
 
 ### 1. Ask Scout about anything
 
-Scout's Navigator ships with web search built-in (Exa MCP by default; set `PARALLEL_API_KEY` for Parallel), so you can start asking questions immediately with no setup beyond your OpenAI key.
+Explorer ships with web search built-in (Exa MCP by default; set `PARALLEL_API_KEY` for Parallel), so you can start asking questions immediately with no setup beyond your OpenAI key.
 
 > *Let's chat about Agno. Read the docs at https://docs.agno.com and tell me what it is.*
 
-Navigator fetches the page, reads the sources it finds, and answers with citations.
+Explorer fetches the page, reads the sources it finds, and answers with citations.
 
 ### 2. Ask Scout about Scout
 
-Scout can navigate codebases, including its own.
+Scout can navigate codebases. Register any public repo as a context:
 
-> *Let's chat about Scout. Navigate https://github.com/agno-agi/scout and explain how the compiler turns raw files into a wiki.*
+```sh
+# in .env
+SCOUT_CONTEXTS=github:agno-agi/scout
+```
 
-Scout reads its own source to answer. You learn what Scout is by watching Scout work.
+Restart `scout-api` and ask:
+
+> *Walk me through how WikiContext turns raw files into a wiki.*
+
+Scout clones the repo on first use and reads the source to answer.
 
 ### 3. Give Scout your context
 
-Drop files into `context/raw/` and Scout will compile them into its wiki. But to start, let's use the sample document: `context/raw/offsite-notes.md`
-
-The compiler runs every hour. But to test the compiler, run it manually:
+Drop files into `context/raw/` — that's the wiki's input staging area on the default `local:./context` backend. Then tell Engineer to ingest + compile, or run it manually:
 
 ```sh
 docker exec -it scout-api python -m scout compile
@@ -79,55 +84,59 @@ For the full argument, read [Context Agents: Navigation over Search](https://agn
 
 ## How it works
 
-Scout has two execution modes and a team of five specialists.
+Scout splits knowledge into two shapes and runs a four-role team on top.
 
-### Compile vs live-read
+### Contexts vs the Wiki
 
-Every source Scout connects to is either compiled into a wiki or read live. The choice is per-source and depends on whether the source already has a good query interface.
-
-| Source | Mode | Why |
+| Shape | What it is | Examples |
 |---|---|---|
-| `./context/raw` (local folder) | compile | Raw files lack structure; compiling gives them one |
-| `./context/compiled` (local folder) | live-read | The compiled wiki itself |
-| S3 bucket | compile | Bucket listings are flat; compiling adds structure |
-| Google Drive | live-read | Drive search is already good |
-| Slack | live-read | Threads *are* the query surface |
-| GitHub | live-read | Grep and git history *are* the query surface |
+| **Context** (live-read) | Sources queried on their own terms, in place | `LocalContext`, `GithubContext`, `S3Context`, `SlackContext`, `GmailContext`, `DriveContext` |
+| **WikiContext** (compile-capable) | One curated store compiled from raw inputs, with a pluggable backend | `LocalBackend` (dev), `GithubBackend` (git-coordinated), `S3Backend` (conditional PUT) |
 
-Compiled sources get turned into a cross-linked markdown wiki that lives in `context/compiled/`. Live sources get queried in place. No mirror, no drift.
+Both are pre-configured at startup via env:
+
+- `SCOUT_WIKI` — one spec string. Default `local:./context`.
+- `SCOUT_CONTEXTS` — comma-separated specs. Empty by default.
+
+Contexts are queried live — nothing is mirrored, nothing drifts. The wiki is the only place compile happens, and its backend handles concurrency (git push rejection, S3 conditional PUT) so multi-container deploys work without coordinating through Scout's process.
 
 ### The team
 
-Five specialists coordinated by a Leader:
+A Leader plus three specialists:
 
-- **Navigator** answers the question. Read-only everywhere: compiled wiki, live sources (Drive/Slack/Gmail inbox/Calendar), SQL SELECT, web search. Never writes.
-- **Compiler** owns every wiki write path. Ingests URLs and text into `context/raw/`, compiles into `context/compiled/`, lints for broken backlinks and stale articles after each pass.
-- **CodeExplorer** clones any git repo on demand into `$REPOS_DIR` and answers code questions (grep, read, blame, log). Read-only.
-- **Engineer** owns SQL writes. Creates `scout_*` tables on demand, inserts user-provided notes / facts / contacts / decisions, records every schema change back to Knowledge so Navigator can find it.
-- **Doctor** diagnoses Scout's own health (sources, compile state, env) and self-heals via retry / reload / refresh / cache-clear. Never touches user data.
+- **Explorer** answers questions by asking the wiki + registered contexts. Read-only SQL on `scout_*` tables. Never writes.
+- **Engineer** owns every non-outbound write: `scout_*` tables (DDL + DML scoped to the `scout` schema) and the wiki via `ingest_url` / `ingest_text` / `trigger_compile`.
+- **Doctor** diagnoses — `health`, `health_all`, `db_health`, `env_report`. Read-only everywhere; never touches user content.
 
-The **Leader** handles all outbound: Slack posting when `SLACK_BOT_TOKEN` is set; Gmail send and Calendar write when `SCOUT_ALLOW_SENDS=true`. The default is drafts-only — the send functions aren't even wired to the model. You approve before anything leaves Scout.
+The **Leader** handles outbound: Slack posting when `SLACK_BOT_TOKEN` is set; Gmail send and Calendar write when `SCOUT_ALLOW_SENDS=true`. The default is drafts-only — the send functions aren't wired to the model. You approve before anything leaves Scout.
+
+Explorer, Engineer, and Doctor share an operational-memory store (`scout_learnings`) — routing hints, corrections, per-user preferences. Written in agentic mode; searched before save so Scout doesn't duplicate.
 
 ## Connect your sources
 
-Scout ships with local folders on day one. Each row below activates when you add the env.
+Scout ships with a default local wiki on day one. Each row below activates by adding env + registering a context.
 
-| Integration | Env | What it does |
-|---|---|---|
-| **Gmail + Calendar + Drive** | `GOOGLE_*` ([setup](docs/GOOGLE_AUTH.md)) | Search mail, draft replies, read events, query Drive |
-| **Slack** | `SLACK_BOT_TOKEN` + `SLACK_SIGNING_SECRET` ([setup](docs/SLACK_CONNECT.md)) | @mention in channels, search threads, post |
-| **Code exploration** | built-in (+ optional `GITHUB_ACCESS_TOKEN`) | `CodeExplorer` clones any public repo on demand and answers code questions — grep, read, blame, log. Add a PAT for private repos or higher rate limits. |
-| **S3** | `S3_BUCKETS` + `AWS_*` | Compile PDFs and docs from buckets into the wiki |
-| **Web research** | built-in (Exa MCP, keyless); `PARALLEL_API_KEY` for premium | Web search + URL extraction. Scout ships with Exa MCP so research works on day one; set `PARALLEL_API_KEY` to switch to Parallel for better extraction and higher rate limits. |
+| Integration | Env | Register via | What it does |
+|---|---|---|---|
+| **Gmail** | `GOOGLE_*` ([setup](docs/GOOGLE_AUTH.md)) + `python scripts/google_auth.py` | `SCOUT_CONTEXTS=gmail` | Search mail, read threads |
+| **Google Calendar** | `GOOGLE_*` ([setup](docs/GOOGLE_AUTH.md)) | Leader direct (not a Context) | Read events, find free slots, draft invites |
+| **Google Drive** | `GOOGLE_*` ([setup](docs/GOOGLE_AUTH.md)) | `SCOUT_CONTEXTS=drive` | Search files, read Docs/Sheets/Slides |
+| **Slack** | `SLACK_BOT_TOKEN` + `SLACK_SIGNING_SECRET` ([setup](docs/SLACK_CONNECT.md)) | `SCOUT_CONTEXTS=slack` | @mention in channels, search threads, Leader posts |
+| **GitHub** | built-in (+ optional `GITHUB_ACCESS_TOKEN`) | `SCOUT_CONTEXTS=github:<owner>/<repo>` | Clone + read, grep, git log/blame/diff/show |
+| **S3** | `AWS_*` | `SCOUT_CONTEXTS=s3:<bucket>[/<prefix>]` or `SCOUT_WIKI=s3:<bucket>/<prefix>` | Live-read a bucket as a Context, or use S3 as the wiki backend |
+| **Local folder** | — | `SCOUT_CONTEXTS=local:<path>` | Any directory you want Explorer to grep/read |
+| **Git-hosted wiki** | `GITHUB_ACCESS_TOKEN` (private repos) | `SCOUT_WIKI=github:<owner>/<repo>` | Wiki lives in a git repo — multi-container-safe |
+| **Web research** | built-in (Exa MCP, keyless); `PARALLEL_API_KEY` for premium | — | Explorer's web-search fallback |
 
 ## Example prompts
 
 ```
 What does our wiki say about PTO?
-Ingest https://arxiv.org/abs/2312.10997
+Ingest https://arxiv.org/abs/2312.10997 — it's the RAG survey
 Find where `Team.coordinate` is defined in agno-agi/agno
 Draft an email to alex@acme.com about Q2 roadmap
 What's in the engineering OKRs doc on Drive?
+Are all my contexts healthy?
 ```
 
 ## CLI
@@ -135,49 +144,50 @@ What's in the engineering OKRs doc on Drive?
 ```sh
 python -m scout                                       # chat (default)
 python -m scout chat                                  # same, explicit
-python -m scout sources                               # registered sources + capabilities
-python -m scout manifest                              # live manifest
-python -m scout compile                               # compile new or changed inputs
-python -m scout compile --source local:raw            # one source
-python -m scout compile --source local:raw --entry handbook.pdf   # one entry
-python -m scout compile --force                       # re-compile everything
-python -m scout compile --limit 10                    # cap entries per source
-python -m scout _smoke_gating                         # assert Navigator can't read compile-only sources
+python -m scout contexts                              # wiki + registered contexts + health
+python -m scout compile                               # one wiki compile pass
+python -m scout compile --force                       # recompile unchanged entries too
 ```
 
 ## API
 
-Three custom endpoints on top of AgentOS's defaults (`/teams/scout/runs`, `/health`, etc.):
+On top of AgentOS's defaults (`/teams/scout/runs`, `/health`, etc.) the custom endpoints are:
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/manifest` | GET | Current manifest |
-| `/sources/{id}/health` | GET | Per-source health ping |
-| `/compile/run` | POST | Run compile pass (no body / `source_id` / `source_id`+`entry_id`) |
+| `/wiki/health` | GET | Wiki health |
+| `/wiki/compile` | POST | Run a compile pass (body: `{"force": bool}`) |
+| `/wiki/ingest` | POST | Ingest URL / text (body: `{"kind": "url"\|"text", ...}`) |
+| `/wiki/query` | POST | Debug: ask the wiki directly |
+| `/contexts` | GET | List wiki + every registered context + health |
+| `/contexts/{id}/health` | GET | One target's health |
+| `/contexts/{id}/query` | POST | Debug: ask one context / wiki |
 
 ## Scheduled tasks
 
-One schedule today — the hourly wiki compile:
+No schedules are registered in this build. To run compile on a cadence, either:
 
-| Task | Schedule | Endpoint |
-|---|---|---|
-| `wiki-compile` | Hourly on :00 (UTC) | `/compile/run` |
+- `docker exec -it scout-api python -m scout compile` on a host-side cron, or
+- `POST /wiki/compile` from an external scheduler, or
+- tell Engineer "compile now" from chat.
 
-A one-shot compile also fires in a background thread at container boot so the wiki is populated within ~30s of startup (no need to wait for the top of the hour). Configured in `app/main.py` → `_register_schedules`. Anything else (briefings, digests, weekly reviews, daily Doctor sweeps) was removed in favor of an explicit ad-hoc model — kick them off from the chat or schedule them externally.
+A scheduler pod posting to `/wiki/compile` on the API LB is the recommended shape for multi-container deploys.
 
 ## Environment
 
 | Variable | Required | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | **Yes** | Model and embeddings |
+| `SCOUT_WIKI` | No | Wiki backend spec. Default `local:./context`. Prod: `github:<owner>/<repo>` or `s3:<bucket>[/<prefix>]`. |
+| `SCOUT_CONTEXTS` | No | Comma-separated live-read context specs. Empty by default. |
 | `PARALLEL_API_KEY` | No | Premium web search + URL extraction. Without it, Scout uses Exa's keyless MCP server — research still works. |
-| `EXA_API_KEY` | No | Optional. Raises rate limits on the Exa MCP fallback; not needed to use it. |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Scout's own Google app — Gmail + Calendar + Drive. Drive scope is managed by sharing folders with Scout's account. |
-| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` | No | Scout's own Slack bot (xoxb-…) — interface and source |
+| `EXA_API_KEY` | No | Optional. Raises rate limits on the Exa MCP fallback. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Scout's Google app — Gmail + Calendar + Drive. Drive scope is managed by sharing folders with Scout's account. Run `python scripts/google_auth.py` once to generate `token.json`. |
+| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` | No | Scout's Slack bot (xoxb-…) — interface, SlackTools, and SlackContext |
 | `SCOUT_ALLOW_SENDS` | No | `true` to let the Leader actually send Gmail / modify Calendar. Default `false` = drafts-only. |
-| `GITHUB_ACCESS_TOKEN` | No | Optional PAT for CodeExplorer. Public repos clone tokenless; set this for private repos or to raise the API rate ceiling. |
-| `REPOS_DIR` | No | Where CodeExplorer clones repos. Compose sets `/repos` (the `repos` named volume); local defaults to `.scout/repos`. |
-| `S3_BUCKETS` / `AWS_*` | No | S3 compile |
+| `GITHUB_ACCESS_TOKEN` | No | Optional PAT. Public repos clone tokenless; set this for private repos (both `GithubContext` and `GithubBackend`) or to raise the API rate ceiling. |
+| `REPOS_DIR` | No | Where Scout clones repos. Compose sets `/repos` (the `repos` named volume); local defaults to `.scout/repos`. |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `SCOUT_WIKI` or `SCOUT_CONTEXTS` reference `s3:...`. |
 | `DB_*` | No | Postgres (compose defaults work) |
 
 Full list in `example.env`.
@@ -185,9 +195,10 @@ Full list in `example.env`.
 ## Troubleshooting
 
 - **Google token expired.** Testing-mode OAuth expires every 7 days. Re-run `python scripts/google_auth.py`.
-- **Port 5432 or 8000 in use.** Edit the host-side port in `compose.yaml` (e.g. change `"8000:8000"` to `"8001:8000"`), or drop `ports:` from `scout-db` if Postgres is already running on the host.
-- **Source shows `unconfigured`.** Env missing; check `example.env`.
-- **Live eval says "Incorrect API key".** `OPENAI_API_KEY` rotated; fix and `docker compose restart scout-api`.
+- **`DriveContext` / `GmailContext` report "no Google auth material".** `token.json` isn't present in the container. Run `python scripts/google_auth.py` on the host; the file is bind-mounted in via the `.:/app` volume in `compose.yaml`.
+- **Port 5432 or 8000 in use.** Edit the host-side port in `compose.yaml` (e.g. `"8001:8000"`), or drop `ports:` from `scout-db` if Postgres is already on the host.
+- **A context shows `disconnected`.** Env missing or wrong. Ask Doctor: `"why is <context id> disconnected?"` — it reads `health` + `env_report` and tells you which var to set.
+- **Live response says "Incorrect API key".** `OPENAI_API_KEY` rotated; fix and `docker compose restart scout-api`.
 
 ## Architecture
 
