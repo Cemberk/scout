@@ -133,11 +133,16 @@ What's in the engineering OKRs doc on Drive?
 ## CLI
 
 ```sh
-python -m scout                       # chat
-python -m scout sources               # registered sources + capabilities
-python -m scout manifest              # live manifest
-python -m scout compile               # compile new or changed inputs
-python -m scout compile --force       # re-compile everything
+python -m scout                                       # chat (default)
+python -m scout chat                                  # same, explicit
+python -m scout sources                               # registered sources + capabilities
+python -m scout manifest                              # live manifest
+python -m scout compile                               # compile new or changed inputs
+python -m scout compile --source local:raw            # one source
+python -m scout compile --source local:raw --entry handbook.pdf   # one entry
+python -m scout compile --force                       # re-compile everything
+python -m scout compile --limit 10                    # cap entries per source
+python -m scout _smoke_gating                         # assert Navigator can't read compile-only sources
 ```
 
 ## API
@@ -148,14 +153,27 @@ python -m scout compile --force       # re-compile everything
 | `/manifest` | GET | Current manifest |
 | `/manifest/reload` | POST | Rebuild manifest |
 | `/sources/{id}/health` | GET | Per-source health ping |
-| `/compile/run` | POST | Run compile pass |
-| `/wiki/ingest` | POST | URL or text → `context/raw/` |
+| `/compile/run` | POST | Run compile pass (no body / `source_id` / `source_id`+`entry_id`) |
+| `/wiki/compile` | POST | Legacy alias for `/compile/run` |
+| `/wiki/ingest` | POST | URL or text → `context/raw/` (JSON body only) |
 | `/doctor/run` | POST | Doctor diagnostic pass (returns JSON report) |
 | `/doctor/health` | GET | Liveness probe |
 
 ## Scheduled tasks
 
-Compile runs every hour. Source health refresh every 15 minutes. Scout also sends a weekday 8 AM briefing, a noon inbox digest, a Monday learning summary, and a Friday review. Configurable in `app/main.py`.
+Seven schedules, all registered idempotently on startup (orphans from older revisions get pruned):
+
+| Task | Schedule | Endpoint |
+|---|---|---|
+| `wiki-compile` | Hourly on :00 (UTC) | `/compile/run` |
+| `source-health-check` | Every 15 min (UTC) | `/manifest/reload` |
+| `daily-briefing` | Weekdays 8 AM (ET) | `/teams/scout/runs` |
+| `inbox-digest` | Weekdays 12 PM (ET) | `/teams/scout/runs` |
+| `learning-summary` | Monday 10 AM (ET) | `/teams/scout/runs` |
+| `weekly-review` | Friday 5 PM (ET) | `/teams/scout/runs` |
+| `doctor-daily` | Daily 9 AM (ET) | `/doctor/run` |
+
+A one-shot compile also fires in a background thread at container boot so the wiki is populated within ~30s of startup (no need to wait for the top of the hour). Configurable in `app/main.py` → `_register_schedules`. When `SLACK_BOT_TOKEN` is set, the team-routed schedules post their results to `#scout-updates`.
 
 ## Environment
 

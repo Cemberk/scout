@@ -266,10 +266,6 @@ Every agent, the Leader, the compile runner, and the evals judge run on `OpenAIR
 | `REPOS_DIR` | No | Where CodeExplorer clones repos. Compose sets `/repos` (the `repos` named volume); local falls back to `.scout/repos` |
 | `S3_BUCKETS` | No | Comma-separated `bucket[:prefix]` — enables `S3Source` |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `S3_BUCKETS` is set |
-| `SCOUT_CONTEXT_DIR` | No | Context directory (default: `./context`) |
-| `SCOUT_RAW_DIR` | No | Override raw intake dir |
-| `SCOUT_COMPILED_DIR` | No | Override compiled wiki dir |
-| `SCOUT_VOICE_DIR` | No | Override voice-guide dir |
 | `DB_HOST/PORT/USER/PASS/DATABASE` | No | PostgreSQL config |
 | `RUNTIME_ENV` | No | `dev` for hot reload |
 
@@ -294,7 +290,7 @@ Every external store is a `Source`. Implementations live in `scout/sources/`. Ca
 from db import db_url, get_postgres_db, create_knowledge, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
 from scout import scout
 from scout.settings import (
-    SCOUT_CONTEXT_DIR, SCOUT_RAW_DIR, SCOUT_COMPILED_DIR,
+    CONTEXT_DIR, CONTEXT_RAW_DIR, CONTEXT_COMPILED_DIR, CONTEXT_VOICE_DIR,
     scout_knowledge, scout_learnings,
 )
 from scout.sources import get_sources, get_source
