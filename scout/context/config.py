@@ -145,7 +145,7 @@ def _build_one(kind: str, params: dict) -> Context:
 
         return SlackContext()
     if kind == "gmail":
-        from scout.context.gmail import GmailContext  # type: ignore[import-not-found]
+        from scout.context.gmail import GmailContext
 
         return GmailContext()
     if kind == "drive":
