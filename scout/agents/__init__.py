@@ -2,6 +2,10 @@ from scout.agents.code_explorer import code_explorer
 from scout.agents.compiler import compiler
 from scout.agents.doctor import doctor
 from scout.agents.engineer import engineer
-from scout.agents.navigator import navigator
+from scout.agents.explorer import explorer
 
-__all__ = ["navigator", "compiler", "code_explorer", "engineer", "doctor"]
+# Legacy alias — `from scout.agents import navigator` still resolves during
+# the migration. Removed in sub-step 1k when team.py switches to explorer.
+navigator = explorer
+
+__all__ = ["explorer", "navigator", "compiler", "code_explorer", "engineer", "doctor"]
