@@ -76,17 +76,19 @@ def build_wiki() -> WikiContext:
     """
     # Local imports avoid cycles — config is imported before the classes it builds.
     # Several targets land in later sub-steps; type: ignore keeps mypy quiet until then.
+    from scout.context.base import WikiBackend
     from scout.context.wiki import WikiContext
 
     spec = getenv("SCOUT_WIKI", "local:./context")
     kind, params = parse_spec(spec)
 
+    backend: WikiBackend
     if kind == "local":
         from scout.context.backends.local import LocalBackend
 
         backend = LocalBackend(params["path"])
     elif kind == "github":
-        from scout.context.backends.github import GithubBackend  # type: ignore[import-not-found]
+        from scout.context.backends.github import GithubBackend
 
         backend = GithubBackend(params["repo"])
     elif kind == "s3":

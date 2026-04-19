@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 import subprocess
 from os import getenv
 from pathlib import Path
@@ -21,40 +20,10 @@ from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 from agno.tools.coding import CodingTools
 
+from scout.context.backends._git import clone_url, ensure_clone, repo_dir_name, run
 from scout.context.base import Answer, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
-
-
-def _repo_dir_name(repo: str) -> str:
-    """Normalize an 'owner/name' or URL to a filesystem-safe directory name."""
-    cleaned = repo.strip()
-    if cleaned.startswith("http://") or cleaned.startswith("https://") or cleaned.startswith("git@"):
-        stem = cleaned.rsplit("/", 1)[-1]
-        return stem[:-4] if stem.endswith(".git") else stem
-    return cleaned.replace("/", "__")
-
-
-def _clone_url(repo: str, token: str) -> str:
-    """Build the clone URL. For 'owner/name' shorthand, bake the token
-    into the URL if present; full URLs are passed through."""
-    if repo.startswith(("http://", "https://", "git@")):
-        return repo
-    if token:
-        return f"https://{token}@github.com/{repo}.git"
-    return f"https://github.com/{repo}.git"
-
-
-def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 60) -> tuple[int, str, str]:
-    """Run a command, capture output, return (rc, stdout, stderr)."""
-    proc = subprocess.run(
-        cmd,
-        cwd=str(cwd) if cwd else None,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    return proc.returncode, proc.stdout, proc.stderr
 
 
 class GithubContext:
@@ -74,7 +43,7 @@ class GithubContext:
         self.id = f"github:{repo}"
         self.name = repo
         default_root = Path(getenv("REPOS_DIR", ".scout/repos"))
-        self.clone_dir = Path(clone_dir) if clone_dir else default_root / _repo_dir_name(repo)
+        self.clone_dir = Path(clone_dir) if clone_dir else default_root / repo_dir_name(repo)
         self._agent: Agent | None = None
 
     # ------------------------------------------------------------------
@@ -83,9 +52,9 @@ class GithubContext:
 
     def health(self) -> HealthStatus:
         token = getenv("GITHUB_ACCESS_TOKEN", "")
-        url = _clone_url(self.repo, token)
+        url = clone_url(self.repo, token)
         try:
-            rc, _, err = _run(["git", "ls-remote", "--heads", url], timeout=20)
+            rc, _, err = run(["git", "ls-remote", "--heads", url], timeout=20)
         except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
             return HealthStatus(HealthState.DISCONNECTED, f"ls-remote failed: {exc}")
         if rc != 0:
@@ -95,23 +64,7 @@ class GithubContext:
     def _ensure_clone(self) -> Path:
         """Clone on first call; fetch+reset on subsequent calls."""
         token = getenv("GITHUB_ACCESS_TOKEN", "")
-        url = _clone_url(self.repo, token)
-
-        if not (self.clone_dir / ".git").exists():
-            if self.clone_dir.exists():
-                shutil.rmtree(self.clone_dir)
-            self.clone_dir.parent.mkdir(parents=True, exist_ok=True)
-            rc, _, err = _run(
-                ["git", "clone", "--depth", "1", "--branch", self.branch, url, str(self.clone_dir)],
-                timeout=300,
-            )
-            if rc != 0:
-                raise RuntimeError(f"git clone failed: {err.strip()}")
-        else:
-            # Fast-forward to origin/<branch>. Silent on failure — the
-            # clone is still usable, just possibly stale.
-            _run(["git", "fetch", "origin", self.branch], cwd=self.clone_dir, timeout=60)
-            _run(["git", "reset", "--hard", f"origin/{self.branch}"], cwd=self.clone_dir, timeout=60)
+        ensure_clone(self.repo, self.clone_dir, self.branch, token, shallow=True)
         return self.clone_dir
 
     # ------------------------------------------------------------------
@@ -147,7 +100,7 @@ class GithubContext:
 
     def _build_agent(self) -> Agent:
         return Agent(
-            id=f"github-context-{_repo_dir_name(self.repo)}",
+            id=f"github-context-{repo_dir_name(self.repo)}",
             name=f"GithubContext({self.repo})",
             role=f"Read-only exploration of the {self.repo} git repo",
             model=OpenAIResponses(id="gpt-5.4"),
@@ -178,7 +131,7 @@ def _git_tools(clone_dir: Path) -> list:
         args = ["git", "log", f"-n{limit}", "--pretty=format:%h %ad %an %s", "--date=short"]
         if path:
             args.extend(["--", path])
-        rc, out, err = _run(args, cwd=clone_dir, timeout=30)
+        rc, out, err = run(args, cwd=clone_dir, timeout=30)
         if rc != 0:
             return json.dumps({"error": err.strip()})
         return out
@@ -186,7 +139,7 @@ def _git_tools(clone_dir: Path) -> list:
     @tool
     def git_blame(path: str, line_start: int = 1, line_end: int = 200) -> str:
         """Blame for a range of lines in a file."""
-        rc, out, err = _run(
+        rc, out, err = run(
             ["git", "blame", "-L", f"{line_start},{line_end}", path],
             cwd=clone_dir,
             timeout=30,
@@ -201,7 +154,7 @@ def _git_tools(clone_dir: Path) -> list:
         args = ["git", "diff", ref1, ref2]
         if path:
             args.extend(["--", path])
-        rc, out, err = _run(args, cwd=clone_dir, timeout=30)
+        rc, out, err = run(args, cwd=clone_dir, timeout=30)
         if rc != 0:
             return json.dumps({"error": err.strip()})
         return out[:50_000]  # cap huge diffs
@@ -209,7 +162,7 @@ def _git_tools(clone_dir: Path) -> list:
     @tool
     def git_show(ref: str) -> str:
         """Show a commit's message + diff."""
-        rc, out, err = _run(["git", "show", ref], cwd=clone_dir, timeout=30)
+        rc, out, err = run(["git", "show", ref], cwd=clone_dir, timeout=30)
         if rc != 0:
             return json.dumps({"error": err.strip()})
         return out[:50_000]
