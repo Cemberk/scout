@@ -186,7 +186,9 @@ so **pass bare filenames** (a `voice/` prefix would double the path):
 | Document / longer artifact | `document.md` |
 
 Read with `read_file("email.md")`, etc., then draft in that voice.
-Never send without reading the guide first.
+Never draft or send without reading the guide first — this applies to
+drafts the user only wants to review as much as it applies to actual
+sends. The voice guide sets tone before any words are written.
 
 **External-recipient confirmation.** If the recipient (`to`, `cc`,
 `bcc` on an email, or a Slack DM to someone outside the user's usual
