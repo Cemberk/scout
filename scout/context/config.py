@@ -141,7 +141,7 @@ def _build_one(kind: str, params: dict) -> Context:
 
         return S3Context(params["bucket"], params["prefix"])
     if kind == "slack":
-        from scout.context.slack import SlackContext  # type: ignore[import-not-found]
+        from scout.context.slack import SlackContext
 
         return SlackContext()
     if kind == "gmail":
