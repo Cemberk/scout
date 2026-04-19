@@ -155,10 +155,7 @@ def _build_fixture(case: Case) -> Fixture:
             ),
         ]
         wiki = _stub_wiki(
-            (
-                "The onboarding article describes the first-week checklist. "
-                "Source: compiled/onboarding-3f7a.md"
-            ),
+            ("The onboarding article describes the first-week checklist. Source: compiled/onboarding-3f7a.md"),
             hits=wiki_hits,
         )
         contexts = [
