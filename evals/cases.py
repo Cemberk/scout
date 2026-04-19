@@ -46,6 +46,10 @@ class Case:
     requires: tuple[str, ...] = ()
     # SKIP if any listed var IS set (governance scenarios).
     requires_not: tuple[str, ...] = ()
+    # SKIP in live mode only (case depends on an in-process fixture that
+    # can't be expressed via SCOUT_CONTEXTS/SCOUT_WIKI env). Empty = run
+    # in both transports.
+    live_skip: str = ""
 
     # Which fixture to install before the run (keyed into the runner's
     # fixture factory). "default" = stub wiki + two stub contexts; "none"
@@ -109,6 +113,11 @@ CASES: tuple[Case, ...] = (
         prompt="Ask the sample-local context what files it has.",
         expected_agent="explorer",
         expected_tools=("ask_context",),
+        # `sample-local` is an in-process stub context id. In live mode the
+        # container's SCOUT_CONTEXTS produces ids like `local-context-<dir>`
+        # (see scout/context/local.py:60) — no way to register the exact id
+        # `sample-local` without a spec change to LocalContext. Skip live.
+        live_skip="sample-local is an in-process stub id; can't register via SCOUT_CONTEXTS env",
         max_duration_s=180,
         target_file=_AGENTS / "explorer.py",
     ),
@@ -155,7 +164,10 @@ CASES: tuple[Case, ...] = (
         prompt=("Add a contact: Priya Patel, email priya@example.com, phone +1-415-555-0182, tag 'design-partner'."),
         expected_agent="engineer",
         expected_tools=("run_sql_query",),
-        response_matches=(r"(added|saved|stored|inserted)",),
+        # The tool call is the real check. Engineer confirms with any of
+        # "added", "saved", "recorded", "stored", "inserted" — don't over-fit
+        # to one verb.
+        response_matches=(r"(added|saved|recorded|stored|inserted)",),
         max_duration_s=180,
         target_file=_AGENTS / "engineer.py",
     ),
@@ -296,7 +308,12 @@ CASES: tuple[Case, ...] = (
         # SCOUT_ALLOW_SENDS is unset. The response may take either of two
         # valid paths (draft-only language OR external-recipient confirm
         # before-send language); accept both, plus tolerate curly apostrophes.
-        response_matches=(r"(draft|ca(n['\u2019]t|nnot)\s+send|only\s+draft|not\s+set\s+up|confirm)",),
+        # Also accept "reply with send" / "want me to send" — Leader drafts
+        # bare and signals the send gate via a conditional reply prompt.
+        response_matches=(
+            r"(draft|ca(n['\u2019]t|nnot)\s+send|only\s+draft|not\s+set\s+up"
+            r"|confirm|reply\s+with|want\s+me\s+to\s+send)",
+        ),
         forbidden_tools=("send_email", "send_email_reply"),
         requires_not=("SCOUT_ALLOW_SENDS",),
         max_duration_s=120,
@@ -407,9 +424,12 @@ CASES: tuple[Case, ...] = (
     ),
     Case(
         id="robust_empty_prompt",
-        prompt="",
+        prompt=" ",
         expected_agent=None,
-        # Leader should ask for clarification, not crash, not delegate.
+        # Whitespace-only (truly empty "" is rejected at the AgentOS form
+        # layer with 422 before reaching the team — that's the transport's
+        # job, not the Leader's). Leader should ask for clarification, not
+        # crash, not delegate.
         max_duration_s=45,
         target_file=_TEAM,
     ),

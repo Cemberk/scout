@@ -217,13 +217,15 @@ def _restore(prev_wiki: Any, prev_contexts: list[Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _skip_reason(case: Case) -> str | None:
+def _skip_reason(case: Case, *, live: bool = False) -> str | None:
     missing = [v for v in case.requires if not os.environ.get(v)]
     if missing:
         return f"missing env: {', '.join(missing)}"
     leaked = [v for v in case.requires_not if os.environ.get(v)]
     if leaked:
         return f"must-be-unset env is set: {', '.join(leaked)}"
+    if live and case.live_skip:
+        return case.live_skip
     return None
 
 
@@ -429,7 +431,7 @@ def run_case(case: Case, *, live: bool = False, base_url: str = "http://localhos
     """Execute one case. Install/restore the fixture around it."""
     transport = "live" if live else "in-process"
 
-    skip = _skip_reason(case)
+    skip = _skip_reason(case, live=live)
     if skip:
         return CaseResult(case_id=case.id, status="SKIPPED", duration_s=0.0, transport=transport, skipped_reason=skip)
 
