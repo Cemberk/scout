@@ -80,10 +80,11 @@ scout/
     └── redactor.py                 # Secret-stripping middleware
 
 context/
-├── voice/                          # Leader's drafting guides (read-only)
-│   ├── email.md
-│   ├── slack-message.md
-│   └── document.md
+├── voice/                          # Voice guides (read-only)
+│   ├── email.md                    #   Leader — email drafts
+│   ├── slack-message.md            #   Leader — Slack posts
+│   ├── document.md                 #   Leader — long-form drafts
+│   └── wiki-article.md             #   WikiContext.compile — article style
 └── raw/                            # Sample content LocalBackend reads in dev
 
 app/
@@ -95,9 +96,7 @@ db/
 ├── session.py                      # get_sql_engine (guarded) / get_readonly_engine
 ├── url.py                          # DB URL builder
 └── tables.py                       # Canonical DDL: scout_contacts / projects /
-                                    # notes / decisions. Drops legacy
-                                    # scout_knowledge / scout_compiled /
-                                    # scout_sources on startup.
+                                    # notes / decisions.
 
 evals/
 ├── cases.py                        # Behavioral Case dataclass + CASES tuple
@@ -185,8 +184,6 @@ Shipped tables under the `scout` schema (created on first startup via `db/tables
 | `scout_decisions` | Decisions made | `title`, `rationale`, `made_at DATE`, `tags TEXT[]` |
 
 Beyond these four, Engineer creates new `scout_*` tables on demand — always in the `scout` schema, always with the standard columns, always recording the new shape into `scout_learnings` afterward so Explorer can find it.
-
-The old `scout_knowledge` / `scout_compiled` / `scout_sources` tables are **dropped on every startup** (`db/tables.py` → `_LEGACY_DROP_TABLES`). Their replacements live elsewhere: wiki state in the backend, context registration in env.
 
 ## Learnings
 

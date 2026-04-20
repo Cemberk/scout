@@ -1,6 +1,5 @@
-"""Custom API routes for Scout — the §7.5 surface.
+"""Custom API routes for Scout
 
-```
 GET  /wiki/health              — wiki health
 POST /wiki/compile             — trigger compile
 POST /wiki/ingest              — ingest url/text
@@ -8,10 +7,6 @@ POST /wiki/query               — debug: ask the wiki
 GET  /contexts                 — list all contexts + wiki + health
 GET  /contexts/{id}/health     — single context or wiki health
 POST /contexts/{id}/query      — debug: ask one context/wiki directly
-```
-
-The active WikiContext + Context list are resolved via
-``scout.tools.ask_context`` — the same singletons the agents use.
 """
 
 from __future__ import annotations
@@ -143,14 +138,16 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
             rows.append(_health_row(ctx))
         return rows
 
-    @router.get("/contexts/{target_id}/health")
+    # :path lets target_id contain slashes — contexts like
+    # "github:agno-agi/agno" and "s3:bucket/prefix" otherwise 404.
+    @router.get("/contexts/{target_id:path}/health")
     def context_health(target_id: str):
         target = _target(target_id)
         if target is None:
             return JSONResponse({"error": f"unknown target {target_id}"}, status_code=404)
         return _health_row(target)
 
-    @router.post("/contexts/{target_id}/query")
+    @router.post("/contexts/{target_id:path}/query")
     def context_query(target_id: str, body: QueryRequest):
         target = _target(target_id)
         if target is None:

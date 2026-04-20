@@ -39,41 +39,10 @@ SCOUT_SCHEMA = "scout"
 _scout_engine: Engine | None = None
 _readonly_engine: Engine | None = None
 
-# ---------------------------------------------------------------------------
-# Non-scout schema write guard
-# ---------------------------------------------------------------------------
-# Matches DDL/DML that explicitly targets the ``public`` or ``ai`` schema.
-# Reads (SELECT FROM public.*) are allowed; writes are not.
-_NON_SCOUT_WRITE_RE = re.compile(
-    r"""(?ix)
-    # DDL targeting public/ai schema
-    (?:create|alter|drop)\s+
-    (?:or\s+replace\s+)?
-    (?:(?:temp|temporary|unlogged|materialized)\s+)?
-    (?:table|view|index|sequence|function|procedure|trigger|type)\s+
-    (?:if\s+(?:not\s+)?exists\s+)?
-    "?(?:public|ai)"?\s*\.
-    |
-    # DML targeting public/ai schema
-    insert\s+into\s+"?(?:public|ai)"?\s*\.
-    |
-    update\s+"?(?:public|ai)"?\s*\.
-    |
-    delete\s+from\s+"?(?:public|ai)"?\s*\.
-    |
-    truncate\s+(?:table\s+)?"?(?:public|ai)"?\s*\.
-    """,
-)
 
-
-def _guard_non_scout_writes(conn, cursor, statement, parameters, context, executemany):
-    """Reject DDL/DML targeting non-scout schemas on the Scout engine."""
-    if _NON_SCOUT_WRITE_RE.search(statement):
-        raise RuntimeError(
-            "Cannot write to public or ai schema from the Scout engine. "
-            "All CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, and TRUNCATE "
-            "operations must target the scout schema."
-        )
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def get_sql_engine() -> Engine:
@@ -87,9 +56,8 @@ def get_sql_engine() -> Engine:
     if _scout_engine is not None:
         return _scout_engine
     bootstrap = create_engine(db_url)
-    with bootstrap.connect() as conn:
+    with bootstrap.begin() as conn:
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCOUT_SCHEMA}"))
-        conn.commit()
     bootstrap.dispose()
     _scout_engine = create_engine(
         db_url,
@@ -106,12 +74,12 @@ def get_readonly_engine() -> Engine:
 
     Uses PostgreSQL's ``default_transaction_read_only`` so any INSERT,
     UPDATE, DELETE, CREATE, DROP, or ALTER is rejected at the database level.
-    Hand this to navigation agents (Navigator, Doctor, Leader) so their
+    Hand this to read-only agents (Explorer, Doctor, Leader) so their
     SQLTools cannot mutate state regardless of how they're prompted.
 
     Also sets ``search_path=scout,public`` so unqualified references like
     ``SELECT * FROM scout_notes`` resolve — matching the scout engine's
-    behaviour. Without this, Navigator's SQL would fail on anything but
+    behaviour. Without this, Explorer's SQL would fail on anything but
     ``scout.scout_notes``.
     """
     global _readonly_engine
@@ -162,3 +130,49 @@ def create_knowledge(name: str, table_name: str) -> Knowledge:
         ),
         contents_db=get_postgres_db(contents_table=f"{table_name}_contents"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Write guard for the scout engine
+# ---------------------------------------------------------------------------
+# Belt-and-suspenders on top of ``search_path=scout,public``. The regex below
+# fires SQLAlchemy's ``before_cursor_execute`` hook if a statement explicitly
+# names ``public.*`` or ``ai.*`` as a write target. Reads against those
+# schemas are allowed — Engineer's ``introspect_schema`` needs them.
+#
+# Scope: catches the shapes agents actually produce. Does NOT catch
+# ``CREATE SCHEMA``, ``COPY … FROM``, ``GRANT/REVOKE``, function side-effects,
+# or anonymous ``DO`` blocks — the DB-level grants + search_path are the
+# primary defense; this is the loud failure mode for the common case.
+
+
+_NON_SCOUT_WRITE_RE = re.compile(
+    r"""(?ix)
+    # DDL targeting public/ai schema
+    (?:create|alter|drop)\s+
+    (?:or\s+replace\s+)?
+    (?:(?:temp|temporary|unlogged|materialized)\s+)?
+    (?:table|view|index|sequence|function|procedure|trigger|type)\s+
+    (?:if\s+(?:not\s+)?exists\s+)?
+    "?(?:public|ai)"?\s*\.
+    |
+    # DML targeting public/ai schema
+    insert\s+into\s+"?(?:public|ai)"?\s*\.
+    |
+    update\s+"?(?:public|ai)"?\s*\.
+    |
+    delete\s+from\s+"?(?:public|ai)"?\s*\.
+    |
+    truncate\s+(?:table\s+)?"?(?:public|ai)"?\s*\.
+    """,
+)
+
+
+def _guard_non_scout_writes(conn, cursor, statement, parameters, context, executemany) -> None:
+    """Reject DDL/DML targeting non-scout schemas on the Scout engine."""
+    if _NON_SCOUT_WRITE_RE.search(statement):
+        raise RuntimeError(
+            "Cannot write to public or ai schema from the Scout engine. "
+            "All CREATE, ALTER, DROP, INSERT, UPDATE, DELETE, and TRUNCATE "
+            "operations must target the scout schema."
+        )

@@ -18,11 +18,6 @@ User data (canonical, Day-1 shape for the Engineer agent):
 Every user-data table carries the same standard columns:
 ``id SERIAL PK``, ``user_id TEXT NOT NULL``, ``created_at TIMESTAMPTZ``.
 Beyond these four, the Engineer agent creates tables on demand.
-
-The old pipeline tables (``scout_compiled``, ``scout_sources``) and the
-old ``scout_knowledge`` routing store are dropped on startup — their
-replacement lives inside WikiContext's backend (state JSON) and in
-``scout_learnings`` respectively.
 """
 
 from __future__ import annotations
@@ -80,26 +75,6 @@ DDL = [
     """,
 ]
 
-# One-shot drop of tables that belong to the old source/compile/manifest
-# layer. Runs on every startup — safe because DROP TABLE IF EXISTS is a
-# no-op once the table is gone, and the replacements live elsewhere:
-# - scout_compiled: state JSON inside WikiContext's backend
-# - scout_sources:  env-derived at startup (SCOUT_CONTEXTS / SCOUT_WIKI)
-# - scout_knowledge: routing content folds into scout_learnings
-_LEGACY_DROP_TABLES = (
-    "scout_compiled",
-    "scout_sources",
-    "scout_knowledge",
-)
-
-_LIVE_TABLES = (
-    "scout_contacts",
-    "scout_projects",
-    "scout_notes",
-    "scout_decisions",
-    "scout_learnings",
-)
-
 
 def create_tables() -> None:
     """Apply the idempotent DDL. Safe to call on every startup."""
@@ -107,20 +82,6 @@ def create_tables() -> None:
     with engine.begin() as conn:
         for stmt in DDL:
             conn.execute(text(stmt))
-    # Drop the legacy tables replaced by WikiContext + env-derived config.
-    for table in _LEGACY_DROP_TABLES:
-        try:
-            with engine.begin() as conn:
-                conn.execute(text(f"DROP TABLE IF EXISTS {SCOUT_SCHEMA}.{table} CASCADE"))
-        except Exception:
-            continue
-    # Strip workspace_id from any live table that still has it (older installs).
-    for table in _LIVE_TABLES:
-        try:
-            with engine.begin() as conn:
-                conn.execute(text(f"ALTER TABLE {SCOUT_SCHEMA}.{table} DROP COLUMN IF EXISTS workspace_id CASCADE"))
-        except Exception:
-            continue
 
 
 if __name__ == "__main__":

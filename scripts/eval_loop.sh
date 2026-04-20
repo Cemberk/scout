@@ -45,7 +45,7 @@ git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || IS_GIT=
 for i in $(seq 1 "${MAX_ATTEMPTS}"); do
     echo -e "\n${BOLD}=== attempt ${i}/${MAX_ATTEMPTS} (case: ${CASE}) ===${NC}\n"
 
-    if python -m evals.live run --case "${CASE}" --base-url "${BASE_URL}"; then
+    if python -m evals --live --case "${CASE}" --base-url "${BASE_URL}"; then
         echo -e "\n${GREEN}${BOLD}PASS on attempt ${i}${NC}"
         exit 0
     fi
@@ -70,7 +70,7 @@ for i in $(seq 1 "${MAX_ATTEMPTS}"); do
 
     echo -e "${BOLD}restarting ${SERVICE}...${NC}"
     docker compose restart "${SERVICE}" >/dev/null
-    # API needs a moment to re-register schedules + rebuild manifest.
+    # API needs a moment to re-wire the wiki + contexts on lifespan.
     sleep 6
 done
 

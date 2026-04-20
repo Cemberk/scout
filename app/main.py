@@ -1,11 +1,6 @@
 """
-Scout AgentOS
-=============
-
-The main entry point for Scout.
-
-Run:
-    python -m app.main
+Scout Entrypoint
+================
 """
 
 from contextlib import asynccontextmanager
@@ -35,8 +30,6 @@ scheduler_base_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
 # ---------------------------------------------------------------------------
 # Interfaces — Slack
 # ---------------------------------------------------------------------------
-# Channel scoping is configured via the Slack app (install to channels).
-# No server-side allowlist middleware.
 interfaces: list = []
 if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
     from agno.os.interfaces.slack import Slack
@@ -46,18 +39,19 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
             team=scout,
             token=SLACK_BOT_TOKEN,
             signing_secret=SLACK_SIGNING_SECRET,
-            reply_to_mentions_only=False,
+            loading_messages=["Thinking...", "Working...", "Simmering..."],
+            reply_to_mentions_only=True,
         )
     )
 
 
 # ---------------------------------------------------------------------------
-# Lifespan — tables + wiki/contexts wire-up
+# Lifespan — Create tables, wire up wiki
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     _create_tables()
-    _wire_wiki_and_contexts()
+    _build_wiki_and_contexts()
     yield
 
 
@@ -93,12 +87,12 @@ def _create_tables() -> None:
         from db.tables import create_tables
 
         create_tables()
-        print("[scout] Tables: applied")
+        print("[scout] Tables: created")
     except Exception as e:
         print(f"[scout] Tables: failed: {e}")
 
 
-def _wire_wiki_and_contexts() -> None:
+def _build_wiki_and_contexts() -> None:
     """Build the WikiContext + Context list from env and publish them
     via ``scout.tools.ask_context.set_runtime`` so the Explorer /
     Engineer / Doctor tools can resolve the active instances.
