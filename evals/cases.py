@@ -112,10 +112,7 @@ CASES: tuple[Case, ...] = (
     ),
     Case(
         id="engineer_create_table",
-        prompt=(
-            "Create a new table scout_readings — columns title, url, read_at (date), "
-            "rating (int 1-5), notes."
-        ),
+        prompt=("Create a new table scout_readings — columns title, url, read_at (date), rating (int 1-5), notes."),
         expected_agent="engineer",
         response_contains=("scout_readings",),
         max_duration_s=240,
