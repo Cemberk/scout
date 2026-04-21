@@ -1,13 +1,12 @@
-"""LLM-scored quality evals.
+"""Evaluate answer quality via LLM-as-judge.
 
 Graders the behavioral tier can't express — answer quality, citation
-discipline, routing clarity. Judges run against the real context set
-(``fixture="real"``), so they exercise actual web traffic and require
-``OPENAI_API_KEY`` plus whichever backend the container is using
-(``PARALLEL_API_KEY`` or ``EXA_API_KEY``).
+discipline, routing clarity. Cases marked ``fixture="real"`` run
+against env-built contexts and hit live providers; cases marked
+``fixture="default"`` run against the stub.
 
-Every judged case scores 0–10 via ``AgentAsJudgeEval``; pass threshold
-is ``passing_score`` on the ``Judged`` dataclass (default 7.0).
+Each case scores 0–10 via ``AgentAsJudgeEval``; pass threshold is
+``passing_score`` on the ``Judged`` dataclass (default 7.0).
 """
 
 from __future__ import annotations
@@ -162,6 +161,3 @@ def run_all_judged(case_id: str | None = None) -> list[JudgedResult]:
     """Run every judged case (or one if case_id given)."""
     selected = [JUDGED_BY_ID[case_id]] if case_id else list(JUDGED)
     return [run_judged(c) for c in selected]
-
-
-__all__ = ["JUDGED", "JUDGED_BY_ID", "Judged", "JudgedResult", "run_all_judged", "run_judged"]

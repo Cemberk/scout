@@ -2,163 +2,159 @@
 
     python -m evals                        # behavioral, in-process, all cases
     python -m evals --case <id>            # single case
-    python -m evals --live                 # same cases via Docker SSE
+    python -m evals --live                 # same cases via SSE
     python -m evals --verbose              # show responses + tool previews
 
-    python -m evals wiring                 # code-level invariants (no LLM)
+    python -m evals wiring                 # structural invariants (no LLM)
     python -m evals judges                 # LLM-scored quality tier
     python -m evals judges --case <id>
 
-Exit code: 0 if all PASS or SKIP, 1 if any FAIL or ERROR.
+Exit 0 if all PASS or SKIP, non-zero if any FAIL or ERROR.
 """
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
 
-from evals.cases import CASES, REPO_ROOT, get
-from evals.runner import CaseResult, run_case, write_diagnostic
+import typer
+from rich.console import Console
 
-_COLORS = {"PASS": "\033[32m", "FAIL": "\033[31m", "ERROR": "\033[31m", "SKIPPED": "\033[33m"}
-_RESET = "\033[0m"
+app = typer.Typer(add_completion=False, no_args_is_help=False, pretty_exceptions_show_locals=False)
+console = Console()
+
+_STATUS_STYLE = {"PASS": "green", "FAIL": "red", "ERROR": "red", "SKIPPED": "yellow"}
 
 
 def _tag(status: str) -> str:
-    if sys.stdout.isatty():
-        return f"{_COLORS.get(status, '')}{status:<7}{_RESET}"
-    return f"{status:<7}"
+    style = _STATUS_STYLE.get(status, "")
+    return f"[{style}]{status:<7}[/{style}]" if style else f"{status:<7}"
 
 
 # ---------------------------------------------------------------------------
-# Behavioral dispatch (default)
+# Behavioral (default)
 # ---------------------------------------------------------------------------
 
 
-def _print_case(r: CaseResult, diagnostic: Path | None, verbose: bool) -> None:
-    print(f"[{_tag(r.status)}] {r.case_id:<40} ({r.duration_s:.1f}s) [{r.transport}]")
-    if r.skipped_reason:
-        print(f"            {r.skipped_reason}")
-    for f in r.failures:
-        print(f"            - {f}")
-    if diagnostic is not None:
-        try:
-            rel = diagnostic.relative_to(REPO_ROOT)
-            print(f"            → {rel}")
-        except ValueError:
-            print(f"            → {diagnostic}")
-    if verbose and r.response:
-        preview = r.response.replace("\n", " ")[:200]
-        print(f"            response: {preview}")
-        if r.tool_names:
-            print(f"            tools: {r.tool_names}")
+@app.callback(invoke_without_command=True)
+def behavioral(
+    ctx: typer.Context,
+    case: str | None = typer.Option(None, "--case", help="Run only this case id"),
+    live: bool = typer.Option(False, "--live", help="Run via SSE against a running scout-api"),
+    base_url: str = typer.Option("http://localhost:8000", "--base-url"),
+    verbose: bool = typer.Option(False, "--verbose", help="Show response + tool previews"),
+) -> None:
+    """Behavioral cases (default when no subcommand given)."""
+    if ctx.invoked_subcommand is not None:
+        return
 
+    from evals.cases import CASES, REPO_ROOT, get
+    from evals.runner import CaseResult, run_case, write_diagnostic
 
-def _dispatch_behavioral(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="python -m evals", description="Scout behavioral evals")
-    p.add_argument("--case", help="Run only this case id")
-    p.add_argument("--live", action="store_true", help="Run via SSE against a running scout-api")
-    p.add_argument("--base-url", default="http://localhost:8000")
-    p.add_argument("--verbose", action="store_true", help="Show response + tool previews")
-    args = p.parse_args(argv)
-
-    cases = [get(args.case)] if args.case else list(CASES)
+    cases = [get(case)] if case else list(CASES)
     results: list[CaseResult] = []
-    for i, case in enumerate(cases, 1):
-        print(f"\n[{i}/{len(cases)}] {case.id}  {case.prompt[:60]!r}")
-        r = run_case(case, live=args.live, base_url=args.base_url)
-        diag = write_diagnostic(case, r) if r.status == "FAIL" else None
-        _print_case(r, diag, args.verbose)
+    for i, c in enumerate(cases, 1):
+        console.print(f"\n[bold][{i}/{len(cases)}][/bold] {c.id}  [dim]{c.prompt[:60]!r}[/dim]")
+        r = run_case(c, live=live, base_url=base_url)
+        diag = write_diagnostic(c, r) if r.status == "FAIL" else None
+        _print_case(r, diag, verbose, REPO_ROOT)
         results.append(r)
 
     _print_summary(results)
-    return 1 if any(r.status in ("FAIL", "ERROR") for r in results) else 0
-
-
-def _print_summary(results: list[CaseResult]) -> None:
-    counts = {s: sum(1 for r in results if r.status == s) for s in ("PASS", "FAIL", "ERROR", "SKIPPED")}
-    total_s = round(sum(r.duration_s for r in results), 1)
-    bar = "=" * 60
-    print(f"\n{bar}")
-    print(
-        f"{counts['PASS']} passed, {counts['FAIL']} failed, "
-        f"{counts['ERROR']} errored, {counts['SKIPPED']} skipped  ({total_s}s)"
-    )
-    print(f"{bar}\n")
+    raise typer.Exit(1 if any(r.status in ("FAIL", "ERROR") for r in results) else 0)
 
 
 # ---------------------------------------------------------------------------
-# Wiring dispatch
+# Wiring
 # ---------------------------------------------------------------------------
 
 
-def _dispatch_wiring(argv: list[str]) -> int:
+@app.command()
+def wiring() -> None:
+    """Structural invariants — no LLM, runs in under a second."""
     from evals.wiring import run_all
 
-    p = argparse.ArgumentParser(prog="python -m evals wiring", description="Scout wiring invariants")
-    p.add_argument("--verbose", action="store_true")
-    args = p.parse_args(argv)
-
-    results = run_all(verbose=args.verbose)
+    results = run_all()
     for r in results:
-        tag = _tag("PASS" if r.passed else "FAIL")
-        print(f"[{tag}] {r.id} {r.name}")
+        console.print(f"[{_tag('PASS' if r.passed else 'FAIL')}] {r.id} {r.name}")
         if not r.passed:
-            print(f"            - {r.detail}")
+            console.print(f"            [red]- {r.detail}[/red]")
+
     passed = sum(1 for r in results if r.passed)
-    failed = sum(1 for r in results if not r.passed)
-    bar = "=" * 60
-    print(f"\n{bar}\nwiring: {passed} passed, {failed} failed\n{bar}\n")
-    return 0 if failed == 0 else 1
+    failed = len(results) - passed
+    _print_bar(f"wiring: {passed} passed, {failed} failed")
+    raise typer.Exit(0 if failed == 0 else 1)
 
 
 # ---------------------------------------------------------------------------
-# Judges dispatch
+# Judges
 # ---------------------------------------------------------------------------
 
 
-def _dispatch_judges(argv: list[str]) -> int:
+@app.command()
+def judges(
+    case: str | None = typer.Option(None, "--case", help="Run only this judged case id"),
+    verbose: bool = typer.Option(False, "--verbose"),
+) -> None:
+    """LLM-scored quality tier."""
     from evals.judges import run_all_judged
 
-    p = argparse.ArgumentParser(prog="python -m evals judges", description="Scout judged-quality tier")
-    p.add_argument("--case", help="Run only this judged case id")
-    p.add_argument("--verbose", action="store_true")
-    args = p.parse_args(argv)
-
-    results = run_all_judged(case_id=args.case)
+    results = run_all_judged(case_id=case)
     for r in results:
         score = f" score={r.score}" if r.score is not None else ""
-        print(f"[{_tag(r.status)}] {r.id:<40} ({r.duration_s:.1f}s){score}")
+        console.print(f"[{_tag(r.status)}] {r.id:<40} ({r.duration_s:.1f}s){score}")
         if r.reason and r.status != "PASS":
-            print(f"            reason: {r.reason[:200]}")
+            console.print(f"            [dim]reason:[/dim] {r.reason[:200]}")
         for f in r.failures:
-            print(f"            - {f}")
-        if args.verbose and r.response:
+            console.print(f"            [red]- {f}[/red]")
+        if verbose and r.response:
             preview = r.response.replace("\n", " ")[:200]
-            print(f"            response: {preview}")
+            console.print(f"            [dim]response:[/dim] {preview}")
 
-    total = len(results)
     passed = sum(1 for r in results if r.status == "PASS")
     failed = sum(1 for r in results if r.status in ("FAIL", "ERROR"))
+    _print_bar(f"judges: {passed}/{len(results)} passed, {failed} failed")
+    raise typer.Exit(0 if failed == 0 else 1)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _print_case(r, diag: Path | None, verbose: bool, repo_root: Path) -> None:
+    console.print(f"[{_tag(r.status)}] {r.case_id:<40} ({r.duration_s:.1f}s) [dim]{r.transport}[/dim]")
+    if r.skipped_reason:
+        console.print(f"            [yellow]{r.skipped_reason}[/yellow]")
+    for f in r.failures:
+        console.print(f"            [red]- {f}[/red]")
+    if diag is not None:
+        try:
+            rel = diag.relative_to(repo_root)
+        except ValueError:
+            rel = diag
+        console.print(f"            [dim]→ {rel}[/dim]")
+    if verbose and r.response:
+        preview = r.response.replace("\n", " ")[:200]
+        console.print(f"            [dim]response:[/dim] {preview}")
+        if r.tool_names:
+            console.print(f"            [dim]tools:[/dim] {r.tool_names}")
+
+
+def _print_summary(results: list) -> None:
+    counts = {s: sum(1 for r in results if r.status == s) for s in ("PASS", "FAIL", "ERROR", "SKIPPED")}
+    total_s = round(sum(r.duration_s for r in results), 1)
+    _print_bar(
+        f"[green]{counts['PASS']} passed[/green], "
+        f"[red]{counts['FAIL']} failed[/red], "
+        f"[red]{counts['ERROR']} errored[/red], "
+        f"[yellow]{counts['SKIPPED']} skipped[/yellow]  [dim]({total_s}s)[/dim]"
+    )
+
+
+def _print_bar(line: str) -> None:
     bar = "=" * 60
-    print(f"\n{bar}\njudges: {passed}/{total} passed, {failed} failed\n{bar}\n")
-    return 0 if failed == 0 else 1
-
-
-# ---------------------------------------------------------------------------
-# Top-level
-# ---------------------------------------------------------------------------
-
-
-def main() -> int:
-    argv = sys.argv[1:]
-    if argv and argv[0] == "wiring":
-        return _dispatch_wiring(argv[1:])
-    if argv and argv[0] == "judges":
-        return _dispatch_judges(argv[1:])
-    return _dispatch_behavioral(argv)
+    console.print(f"\n{bar}\n{line}\n{bar}\n")
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    app()

@@ -1,40 +1,60 @@
-"""Wiring invariants — structural checks about agent + context composition.
+"""Evaluate structural wiring.
 
-No LLM, no network, no ``team.run()``. Each check binds to the shape
-the architecture commits to; regressions fail loudly.
+Checks:
+    W1  Explorer's bound tools are read-only.
+    W2  Engineer wires SQL + introspect + learnings + reasoning; no outbound.
+    W3  Doctor wires status + diagnostic + learnings; no writers.
+    W4  Leader has no tools (pure router).
+    W5  Every registered ``ContextProvider`` has the expected shape.
 
-W1  Explorer's bound tools are read-only.
-W2  Engineer's tools are SQL + introspect + learnings + reasoning; no outbound.
-W3  Doctor's tools are status + diagnostic + learnings; no writers.
-W4  Leader has no tools (pure router).
-W5  Every registered ``ContextProvider`` has the expected shape.
+Each check is a function that returns None on PASS and raises
+``AssertionError`` on FAIL. Zero LLM, zero network — runs in under a second.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any
 
 
-def _tool_names(tools: Iterable[Any] | None) -> list[str]:
+@dataclass
+class InvariantResult:
+    id: str
+    name: str
+    passed: bool
+    detail: str = ""
+
+
+FORBIDDEN_OUTBOUND = ("send_email", "send_message", "create_event", "post_message", "delete_event")
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _tool_names(tools: Any) -> list[str]:
     """Best-effort extraction of tool names from an agent's ``tools=`` list."""
-    names: list[str] = []
     if tools is None:
-        return names
+        return []
     if callable(tools) and not hasattr(tools, "__iter__"):
         try:
             tools = tools()
         except Exception:
-            return names
+            return []
+
+    names: list[str] = []
     for item in tools:
         name = getattr(item, "name", None)
         if isinstance(name, str) and name:
             names.append(name)
             continue
+
         fns = getattr(item, "functions", None)
         if isinstance(fns, dict):
             names.extend(str(k) for k in fns.keys())
             continue
+
         sub = getattr(item, "tools", None)
         if isinstance(sub, (list, tuple)):
             for t in sub:
@@ -42,163 +62,114 @@ def _tool_names(tools: Iterable[Any] | None) -> list[str]:
                 if isinstance(n, str) and n:
                     names.append(n)
             continue
+
         entry = getattr(item, "entrypoint", None)
         if callable(entry):
             fn_name = getattr(entry, "__name__", None)
             if isinstance(fn_name, str) and fn_name:
                 names.append(fn_name)
                 continue
-        cls = type(item).__name__
-        if cls:
-            names.append(f"<{cls}>")
+
+        names.append(f"<{type(item).__name__}>")
+
     return names
 
 
-@dataclass
-class InvariantResult:
-    """Result from one invariant check."""
+def _assert_has(names: list[str], wanted: tuple[str, ...], agent: str) -> None:
+    missing = [w for w in wanted if not any(w in n for n in names)]
+    if missing:
+        raise AssertionError(f"{agent} missing expected tool(s) {missing}. Full tool list: {names}")
 
-    id: str
-    name: str
-    passed: bool
-    detail: str = ""
+
+def _assert_no_outbound(names: list[str], agent: str) -> None:
+    leaks = [n for n in names for bad in FORBIDDEN_OUTBOUND if bad in n]
+    if leaks:
+        raise AssertionError(f"{agent} has outbound tool(s) it shouldn't: {leaks}. Full tool list: {names}")
 
 
 # ---------------------------------------------------------------------------
-# W1 — Explorer readonly
+# Checks
 # ---------------------------------------------------------------------------
 
 
 def w1_explorer_readonly() -> None:
-    """Explorer's tool list must be read-only and include expected helpers."""
     from scout.agents.explorer import explorer
     from scout.contexts import build_contexts, get_contexts, set_runtime
 
-    prev_contexts = get_contexts()
+    prev = get_contexts()
     try:
         set_runtime(build_contexts())
-        names = _tool_names(explorer.tools or [])  # type: ignore[arg-type]
+        names = _tool_names(explorer.tools)
     finally:
-        set_runtime(prev_contexts)
+        set_runtime(prev)
 
-    forbidden = ("send_email", "send_message", "create_event", "post_message", "delete_event")
-    leaks = [n for n in names for bad in forbidden if bad in n]
-    if leaks:
-        raise AssertionError(f"Explorer has forbidden tool(s): {leaks}. Full tool list: {names}")
-
-    expected = ("list_contexts", "update_learnings")
-    missing = [want for want in expected if not any(want in n for n in names)]
-    if missing:
-        raise AssertionError(f"Explorer missing expected tool(s) {missing}. Full tool list: {names}")
-
-
-# ---------------------------------------------------------------------------
-# W2 — Engineer write-shape
-# ---------------------------------------------------------------------------
+    _assert_no_outbound(names, "Explorer")
+    _assert_has(names, ("list_contexts", "update_learnings"), "Explorer")
 
 
 def w2_engineer_write_shape() -> None:
-    """Engineer has SQL + introspect + learnings + reasoning; no outbound."""
     from scout.agents.engineer import engineer
 
-    names = _tool_names(engineer.tools or [])  # type: ignore[arg-type]
-    expected = ("introspect_schema", "update_learnings")
-    missing = [want for want in expected if not any(want in n for n in names)]
-    if missing:
-        raise AssertionError(f"Engineer missing expected tool(s) {missing}. Full tool list: {names}")
-
-    forbidden = ("send_email", "send_message", "create_event", "post_message", "delete_event")
-    leaks = [n for n in names for bad in forbidden if bad in n]
-    if leaks:
-        raise AssertionError(f"Engineer has outbound tool(s) it shouldn't: {leaks}. Full tool list: {names}")
-
-
-# ---------------------------------------------------------------------------
-# W3 — Doctor readonly
-# ---------------------------------------------------------------------------
+    names = _tool_names(engineer.tools)
+    _assert_has(names, ("introspect_schema", "update_learnings"), "Engineer")
+    _assert_no_outbound(names, "Engineer")
 
 
 def w3_doctor_readonly() -> None:
     from scout.agents.doctor import doctor
 
-    names = _tool_names(doctor.tools or [])  # type: ignore[arg-type]
-    expected = ("status", "status_all", "db_status", "env_report", "update_learnings")
-    missing = [want for want in expected if not any(want in n for n in names)]
-    if missing:
-        raise AssertionError(f"Doctor missing expected tool(s) {missing}. Full tool list: {names}")
-
-    forbidden = ("send_email", "send_message", "create_event", "post_message", "delete_event")
-    leaks = [n for n in names for bad in forbidden if bad in n]
-    if leaks:
-        raise AssertionError(f"Doctor has writer/send tool(s) it shouldn't: {leaks}. Full tool list: {names}")
-
-
-# ---------------------------------------------------------------------------
-# W4 — Leader has no tools (pure router)
-# ---------------------------------------------------------------------------
+    names = _tool_names(doctor.tools)
+    _assert_has(names, ("status", "status_all", "db_status", "env_report", "update_learnings"), "Doctor")
+    _assert_no_outbound(names, "Doctor")
 
 
 def w4_leader_no_tools() -> None:
     from scout.team import scout
 
-    names = _tool_names(scout.tools or [])  # type: ignore[arg-type]
+    names = _tool_names(scout.tools)
     if names:
         raise AssertionError(f"Leader should be a pure router with no tools, got: {names}")
-
-
-# ---------------------------------------------------------------------------
-# W5 — ContextProvider shape
-# ---------------------------------------------------------------------------
 
 
 def w5_context_protocol_shape() -> None:
     from scout.context.provider import ContextProvider
     from scout.contexts import build_contexts
 
-    built = build_contexts()
-    for ctx in built:
+    for ctx in build_contexts():
+        if not isinstance(ctx, ContextProvider):
+            raise AssertionError(f"ContextProvider {ctx.id!r} is not a subclass of ContextProvider")
         for attr in ("id", "name"):
             if not isinstance(getattr(ctx, attr, None), str):
                 raise AssertionError(f"ContextProvider {type(ctx).__name__!s} missing/non-string attr {attr!r}")
         for method in ("query", "status", "get_tools", "instructions"):
             if not callable(getattr(ctx, method, None)):
                 raise AssertionError(f"ContextProvider {ctx.id!r} missing callable method {method!r}")
-        if not isinstance(ctx, ContextProvider):
-            raise AssertionError(f"ContextProvider {ctx.id!r} is not a subclass of ContextProvider")
 
 
 # ---------------------------------------------------------------------------
-# Registry + run helper
+# Runner
 # ---------------------------------------------------------------------------
 
 
-INVARIANTS: tuple[tuple[str, str, Callable[[], None]], ...] = (
-    ("W1", "explorer_readonly", w1_explorer_readonly),
-    ("W2", "engineer_write_shape", w2_engineer_write_shape),
-    ("W3", "doctor_readonly", w3_doctor_readonly),
-    ("W4", "leader_no_tools", w4_leader_no_tools),
-    ("W5", "context_protocol_shape", w5_context_protocol_shape),
+CHECKS = (
+    w1_explorer_readonly,
+    w2_engineer_write_shape,
+    w3_doctor_readonly,
+    w4_leader_no_tools,
+    w5_context_protocol_shape,
 )
 
 
-def run_all(verbose: bool = False) -> list[InvariantResult]:
-    """Run every invariant. Returns a result per check."""
-    del verbose
-    results: list[InvariantResult] = []
-    for id_, name, fn in INVARIANTS:
+def run_all() -> list[InvariantResult]:
+    """Run every check. Returns a result per check."""
+    results = []
+    for fn in CHECKS:
+        id_, _, name = fn.__name__.partition("_")
         try:
             fn()
-            results.append(InvariantResult(id=id_, name=name, passed=True))
+            results.append(InvariantResult(id=id_.upper(), name=name, passed=True))
         except Exception as exc:
             results.append(
-                InvariantResult(
-                    id=id_,
-                    name=name,
-                    passed=False,
-                    detail=f"{type(exc).__name__}: {exc}",
-                )
+                InvariantResult(id=id_.upper(), name=name, passed=False, detail=f"{type(exc).__name__}: {exc}")
             )
     return results
-
-
-__all__ = ["INVARIANTS", "InvariantResult", "run_all"]

@@ -1,8 +1,11 @@
-"""Scout behavioral eval cases.
+"""Evaluate routing and tool use.
 
-One flat list, one dataclass. The runner (in-process or --live SSE)
-dispatches every case through the same assertion model. Judged cases
-live in ``evals/judges.py``; wiring invariants in ``evals/wiring.py``.
+One flat ``CASES`` tuple drives both transports (in-process and
+``--live`` SSE). Each case defines a prompt + assertions on the final
+response, the delegated agent, and tools called.
+
+Judged cases live in ``evals/judges.py``; structural checks in
+``evals/wiring.py``.
 """
 
 from __future__ import annotations
@@ -238,6 +241,3 @@ def get(case_id: str) -> Case:
     if case_id not in CASES_BY_ID:
         raise KeyError(f"unknown case {case_id!r}; known: {sorted(CASES_BY_ID)}")
     return CASES_BY_ID[case_id]
-
-
-__all__ = ["Case", "CASES", "CASES_BY_ID", "REPO_ROOT", "get"]
