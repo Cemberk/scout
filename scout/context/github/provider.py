@@ -133,6 +133,24 @@ class GitHubContextProvider(ContextProvider):
             name=self.name,
             role="Answer questions by searching and reading GitHub",
             model=self.model,
+            instructions=_AGENT_INSTRUCTIONS,
             tools=[self._ensure_tools()],
             markdown=True,
         )
+
+
+_AGENT_INSTRUCTIONS = """\
+You answer questions by searching and reading GitHub repositories.
+
+Workflow:
+1. **Find the right scope.** `search_repositories(query)` to locate repos;
+   `search_code(query)` for symbols or patterns across code; `search_issues_and_prs`
+   for issue/PR discovery.
+2. **Read artifacts.** `get_file_content(repo, path)` for a specific file;
+   `get_directory_content` to browse a tree; `get_branch_content` for a whole branch.
+3. **Issues and PRs.** `get_issue` / `get_pull_request_with_details` for the body;
+   `list_issue_comments` / `get_pull_request_comments` for the discussion.
+4. **Cite URLs.** Every claim should include the html_url of what you read.
+
+You are read-only. Never create, edit, close, merge, or delete.
+"""

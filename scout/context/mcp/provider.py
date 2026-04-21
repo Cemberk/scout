@@ -79,13 +79,13 @@ class MCPContextProvider(ContextProvider):
         return self._all_tools()
 
     def _all_tools(self) -> list:
-        return [self._ensure_mcp_tools()]
+        return [self._ensure_tools()]
 
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
 
-    def _ensure_mcp_tools(self) -> MCPTools:
+    def _ensure_tools(self) -> MCPTools:
         if self._mcp_tools is None:
             kwargs: dict[str, Any] = {}
             if self.command:
@@ -110,6 +110,15 @@ class MCPContextProvider(ContextProvider):
             name=self.name,
             role=f"Query the {self.name} MCP server",
             model=self.model,
-            tools=[self._ensure_mcp_tools()],
+            instructions=_AGENT_INSTRUCTIONS,
+            tools=[self._ensure_tools()],
             markdown=True,
         )
+
+
+_AGENT_INSTRUCTIONS = """\
+You answer questions using tools exposed by an MCP server. The server defines
+its own tools — inspect what's available, call the ones that fit the question,
+and cite any URLs / identifiers they return. Don't invent tool names; only
+call what's on the list.
+"""

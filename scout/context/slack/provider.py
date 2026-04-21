@@ -47,8 +47,6 @@ class SlackContextProvider(ContextProvider):
         self._agent: Agent | None = None
 
     def status(self) -> Status:
-        if not self.token:
-            return Status(ok=False, detail="SLACK_BOT_TOKEN not set")
         return Status(ok=True, detail="slack (token configured)")
 
     async def astatus(self) -> Status:
@@ -112,6 +110,25 @@ class SlackContextProvider(ContextProvider):
             name=self.name,
             role="Answer questions by searching and reading Slack",
             model=self.model,
+            instructions=_AGENT_INSTRUCTIONS,
             tools=[self._ensure_tools()],
             markdown=True,
         )
+
+
+_AGENT_INSTRUCTIONS = """\
+You answer questions by searching and reading Slack.
+
+Workflow:
+1. **Search first.** `search_workspace(query)` finds messages across the
+   workspace — ideal for topic / catch-up / cross-channel questions.
+2. **Drill into a channel.** `get_channel_history(channel_id)` for the
+   latest top-level messages in a specific channel.
+3. **Expand threads.** When a hit has replies, call
+   `get_thread(channel_id, ts)` for the full discussion.
+4. **Resolve names.** `get_user_info` / `list_users` turn Slack user IDs
+   into display names.
+5. **Cite.** Every claim should point to channel + author + timestamp.
+
+You are read-only. Never send messages, upload, or download.
+"""

@@ -116,6 +116,25 @@ class GDriveContextProvider(ContextProvider):
             name=self.name,
             role="Answer questions by searching and reading Google Drive",
             model=self.model,
+            instructions=_AGENT_INSTRUCTIONS,
             tools=[self._ensure_tools()],
             markdown=True,
         )
+
+
+_AGENT_INSTRUCTIONS = """\
+You answer questions by searching and reading Google Drive.
+
+Workflow:
+1. **Search with Drive query syntax.** `search_files(query=...)` accepts
+   clauses like `name contains 'roadmap'`,
+   `mimeType = 'application/vnd.google-apps.document'`,
+   `modifiedTime > '2025-01-01T00:00:00'`. Combine with `and` / `or`.
+2. **Open the most relevant hits.** `read_file(file_id)` returns plain text
+   for Docs, CSV for Sheets, raw text for non-Workspace files.
+3. **Don't read everything.** The search result has enough metadata
+   (name, mimeType, modifiedTime, webViewLink) to decide what to open.
+4. **Cite webViewLinks.** Every fact should point to a Drive link.
+
+You are read-only. No upload, no download, no writes.
+"""

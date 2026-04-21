@@ -39,23 +39,39 @@ contexts: list[ContextProvider] = []
 
 
 def build_contexts() -> list[ContextProvider]:
-    """Build the registered contexts from env and cache them for the process."""
+    """Build the registered contexts from env and cache them for the process.
+
+    Optional builders are wrapped in try/except so one bad config doesn't take
+    the whole registry down. Duplicate `id`s are dropped with a warning
+    (first one wins) so Explorer never ends up with two `query_<id>` tools
+    sharing a name.
+    """
     new_contexts: list[ContextProvider] = [_build_web()]
-    fs = _build_filesystem()
-    if fs is not None:
-        new_contexts.append(fs)
-    slack = _build_slack()
-    if slack is not None:
-        new_contexts.append(slack)
-    github = _build_github()
-    if github is not None:
-        new_contexts.append(github)
-    gdrive = _build_gdrive()
-    if gdrive is not None:
-        new_contexts.append(gdrive)
+    for builder in (_build_filesystem, _build_slack, _build_github, _build_gdrive):
+        try:
+            ctx = builder()
+        except Exception as exc:
+            log.warning("%s failed: %s", builder.__name__, exc)
+            continue
+        if ctx is not None:
+            new_contexts.append(ctx)
     new_contexts.extend(_build_mcp_servers())
-    contexts[:] = new_contexts
-    log.info("contexts: %s", [c.id for c in new_contexts])
+
+    seen: set[str] = set()
+    deduped: list[ContextProvider] = []
+    for registered in new_contexts:
+        if registered.id in seen:
+            log.warning(
+                "context id %r already registered; skipping duplicate (%s)",
+                registered.id,
+                type(registered).__name__,
+            )
+            continue
+        seen.add(registered.id)
+        deduped.append(registered)
+
+    contexts[:] = deduped
+    log.info("contexts: %s", [c.id for c in deduped])
     return list(contexts)
 
 

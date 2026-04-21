@@ -4,7 +4,7 @@ Scout is a **context agent** — an agent that explores information sources and 
 
 Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
 
-Scout is built around a small `ContextProvider` abstraction — any source (the web, a filesystem, Slack, Drive, a database, an inbox) is just a subclass. **This release ships `WebContextProvider`.** Filesystem, GitHub, Slack, Gmail, and Drive providers are next.
+Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, **GitHub**, **Google Drive**, plus a generic **MCP** wrapper that turns any Model Context Protocol server into a provider. Gmail and Calendar are next.
 
 ## Quick start
 
