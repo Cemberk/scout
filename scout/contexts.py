@@ -9,11 +9,11 @@ Slack and Google Drive light up when their env vars are set.
 from __future__ import annotations
 
 import json
-import logging
 from os import getenv
 from pathlib import Path
 
 from agno.tools import tool
+from agno.utils.log import log_info, log_warning
 
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
@@ -24,8 +24,6 @@ from scout.context.web.exa_mcp import ExaMCPBackend
 from scout.context.web.parallel import ParallelBackend
 from scout.context.web.provider import WebContextProvider
 from scout.settings import default_model
-
-log = logging.getLogger(__name__)
 
 # Filesystem context root — the scout repo. Edit this one line to scope
 # Scout to a different directory.
@@ -53,7 +51,7 @@ def build_contexts() -> list[ContextProvider]:
         try:
             ctx = builder()
         except Exception as exc:
-            log.warning(f"{builder.__name__} failed: {exc}")
+            log_warning(f"{builder.__name__} failed: {exc}")
             continue
         if ctx is not None:
             new_contexts.append(ctx)
@@ -62,7 +60,7 @@ def build_contexts() -> list[ContextProvider]:
     deduped: list[ContextProvider] = []
     for registered in new_contexts:
         if registered.id in seen:
-            log.warning(
+            log_warning(
                 f"context id {registered.id!r} already registered; skipping duplicate ({type(registered).__name__})"
             )
             continue
@@ -77,7 +75,7 @@ def build_contexts() -> list[ContextProvider]:
 def _log_contexts(ctxs: list[ContextProvider]) -> None:
     """Log the resolved context set with each provider's status detail."""
     if not ctxs:
-        log.info("contexts: (none)")
+        log_info("contexts: (none)")
         return
     width = max(len(c.id) for c in ctxs)
     lines = ["contexts:"]
@@ -87,7 +85,7 @@ def _log_contexts(ctxs: list[ContextProvider]) -> None:
         except Exception as exc:
             detail = f"<status failed: {type(exc).__name__}>"
         lines.append(f"  {c.id:<{width}}  {detail}")
-    log.info("\n".join(lines))
+    log_info("\n".join(lines))
 
 
 def get_contexts() -> list[ContextProvider]:

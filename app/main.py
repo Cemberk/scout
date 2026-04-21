@@ -3,7 +3,6 @@ AgentOS Entrypoint
 ==================
 """
 
-import logging
 from contextlib import asynccontextmanager
 from os import getenv
 from pathlib import Path
@@ -16,8 +15,6 @@ from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
 from scout.contexts import build_contexts
 from scout.team import scout
-
-log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Environment
