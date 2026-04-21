@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a three-role team coordinated by a Leader, built on the `ContextProvider` base class. Ships with `WebContextProvider`, `FilesystemContextProvider`, and `MCPContextProvider`. Slack / GitHub / Gmail / Drive land in upcoming PRs.
+Scout is an **enterprise context agent** — a three-role team coordinated by a Leader, built on the `ContextProvider` base class. Ships with `WebContextProvider`, `FilesystemContextProvider`, `SlackContextProvider`, and `MCPContextProvider`. GitHub / Gmail / Drive land in upcoming PRs.
 
 ## Architecture
 
@@ -78,6 +78,9 @@ scout/
     ├── mcp/
     │   ├── __init__.py
     │   └── provider.py             # MCPContextProvider (one per MCP server)
+    ├── slack/
+    │   ├── __init__.py
+    │   └── provider.py             # SlackContextProvider (read-only SlackTools)
     └── web/
         ├── __init__.py
         ├── provider.py             # WebContextProvider
@@ -161,6 +164,7 @@ Registered provider set (in order):
 |---|---|---|
 | `WebContextProvider` | always | Backend picked below |
 | `FilesystemContextProvider` | `SCOUT_FS_ROOT` | Read-only; `FileTools` scoped to the root |
+| `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting) |
 | `MCPContextProvider` | `SCOUT_MCP_CONFIG` (YAML) | One provider per YAML entry. Schema: [`docs/MCP.md`](docs/MCP.md) |
 
 Web backend selection (first match wins):
@@ -244,6 +248,7 @@ from scout.contexts import build_contexts, get_contexts, update_contexts, list_c
 from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
 from scout.context.fs import FilesystemContextProvider
 from scout.context.mcp import MCPContextProvider
+from scout.context.slack import SlackContextProvider
 from scout.context.web import WebContextProvider
 from scout.context.web.parallel import ParallelBackend
 from scout.context.web.exa import ExaBackend

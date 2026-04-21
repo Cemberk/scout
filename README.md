@@ -58,6 +58,7 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 |---|---|---|
 | **`WebContextProvider`** | always on — picks a backend based on keys below | `web_search` / `web_extract` |
 | **`FilesystemContextProvider`** | `SCOUT_FS_ROOT` | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` under the root |
+| **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. |
 | **`MCPContextProvider`** | `SCOUT_MCP_CONFIG` (YAML) | one provider per entry — wraps any MCP server as tools. Setup: [`docs/MCP.md`](docs/MCP.md). |
 
 **Web backends**, first-match selection:
@@ -118,7 +119,7 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
 | `OPENAI_API_KEY` | **Yes** | Model and embeddings |
 | `PARALLEL_API_KEY` | No | Premium web research + URL extraction. Selects `ParallelBackend`. |
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK path). Ignored if `PARALLEL_API_KEY` is set. |
-| `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Required (with `SLACK_SIGNING_SECRET`) to run in Slack. |
+| `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` for the Slack interface; alone, activates the Slack context provider. |
 | `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
 | `SCOUT_FS_ROOT` | No | Path to expose as a read-only filesystem context. |
 | `SCOUT_MCP_CONFIG` | No | YAML file registering one or more MCP servers. See [`docs/MCP.md`](docs/MCP.md). |

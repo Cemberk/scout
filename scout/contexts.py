@@ -18,6 +18,7 @@ from agno.tools import tool
 from scout.context.fs import FilesystemContextProvider
 from scout.context.mcp import MCPContextProvider
 from scout.context.provider import ContextProvider
+from scout.context.slack import SlackContextProvider
 from scout.context.web.exa import ExaBackend
 from scout.context.web.exa_mcp import ExaMCPBackend
 from scout.context.web.parallel import ParallelBackend
@@ -41,6 +42,9 @@ def build_contexts() -> list[ContextProvider]:
     fs = _build_filesystem()
     if fs is not None:
         new_contexts.append(fs)
+    slack = _build_slack()
+    if slack is not None:
+        new_contexts.append(slack)
     new_contexts.extend(_build_mcp_servers())
     contexts[:] = new_contexts
     log.info("contexts: %s", [c.id for c in new_contexts])
@@ -73,6 +77,12 @@ def _build_filesystem() -> FilesystemContextProvider | None:
     if not root:
         return None
     return FilesystemContextProvider(root=root, model=default_model())
+
+
+def _build_slack() -> SlackContextProvider | None:
+    if not (getenv("SLACK_BOT_TOKEN") or getenv("SLACK_TOKEN")):
+        return None
+    return SlackContextProvider(model=default_model())
 
 
 _MCP_ENTRY_FIELDS = {"id", "name", "command", "url", "transport", "env"}
