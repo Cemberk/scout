@@ -39,7 +39,6 @@ services:
       RUNTIME_ENV: dev
       AGNO_DEBUG: "True"
       WAIT_FOR_DB: "True"
-      PRINT_ENV_ON_LOAD: "True"
       AGENTOS_URL: http://127.0.0.1:8000
       DB_HOST: scout-db
       DB_PORT: 5432

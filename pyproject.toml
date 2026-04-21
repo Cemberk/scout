@@ -1,6 +1,6 @@
 [project]
 name = "scout"
-version = "1.0.0"
+version = "0.1.0"
 description = "An enterprise context agent that navigates your company's knowledge graph"
 requires-python = ">=3.12,<4"
 readme = "README.md"
