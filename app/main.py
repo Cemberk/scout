@@ -11,11 +11,9 @@ from agno.os import AgentOS
 
 from app.router import create_router
 from db import get_postgres_db
-from scout.agents.doctor import doctor
 from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
 from scout.contexts import build_contexts, publish_contexts
-from scout.settings import scout_learnings
 from scout.team import scout
 
 # ---------------------------------------------------------------------------
@@ -47,8 +45,7 @@ agent_os = AgentOS(
     lifespan=lifespan,
     db=get_postgres_db(),
     teams=[scout],
-    agents=[explorer, engineer, doctor],
-    knowledge=[scout_learnings],
+    agents=[explorer, engineer],
     config=str(Path(__file__).parent / "config.yaml"),
 )
 

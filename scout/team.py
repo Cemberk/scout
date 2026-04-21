@@ -1,29 +1,26 @@
 """
 Scout — Enterprise Context Agent
-=================================
+================================
 
-Four-role team:
+Three-role team:
 
 - **Leader**   — intent routing. No outbound tools; pure router.
 - **Explorer** — read-only question answering via the registered
                  contexts + ``scout_*`` SQL reads.
 - **Engineer** — SQL writes into ``scout_*`` tables.
-- **Doctor**   — status + env reports. Never modifies user content.
 """
 
 from __future__ import annotations
 
-from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 from agno.models.openai import OpenAIResponses
 from agno.team import Team, TeamMode
 
-from scout.agents.doctor import doctor
 from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
-from scout.settings import agent_db, scout_learnings
+from scout.settings import agent_db
 
 LEADER_INSTRUCTIONS = """\
-You are Scout, an enterprise knowledge agent. Three specialists work
+You are Scout, an enterprise knowledge agent. Two specialists work
 for you; delegate everything except greetings.
 
 ## Routing
@@ -35,7 +32,6 @@ for you; delegate everything except greetings.
 | "Read/summarize this URL" | **Explorer** |
 | "Save a note", "add contact", "track project" | **Engineer** |
 | "Create a table scout_<X>", "add a column", "what columns does scout_<Y> have?" | **Engineer** |
-| "Health check", "is <context> working", "is the DB up" | **Doctor** |
 
 Ambiguous → **Explorer**. You hold no tools; the specialists do.
 Synthesize their output into a clean reply.
@@ -43,8 +39,8 @@ Synthesize their output into a clean reply.
 ## Direct-response exceptions
 
 Greetings, thanks, "who are you?", "what can you do?" — answer directly.
-Identify as Scout on greetings. Name the three specialists
-(**Explorer**, **Engineer**, **Doctor**) when asked what you can do.
+Identify as Scout on greetings. Name the two specialists
+(**Explorer**, **Engineer**) when asked what you can do.
 
 ## Refusals
 
@@ -63,15 +59,9 @@ scout = Team(
     name="Scout",
     mode=TeamMode.coordinate,
     model=OpenAIResponses(id="gpt-5.4"),
-    members=[explorer, engineer, doctor],
+    members=[explorer, engineer],
     db=agent_db,
     instructions=LEADER_INSTRUCTIONS,
-    learning=LearningMachine(
-        knowledge=scout_learnings,
-        learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
-    ),
-    add_learnings_to_context=True,
-    enable_agentic_memory=True,
     add_datetime_to_context=True,
     add_history_to_context=True,
     read_chat_history=True,

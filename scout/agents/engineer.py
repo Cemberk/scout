@@ -6,33 +6,16 @@ Single write surface: ``scout_*`` user-data tables (DDL + DML in the
 SQLTools is bound to ``get_sql_engine()`` — Engineer can CREATE /
 ALTER / INSERT / UPDATE / DELETE. The session-level guard rejects any
 statement that targets ``public`` or ``ai``.
-
-Shares ``scout_learnings`` with Explorer and Doctor.
 """
 
 from __future__ import annotations
 
 from agno.agent import Agent
-from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 from agno.models.openai import OpenAIResponses
-from agno.tools.reasoning import ReasoningTools
 from agno.tools.sql import SQLTools
 
-from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
-from scout.settings import agent_db, scout_learnings
-from scout.tools.introspect import create_introspect_schema_tool
-from scout.tools.learnings import create_update_learnings
-
-
-def engineer_tools() -> list:
-    """Build Engineer's tool list: SQL + introspect + learnings + reasoning."""
-    return [
-        SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
-        create_introspect_schema_tool(get_readonly_engine()),
-        create_update_learnings(scout_learnings),
-        ReasoningTools(),
-    ]
-
+from db import SCOUT_SCHEMA, get_sql_engine
+from scout.settings import agent_db
 
 ENGINEER_INSTRUCTIONS = """\
 You are Engineer. You own writes to the `scout` schema.
@@ -50,11 +33,10 @@ Prefer these when intent fits; create new `scout_*` tables only when it doesn't.
 
 - **Write only to `scout`.** `public` is read-only; `ai` is off-limits.
 - **Schema-qualify everything.** `scout.scout_notes`, never bare names.
-- **Introspect before DDL.** Call `introspect_schema` first.
+- **Introspect before DDL.** Query `information_schema.columns` first.
 - **DROP requires explicit user confirmation.**
 - **Standard columns on new tables:** `id SERIAL PRIMARY KEY`,
   `user_id TEXT NOT NULL`, `created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`.
-- **Record schema changes via `update_learnings`** so Explorer finds the new shape.
 """
 
 
@@ -65,11 +47,7 @@ engineer = Agent(
     model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
     instructions=ENGINEER_INSTRUCTIONS,
-    learning=LearningMachine(
-        knowledge=scout_learnings,
-        learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
-    ),
-    tools=engineer_tools(),
+    tools=[SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA)],
     add_datetime_to_context=True,
     add_history_to_context=True,
     num_history_runs=5,

@@ -26,14 +26,11 @@ Scout is now running at `http://localhost:8000`.
 
 ## How it works
 
-Scout is a four-role team:
+Scout is a three-role team:
 
 - **Leader** — pure router. Routes intent to the right specialist; never holds tools itself.
 - **Explorer** — read-only question answering via the registered contexts + read-only SQL on `scout_*` tables.
 - **Engineer** — owns SQL writes into the `scout` schema (DDL + DML).
-- **Doctor** — diagnoses Scout's own health: `status`, `status_all`, `db_status`, `env_report`. Read-only.
-
-Explorer, Engineer, and Doctor share an operational-memory store (`scout_learnings`) — routing hints, corrections, per-user preferences. Searched before save so duplicates don't pile up.
 
 ## Contexts
 
@@ -105,7 +102,7 @@ See [`docs/EVALS.md`](docs/EVALS.md) for the full picture.
 ## Troubleshooting
 
 - **Port 5432 or 8000 in use.** Edit the host-side port in `compose.yaml`.
-- **A context shows down.** Ask Doctor: `"why is web disconnected?"` — it reads `status` + `env_report`.
+- **A context shows down.** `GET /contexts` or `python -m scout contexts` — the `detail` column names the missing env var.
 - **"Incorrect API key".** `OPENAI_API_KEY` rotated; fix and `docker compose restart scout-api`.
 
 ## Architecture

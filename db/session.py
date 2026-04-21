@@ -70,7 +70,7 @@ def get_readonly_engine() -> Engine:
 
     Uses PostgreSQL's ``default_transaction_read_only`` so any INSERT,
     UPDATE, DELETE, CREATE, DROP, or ALTER is rejected at the database level.
-    Hand this to read-only agents (Explorer, Doctor, Leader) so their
+    Hand this to read-only agents (Explorer, Leader) so their
     SQLTools cannot mutate state regardless of how they're prompted.
 
     Also sets ``search_path=scout,public`` so unqualified references like

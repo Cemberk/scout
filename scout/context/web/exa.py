@@ -27,7 +27,7 @@ class ExaBackend(ContextBackend):
     """Backend for `WebContextProvider` using Exa's search + contents APIs."""
 
     def __init__(self, *, api_key: str | None = None) -> None:
-        self.api_key = api_key if api_key is not None else (getenv("EXA_API_KEY", "") or None)
+        self.api_key: str = api_key if api_key else getenv("EXA_API_KEY", "")
         self._client: Any = None
 
     def status(self) -> Status:

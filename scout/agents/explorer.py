@@ -8,29 +8,24 @@ take effect immediately.
 
 SQLTools is bound to ``get_readonly_engine()`` so any write is rejected
 at the PostgreSQL level.
-
-Shares ``scout_learnings`` with Engineer and Doctor.
 """
 
 from __future__ import annotations
 
 from agno.agent import Agent
-from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 from agno.models.openai import OpenAIResponses
 from agno.tools.sql import SQLTools
 
 from db import SCOUT_SCHEMA, get_readonly_engine
 from scout.contexts import get_contexts, list_contexts
-from scout.settings import agent_db, scout_learnings
-from scout.tools.learnings import create_update_learnings
+from scout.settings import agent_db
 
 EXPLORER_INSTRUCTIONS = """\
 You are Explorer — Scout's read-only specialist. User: `{user_id}`.
 
 Answer by calling the `query_<id>` tools for registered contexts, or
 read-only SQL on `scout_*` tables for structured user data. Use
-`list_contexts` for meta questions only. Save routing hints via
-`update_learnings`.
+`list_contexts` for meta questions only.
 
 Rules:
 - If the user names a context that isn't in your tool list, say so as
@@ -49,7 +44,6 @@ def explorer_tools() -> list:
         [
             SQLTools(db_engine=get_readonly_engine(), schema=SCOUT_SCHEMA),
             list_contexts,
-            create_update_learnings(scout_learnings),
         ]
     )
     return tools
@@ -62,10 +56,6 @@ explorer = Agent(
     model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
     instructions=EXPLORER_INSTRUCTIONS,
-    learning=LearningMachine(
-        knowledge=scout_learnings,
-        learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
-    ),
     tools=explorer_tools,
     cache_callables=False,
     add_datetime_to_context=True,

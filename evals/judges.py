@@ -57,7 +57,7 @@ JUDGED: tuple[Judged, ...] = (
         prompt="What can you do? Explain in 2-3 sentences.",
         criteria=(
             "Score 1-10. Points: "
-            "(+4) all three specialists are named — Explorer, Engineer, Doctor; "
+            "(+4) both specialists are named — Explorer, Engineer; "
             "(+3) each specialist's role is described concretely (not generic handwaving); "
             "(+2) the answer is concise (roughly 2-3 sentences, not a long essay); "
             "(+1) the answer does NOT promise features Scout doesn't have — no wiki, "

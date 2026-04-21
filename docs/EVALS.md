@@ -16,11 +16,10 @@ File: [`evals/wiring.py`](../evals/wiring.py).
 
 Each invariant is a function that returns `None` on PASS and raises `AssertionError` with a diagnostic on FAIL. Today's set:
 
-- `W1` Explorer's bound tools are read-only; expected helpers (`list_contexts`, `update_learnings`) present.
-- `W2` Engineer wires `introspect_schema` + `update_learnings`; no outbound send tools.
-- `W3` Doctor wires `status` / `status_all` / `db_status` / `env_report` / `update_learnings`; no writers.
-- `W4` Leader has no tools (pure router).
-- `W5` Every registered `ContextProvider` has the expected shape (`id`/`name` + `query`/`status`/`get_tools`/`instructions`).
+- `W1` Explorer's bound tools are read-only; `list_contexts` present.
+- `W2` Engineer wires SQL writes; no outbound send tools.
+- `W3` Leader has no tools (pure router).
+- `W4` Every registered `ContextProvider` has the expected shape (`id`/`name` + `query`/`status`/`get_tools`/`instructions`).
 
 ```bash
 python -m evals wiring          # exits 0 on PASS, non-zero on FAIL
@@ -70,7 +69,7 @@ Seeded cases:
 | Case | What it grades |
 |---|---|
 | `grounded_url_summary` | Does the answer about Agno draw concrete features from `docs.agno.com` and cite a URL under that domain? |
-| `capabilities_clarity` | Does "what can you do?" name all three specialists concretely and avoid over-promising? (uses `fixture="default"`) |
+| `capabilities_clarity` | Does "what can you do?" name both specialists concretely and avoid over-promising? (uses `fixture="default"`) |
 | `citation_discipline` | When asked to cite a source, does the answer include a real URL that corresponds to a specific claim? |
 
 ```bash

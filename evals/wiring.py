@@ -1,11 +1,10 @@
 """Evaluate structural wiring.
 
 Checks:
-    W1  Explorer's bound tools are read-only.
-    W2  Engineer wires SQL + introspect + learnings + reasoning; no outbound.
-    W3  Doctor wires status + diagnostic + learnings; no writers.
-    W4  Leader has no tools (pure router).
-    W5  Every registered ``ContextProvider`` has the expected shape.
+    W1  Explorer's bound tools are read-only; ``list_contexts`` present.
+    W2  Engineer wires SQL; no outbound.
+    W3  Leader has no tools (pure router).
+    W4  Every registered ``ContextProvider`` has the expected shape.
 
 Each check is a function that returns None on PASS and raises
 ``AssertionError`` on FAIL. Zero LLM, zero network — runs in under a second.
@@ -104,26 +103,18 @@ def w1_explorer_readonly() -> None:
         publish_contexts(prev)
 
     _assert_no_outbound(names, "Explorer")
-    _assert_has(names, ("list_contexts", "update_learnings"), "Explorer")
+    _assert_has(names, ("list_contexts",), "Explorer")
 
 
 def w2_engineer_write_shape() -> None:
     from scout.agents.engineer import engineer
 
     names = _tool_names(engineer.tools)
-    _assert_has(names, ("introspect_schema", "update_learnings"), "Engineer")
+    _assert_has(names, ("sql_tools",), "Engineer")
     _assert_no_outbound(names, "Engineer")
 
 
-def w3_doctor_readonly() -> None:
-    from scout.agents.doctor import doctor
-
-    names = _tool_names(doctor.tools)
-    _assert_has(names, ("status", "status_all", "db_status", "update_learnings"), "Doctor")
-    _assert_no_outbound(names, "Doctor")
-
-
-def w4_leader_no_tools() -> None:
+def w3_leader_no_tools() -> None:
     from scout.team import scout
 
     names = _tool_names(scout.tools)
@@ -131,7 +122,7 @@ def w4_leader_no_tools() -> None:
         raise AssertionError(f"Leader should be a pure router with no tools, got: {names}")
 
 
-def w5_context_protocol_shape() -> None:
+def w4_context_protocol_shape() -> None:
     from scout.context.provider import ContextProvider
     from scout.contexts import build_contexts
 
@@ -154,9 +145,8 @@ def w5_context_protocol_shape() -> None:
 CHECKS = (
     w1_explorer_readonly,
     w2_engineer_write_shape,
-    w3_doctor_readonly,
-    w4_leader_no_tools,
-    w5_context_protocol_shape,
+    w3_leader_no_tools,
+    w4_context_protocol_shape,
 )
 
 
