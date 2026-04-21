@@ -24,6 +24,12 @@ Scout is now running at `http://localhost:8000`.
 2. Click **Add OS**, choose **Local**, enter **http://localhost:8000**, then **Connect**.
 3. Try the pre-configured prompts.
 
+## Chat with Scout in Slack
+
+Scout can live in Slack as a teammate. Set `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` in `.env` and the Slack interface lights up automatically on the next restart. Each Slack thread becomes its own session with conversation history intact.
+
+Step-by-step setup (app manifest, scopes, install flow): [docs/SLACK_CONNECT.md](docs/SLACK_CONNECT.md).
+
 ## How it works
 
 Scout is a three-role team coordinated by a Leader:
@@ -108,6 +114,8 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
 | `OPENAI_API_KEY` | **Yes** | Model and embeddings |
 | `PARALLEL_API_KEY` | No | Premium web research + URL extraction. Selects `ParallelBackend`. |
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK path). Ignored if `PARALLEL_API_KEY` is set. |
+| `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Required (with `SLACK_SIGNING_SECRET`) to run in Slack. |
+| `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
 | `DB_*` | No | Postgres (compose defaults work) |
 
 Full list in [`example.env`](example.env).

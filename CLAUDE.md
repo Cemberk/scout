@@ -44,6 +44,16 @@ The full type set:
 
 Everything else reads. Explorer uses `get_readonly_engine()` (PostgreSQL's `default_transaction_read_only`). The scout engine has a `before_cursor_execute` hook that rejects any DDL/DML targeting `public` or `ai`.
 
+## Interfaces
+
+Chat surfaces beyond AgentOS's built-in UI. Wired in `app/main.py` and passed to `AgentOS(interfaces=...)`.
+
+| Interface | Trigger | Notes |
+|---|---|---|
+| Slack | `SLACK_BOT_TOKEN` **and** `SLACK_SIGNING_SECRET` set | Webhook at `/slack/events`; each Slack thread → a persistent session. `resolve_user_identity=True` maps Slack user IDs to names. Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md). |
+
+Both Slack env vars must be set for the interface to light up; otherwise `interfaces=[]` and Scout runs headless + on AgentOS. We explicitly pass `token=SLACK_BOT_TOKEN` because agno's default env-var read is `SLACK_TOKEN` — keeping the `_BOT_` name is intentional.
+
 ## Structure
 
 ```
@@ -70,7 +80,7 @@ scout/
         └── exa_mcp.py              # ExaMCPBackend (keyless Exa MCP)
 
 app/
-├── main.py                         # AgentOS entry (lifespan wires contexts)
+├── main.py                         # AgentOS entry (lifespan wires contexts; Slack interface if env set)
 ├── router.py                       # /contexts/* endpoints
 └── config.yaml
 
@@ -190,6 +200,8 @@ Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.mode
 | `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent |
 | `PARALLEL_API_KEY` | No | Selects `ParallelBackend` for web research. |
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK). Ignored if `PARALLEL_API_KEY` is set. |
+| `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` to enable Slack interface. |
+| `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
 

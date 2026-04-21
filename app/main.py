@@ -25,6 +25,26 @@ log = logging.getLogger(__name__)
 runtime_env = getenv("RUNTIME_ENV", "prd")
 scheduler_base_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
 
+# ---------------------------------------------------------------------------
+# Interfaces — Slack lights up when both env vars are set
+# ---------------------------------------------------------------------------
+SLACK_BOT_TOKEN = getenv("SLACK_BOT_TOKEN", "")
+SLACK_SIGNING_SECRET = getenv("SLACK_SIGNING_SECRET", "")
+
+interfaces: list = []
+if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
+    from agno.os.interfaces.slack import Slack
+
+    interfaces.append(
+        Slack(
+            team=scout,
+            streaming=True,
+            token=SLACK_BOT_TOKEN,
+            signing_secret=SLACK_SIGNING_SECRET,
+            resolve_user_identity=True,
+        )
+    )
+
 
 # ---------------------------------------------------------------------------
 # Lifespan — Create tables and wire up contexts
@@ -49,6 +69,7 @@ agent_os = AgentOS(
     db=get_postgres_db(),
     teams=[scout],
     agents=[explorer, engineer],
+    interfaces=interfaces,
     config=str(Path(__file__).parent / "config.yaml"),
 )
 
