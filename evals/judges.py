@@ -13,11 +13,11 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from agno.eval.agent_as_judge import AgentAsJudgeEval
-from agno.models.openai import OpenAIResponses
 
 from evals.runner import build_fixture, install_fixture, restore_contexts
+from scout.settings import default_model
 
-JUDGE_MODEL = OpenAIResponses(id="gpt-5.4")
+JUDGE_MODEL = default_model()
 
 
 @dataclass(frozen=True)

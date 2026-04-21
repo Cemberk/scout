@@ -11,11 +11,10 @@ statement that targets ``public`` or ``ai``.
 from __future__ import annotations
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIResponses
 from agno.tools.sql import SQLTools
 
 from db import SCOUT_SCHEMA, get_sql_engine
-from scout.settings import agent_db
+from scout.settings import agent_db, default_model
 
 ENGINEER_INSTRUCTIONS = """\
 You are Engineer. You own writes to the `scout` schema.
@@ -44,7 +43,7 @@ engineer = Agent(
     id="engineer",
     name="Engineer",
     role="Owns SQL writes into the scout_* tables",
-    model=OpenAIResponses(id="gpt-5.4"),
+    model=default_model(),
     db=agent_db,
     instructions=ENGINEER_INSTRUCTIONS,
     tools=[SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA)],

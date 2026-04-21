@@ -12,12 +12,11 @@ Three-role team:
 
 from __future__ import annotations
 
-from agno.models.openai import OpenAIResponses
 from agno.team import Team, TeamMode
 
 from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
-from scout.settings import agent_db
+from scout.settings import agent_db, default_model
 
 LEADER_INSTRUCTIONS = """\
 You are Scout, an enterprise knowledge agent. Two specialists work
@@ -58,7 +57,7 @@ scout = Team(
     id="scout",
     name="Scout",
     mode=TeamMode.coordinate,
-    model=OpenAIResponses(id="gpt-5.4"),
+    model=default_model(),
     members=[explorer, engineer],
     db=agent_db,
     instructions=LEADER_INSTRUCTIONS,

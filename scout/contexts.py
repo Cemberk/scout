@@ -11,7 +11,6 @@ import json
 import logging
 from os import getenv
 
-from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 
 from scout.context.provider import ContextProvider
@@ -19,6 +18,7 @@ from scout.context.web.exa import ExaBackend
 from scout.context.web.exa_mcp import ExaMCPBackend
 from scout.context.web.parallel import ParallelBackend
 from scout.context.web.provider import WebContextProvider
+from scout.settings import default_model
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def build_contexts() -> list[ContextProvider]:
 
 
 def _build_web() -> WebContextProvider:
-    model = OpenAIResponses(id="gpt-5.4")
+    model = default_model()
     if getenv("PARALLEL_API_KEY"):
         return WebContextProvider(backend=ParallelBackend(), model=model)
     if getenv("EXA_API_KEY"):

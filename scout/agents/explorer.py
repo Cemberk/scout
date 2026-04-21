@@ -13,12 +13,11 @@ at the PostgreSQL level.
 from __future__ import annotations
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIResponses
 from agno.tools.sql import SQLTools
 
 from db import SCOUT_SCHEMA, get_readonly_engine
 from scout.contexts import get_contexts, list_contexts
-from scout.settings import agent_db
+from scout.settings import agent_db, default_model
 
 EXPLORER_INSTRUCTIONS = """\
 You are Explorer — Scout's read-only specialist. User: `{user_id}`.
@@ -53,7 +52,7 @@ explorer = Agent(
     id="explorer",
     name="Explorer",
     role="Answer questions by asking the registered contexts",
-    model=OpenAIResponses(id="gpt-5.4"),
+    model=default_model(),
     db=agent_db,
     instructions=EXPLORER_INSTRUCTIONS,
     tools=explorer_tools,
