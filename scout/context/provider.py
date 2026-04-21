@@ -119,7 +119,7 @@ class ContextProvider(ABC):
         return [self._query_tool()]
 
     def _query_tool(self):
-        from scout.tools.redactor import redact
+        from scout.context._redactor import redact
 
         provider = self
 

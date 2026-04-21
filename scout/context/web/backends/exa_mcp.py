@@ -11,6 +11,7 @@ import logging
 from os import getenv
 from typing import Any
 
+from scout.context.backend import ContextBackend
 from scout.context.provider import Status
 
 log = logging.getLogger(__name__)
@@ -19,10 +20,8 @@ _BASE_URL = "https://mcp.exa.ai/mcp"
 _TOOLS = "web_search_exa,web_fetch_exa"
 
 
-class ExaMCPBackend:
+class ExaMCPBackend(ContextBackend):
     """Backend for `WebContextProvider` that speaks to Exa's MCP server."""
-
-    kind: str = "exa_mcp"
 
     def __init__(self, *, api_key: str | None = None) -> None:
         self.api_key = api_key if api_key is not None else (getenv("EXA_API_KEY", "") or None)

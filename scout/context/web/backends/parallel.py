@@ -15,15 +15,14 @@ import json
 import logging
 from os import getenv
 
+from scout.context.backend import ContextBackend
 from scout.context.provider import Status
 
 log = logging.getLogger(__name__)
 
 
-class ParallelBackend:
+class ParallelBackend(ContextBackend):
     """Backend for `WebContextProvider` backed by Parallel's beta API."""
-
-    kind: str = "parallel"
 
     def __init__(self, *, api_key: str | None = None) -> None:
         self.api_key = api_key if api_key is not None else (getenv("PARALLEL_API_KEY", "") or None)

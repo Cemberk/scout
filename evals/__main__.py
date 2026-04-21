@@ -119,7 +119,7 @@ def _dispatch_wiring(argv: list[str]) -> int:
 
 
 def _dispatch_judges(argv: list[str]) -> int:
-    from evals.judges import JUDGED, run_all_judged
+    from evals.judges import run_all_judged
 
     p = argparse.ArgumentParser(prog="python -m evals judges", description="Scout judged-quality tier")
     p.add_argument("--case", help="Run only this judged case id")
@@ -138,7 +138,7 @@ def _dispatch_judges(argv: list[str]) -> int:
             preview = r.response.replace("\n", " ")[:200]
             print(f"            response: {preview}")
 
-    total = len(results) if not args.case else len(JUDGED)
+    total = len(results)
     passed = sum(1 for r in results if r.status == "PASS")
     failed = sum(1 for r in results if r.status in ("FAIL", "ERROR"))
     bar = "=" * 60

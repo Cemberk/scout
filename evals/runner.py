@@ -95,6 +95,14 @@ def _build_fixture(case: Case) -> Fixture:
             ]
         )
 
+    if name == "real":
+        # Real env-built contexts. For quality evals (judges) that need
+        # actual web traffic; requires OPENAI_API_KEY + optionally
+        # PARALLEL_API_KEY / EXA_API_KEY to be set.
+        from scout.contexts import build_contexts
+
+        return Fixture(contexts=build_contexts())
+
     raise ValueError(f"unknown fixture {name!r}")
 
 

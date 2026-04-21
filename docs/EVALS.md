@@ -6,7 +6,7 @@ Three tiers, one registry:
 |---|---|---|---|---|
 | **Wiring** (code-level invariants) | `python -m evals wiring` | Agent tools drift off-shape (reader wires a writer, writer wires a sender, Leader gains tools) | No | No |
 | **Behavioral** (cases) | `python -m evals` | Leader routes wrong / agents over-tool / responses miss expected substrings / forbidden tools fire | Yes | No (default); `--live` for SSE |
-| **Judges** (LLM-scored quality) | `python -m evals judges` | Grounded-answer quality (currently empty pending more providers) | Yes | No |
+| **Judges** (LLM-scored quality) | `python -m evals judges` | Grounded-answer quality, citation discipline, capabilities clarity | Yes | Only for `fixture="real"` cases that need live web |
 
 `scripts/validate.sh` runs the wiring tier on every invocation. Judges and behavioral stay out of validate because they hit the model.
 
@@ -38,7 +38,7 @@ One flat `CASES` tuple. Fields:
 - `response_contains` / `response_forbids` / `response_matches` (regex) — deterministic assertions
 - `expected_tools` / `forbidden_tools` — substring match against tool names across leader + every delegated specialist
 - `requires` / `requires_not` — env gating (SKIP, not FAIL)
-- `fixture` — `"default"` (one stub web context) or `"none"` (empty)
+- `fixture` — `"default"` (one stub web context), `"none"` (empty), or `"real"` (env-built contexts; hits actual providers)
 - `max_duration_s`, `target_file`
 
 Two transports share the case inventory:
@@ -58,13 +58,30 @@ On FAIL, a per-case diagnostic is written to [`evals/results/<case_id>.md`](../e
 
 File: [`evals/judges.py`](../evals/judges.py).
 
-Currently empty. New cases will land here as the provider set expands.
+Fields on the `Judged` dataclass:
+
+- `prompt` — sent to the team
+- `criteria` — the rubric handed to `AgentAsJudgeEval`. Each bullet is a point budget the judge allocates.
+- `scoring` — `"numeric"` (0–10, pass at `passing_score`) or `"binary"` (pass/fail).
+- `passing_score` — numeric threshold (default `7.0`).
+- `fixture` — same shapes as behavioral. Defaults to `"real"` so the judge grades real backend output, not stub canned text.
+- `max_duration_s` — budget for the team run; the judge itself is separate.
+
+Seeded cases:
+
+| Case | What it grades |
+|---|---|
+| `grounded_url_summary` | Does the answer about Agno draw concrete features from `docs.agno.com` and cite a URL under that domain? |
+| `capabilities_clarity` | Does "what can you do?" name all three specialists concretely and avoid over-promising? (uses `fixture="default"`) |
+| `citation_discipline` | When asked to cite a source, does the answer include a real URL that corresponds to a specific claim? |
 
 ```bash
 python -m evals judges                # all judged cases
 python -m evals judges --case <id>    # one case
-python -m evals judges --verbose
+python -m evals judges --verbose      # responses + judge reason on FAIL
 ```
+
+Judges that use `fixture="real"` hit live providers — they require the same env (`OPENAI_API_KEY`, optionally `PARALLEL_API_KEY` / `EXA_API_KEY`) as running the app. They are not invoked by `scripts/validate.sh`.
 
 ## Shell env — load `.env` or nothing works
 

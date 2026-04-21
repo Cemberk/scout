@@ -1,3 +1,4 @@
+from scout.context.backend import ContextBackend
 from scout.context.mode import ContextMode
 from scout.context.provider import (
     Answer,
@@ -8,6 +9,7 @@ from scout.context.provider import (
 
 __all__ = [
     "Answer",
+    "ContextBackend",
     "ContextMode",
     "ContextProvider",
     "Document",

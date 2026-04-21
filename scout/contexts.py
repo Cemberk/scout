@@ -35,7 +35,7 @@ def build_contexts() -> list[ContextProvider]:
     web = _build_web()
     if web is not None:
         contexts.append(web)
-        log.info("context: web (%s)", web.backend.kind)
+        log.info("context: web")
     return contexts
 
 

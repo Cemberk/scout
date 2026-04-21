@@ -1,41 +1,36 @@
 """WebContextProvider — web research via configurable backend.
 
-Backends ship today:
+Backends available:
 
 - `ExaMCPBackend` — keyless web search via Exa's public MCP server.
 - `ParallelBackend` — premium, requires `PARALLEL_API_KEY`.
 
-Default mode (`ContextMode.default`) exposes the backend's tools
-directly. Switch to `ContextMode.agent` to
-wrap the backend in a sub-agent that does search-then-fetch internally.
+Default mode (`ContextMode.default`) exposes the backend's tools directly.
+Switch to `ContextMode.agent` to wrap the backend in a sub-agent that does search-then-fetch internally.
 """
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
 from scout.context._utils import answer_from_run
+from scout.context.backend import ContextBackend
 from scout.context.mode import ContextMode
 from scout.context.provider import Answer, ContextProvider, Status
 
 if TYPE_CHECKING:
     from agno.models.base import Model
 
-    from scout.context.web.backend import WebBackend
-
-log = logging.getLogger(__name__)
-
 
 class WebContextProvider(ContextProvider):
-    """Web research. Backend chooses the substrate."""
+    """Web research via a configurable backend."""
 
     def __init__(
         self,
-        backend: WebBackend,
+        backend: ContextBackend,
         *,
         id: str = "web",
         name: str = "Web",
@@ -50,7 +45,6 @@ class WebContextProvider(ContextProvider):
         return self.backend.status()
 
     def query(self, question: str, *, limit: int = 10) -> Answer:
-        del limit
         agent = self._ensure_agent()
         return answer_from_run(agent.run(question))
 
@@ -86,8 +80,8 @@ class WebContextProvider(ContextProvider):
 
     def _build_agent(self) -> Agent:
         return Agent(
-            id=f"web-context-{self.backend.kind}",
-            name=f"WebContextProvider({self.backend.kind})",
+            id=self.id,
+            name=self.name,
             role="Research the web and return cited answers",
             model=self.model or OpenAIResponses(id="gpt-5.4"),
             instructions=_AGENT_INSTRUCTIONS,
