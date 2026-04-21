@@ -42,10 +42,11 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | `agent` | Wraps the provider behind a sub-agent; one `query_<id>` tool. |
 | `tools` | Exposes the underlying tools directly. |
 
-This release ships **`WebContextProvider`** with two backends:
+This release ships **`WebContextProvider`** with three backends (first-match selection):
 
-- **`ExaMCPBackend`** — keyless web research via Exa's public MCP server (default).
-- **`ParallelBackend`** — premium research + extraction; activates when `PARALLEL_API_KEY` is set.
+- **`ParallelBackend`** — premium research + extraction. Activates when `PARALLEL_API_KEY` is set.
+- **`ExaBackend`** — Exa SDK path (search + contents). Activates when `EXA_API_KEY` is set.
+- **`ExaMCPBackend`** — keyless web research via Exa's public MCP server. Default when neither key is set.
 
 Web's default mode is `tools` — the calling agent gets `web_search` / `web_extract` (or the Exa-named equivalents) directly.
 
@@ -81,8 +82,8 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
 | Variable | Required | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | **Yes** | Model and embeddings |
-| `PARALLEL_API_KEY` | No | Premium web research + URL extraction. Without it, Scout uses Exa's keyless MCP. |
-| `EXA_API_KEY` | No | Optional. Raises rate limits on the Exa MCP fallback. |
+| `PARALLEL_API_KEY` | No | Premium web research + URL extraction. Selects `ParallelBackend`. |
+| `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK path). Ignored if `PARALLEL_API_KEY` is set. |
 | `DB_*` | No | Postgres (compose defaults work) |
 
 Full list in [`example.env`](example.env).
@@ -93,7 +94,6 @@ Full list in [`example.env`](example.env).
 python -m evals wiring             # code-level invariants (no LLM)
 python -m evals                    # behavioral cases, in-process
 python -m evals --case <id>        # single case
-python -m evals --live             # SSE against a running scout-api
 python -m evals judges             # LLM-scored quality tier
 ```
 
