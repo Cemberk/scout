@@ -1,4 +1,4 @@
-"""S3Context — agentic read-only context over an S3 bucket + prefix.
+"""S3ContextProvider — agentic read-only context over an S3 bucket + prefix.
 
 Registered via ``SCOUT_CONTEXTS=s3:<bucket>[/<prefix>]``. The agent has
 ``list_keys`` / ``get_object`` / ``head_object`` scoped to the configured
@@ -15,14 +15,14 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 
+from scout.context._s3 import build_client, normalize_prefix
 from scout.context._shared import answer_from_run
-from scout.context.backends._s3 import build_client, normalize_prefix
-from scout.context.base import Answer, HealthState, HealthStatus
+from scout.context.base import Answer, ContextProvider, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
 
 
-class S3Context:
+class S3ContextProvider(ContextProvider):
     """Agentic read-only context over a bucket + prefix."""
 
     kind: str = "s3"
@@ -43,14 +43,8 @@ class S3Context:
             return HealthStatus(HealthState.DISCONNECTED, f"head_bucket failed: {exc}")
         return HealthStatus(HealthState.CONNECTED, self.id)
 
-    def query(
-        self,
-        question: str,
-        *,
-        limit: int = 10,
-        filters: dict | None = None,
-    ) -> Answer:
-        del filters, limit
+    def query(self, question: str, *, limit: int = 10) -> Answer:
+        del limit
         agent = self._ensure_agent()
         return answer_from_run(agent.run(question))
 
@@ -62,7 +56,7 @@ class S3Context:
     def _build_agent(self) -> Agent:
         return Agent(
             id=f"s3-context-{self.bucket}",
-            name=f"S3Context({self.id})",
+            name=f"S3ContextProvider({self.id})",
             role=f"Read-only exploration of s3://{self.bucket}/{self.prefix}",
             model=OpenAIResponses(id="gpt-5.4"),
             instructions=_instructions(self.id),

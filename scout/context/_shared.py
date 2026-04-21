@@ -32,7 +32,7 @@ def google_env_missing() -> str | None:
     """Return a ``missing: [...]`` reason string if any required
     ``GOOGLE_*`` env var is unset, else ``None``.
 
-    Used by ``DriveContext`` + ``GmailContext`` for their health probe
+    Used by ``DriveContextProvider`` + ``GmailContextProvider`` for their health probe
     and for lazy-agent gating.
     """
     missing = [name for name in _GOOGLE_ENV_VARS if not getenv(name)]

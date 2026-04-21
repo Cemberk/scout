@@ -53,7 +53,7 @@ class Case:
 
     # Which fixture to install before the run (keyed into the runner's
     # fixture factory). "default" = stub wiki + two stub contexts; "none"
-    # = empty; "writable_wiki" = real LocalBackend-backed wiki in a tmp dir.
+    # = empty; "writable_wiki" = real LocalWikiBackend-backed wiki in a tmp dir.
     fixture: str = "default"
 
     # Hard budget; exceeding it is a FAIL, not a timeout.
@@ -76,7 +76,7 @@ CASES: tuple[Case, ...] = (
         prompt="hey",
         expected_agent=None,
         response_contains=("scout",),
-        forbidden_tools=("ask_context", "ingest_url", "trigger_compile"),
+        forbidden_tools=("query_", "ingest_url", "trigger_compile"),
         max_duration_s=45,
         target_file=_TEAM,
     ),
@@ -98,13 +98,13 @@ CASES: tuple[Case, ...] = (
         target_file=_TEAM,
     ),
     # -----------------------------------------------------------------------
-    # Explorer — ask_context + list_contexts (spec §4.2, §7.1)
+    # Explorer — per-provider query_* tools + list_contexts (spec §4.2, §7.1)
     # -----------------------------------------------------------------------
     Case(
         id="explorer_wiki_query",
         prompt="What does the wiki say about onboarding? Cite the article.",
         expected_agent="explorer",
-        expected_tools=("ask_context",),
+        expected_tools=("query_wiki",),
         max_duration_s=180,
         target_file=_AGENTS / "explorer.py",
     ),
@@ -112,11 +112,12 @@ CASES: tuple[Case, ...] = (
         id="explorer_context_query",
         prompt="Ask the sample-local context what files it has.",
         expected_agent="explorer",
-        expected_tools=("ask_context",),
+        # `sample-local` → sanitized → `query_sample_local`
+        expected_tools=("query_sample_local",),
         # `sample-local` is an in-process stub context id. In live mode the
         # container's SCOUT_CONTEXTS produces ids like `local-context-<dir>`
-        # (see scout/context/local.py:60) — no way to register the exact id
-        # `sample-local` without a spec change to LocalContext. Skip live.
+        # (see scout/context/local/provider.py) — no way to register the exact id
+        # `sample-local` without a spec change to LocalContextProvider. Skip live.
         live_skip="sample-local is an in-process stub id; can't register via SCOUT_CONTEXTS env",
         max_duration_s=180,
         target_file=_AGENTS / "explorer.py",

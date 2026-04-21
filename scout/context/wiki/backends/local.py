@@ -1,7 +1,8 @@
-"""LocalBackend — direct filesystem I/O for WikiContext.
+"""LocalWikiBackend — direct filesystem I/O for WikiContextProvider.
 
 Single-container only. Not safe for multi-container deployments
-(no concurrency coordination). Use GithubBackend or S3Backend in prod.
+(no concurrency coordination). Use ``GithubWikiBackend`` or
+``S3WikiBackend`` in prod.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from pathlib import Path
 from scout.context.base import HealthState, HealthStatus
 
 
-class LocalBackend:
+class LocalWikiBackend:
     """Dev-only backend that reads and writes straight to the filesystem."""
 
     kind: str = "local"

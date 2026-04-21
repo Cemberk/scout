@@ -1,17 +1,15 @@
 """Wiring invariants — structural checks about agent + context composition.
 
-No LLM, no network, no ``team.run()``. These are the invariants that
-used to live in ``scout/__main__.py::_cmd_smoke_gating``; the new
-architecture checks tool-binding and protocol shape instead of a
-manifest-gated ``source_read``.
+No LLM, no network, no ``team.run()``. Each check binds to the shape
+the architecture commits to; regressions fail loudly.
 
 W1  Explorer's bound tools are read-only.
 W2  Engineer has write-shape tools, no outbound sends.
 W3  Doctor's bound tools are read-shaped, no writers.
 W4  Leader's send tools align with ``SCOUT_ALLOW_SENDS`` + token env.
-W5  Every registered ``Context`` satisfies the protocol (2 methods + 3 attrs).
-W6  ``WikiContext`` has the 5-method ingest/compile shape.
-W7  ``LocalBackend`` rejects ``../`` path escapes for both read and write.
+W5  Every registered ``ContextProvider`` has the expected shape.
+W6  ``WikiContextProvider`` has the 5-method ingest/compile shape.
+W7  ``LocalWikiBackend`` rejects ``../`` path escapes for both read and write.
 
 Each check is a function that returns ``None`` on PASS and raises
 ``AssertionError`` with a diagnostic string on FAIL. The runner
@@ -103,9 +101,24 @@ class InvariantResult:
 
 
 def w1_explorer_readonly() -> None:
-    from scout.agents.explorer import explorer
+    """Explorer's tool list must be read-only.
 
-    names = _tool_names(explorer.tools or [])  # type: ignore[arg-type]
+    ``set_runtime(wiki, contexts)`` installs the registry and rewires
+    Explorer in one call. Run the check with a real wiki so the
+    steady-state tool shape matches production.
+    """
+    from scout.agents.explorer import explorer
+    from scout.context.config import build_wiki
+    from scout.tools.ask_context import get_contexts, get_wiki, set_runtime
+
+    prev_wiki = get_wiki()
+    prev_contexts = get_contexts()
+    try:
+        set_runtime(build_wiki(), [])
+        names = _tool_names(explorer.tools or [])  # type: ignore[arg-type]
+    finally:
+        set_runtime(prev_wiki, prev_contexts)
+
     forbidden_substrings = (
         "ingest_url",
         "ingest_text",
@@ -122,7 +135,7 @@ def w1_explorer_readonly() -> None:
     if leaks:
         raise AssertionError(f"Explorer has forbidden tool(s): {leaks}. Full tool list: {names}")
 
-    expected_substrings = ("ask_context", "list_contexts", "update_learnings")
+    expected_substrings = ("query_wiki", "list_contexts", "update_learnings")
     missing = [want for want in expected_substrings if not any(want in n for n in names)]
     if missing:
         raise AssertionError(f"Explorer missing expected tool(s) {missing}. Full tool list: {names}")
@@ -134,9 +147,23 @@ def w1_explorer_readonly() -> None:
 
 
 def w2_engineer_write_shape() -> None:
-    from scout.agents.engineer import engineer
+    """Engineer's wiki tools come from ``wiki.get_tools(include_writes=True)``.
 
-    names = _tool_names(engineer.tools or [])  # type: ignore[arg-type]
+    ``set_runtime`` wires them in. Run with a real wiki so the tool
+    shape matches production.
+    """
+    from scout.agents.engineer import engineer
+    from scout.context.config import build_wiki
+    from scout.tools.ask_context import get_contexts, get_wiki, set_runtime
+
+    prev_wiki = get_wiki()
+    prev_contexts = get_contexts()
+    try:
+        set_runtime(build_wiki(), [])
+        names = _tool_names(engineer.tools or [])  # type: ignore[arg-type]
+    finally:
+        set_runtime(prev_wiki, prev_contexts)
+
     expected = ("ingest_url", "ingest_text", "trigger_compile", "introspect_schema", "update_learnings")
     missing = [want for want in expected if not any(want in n for n in names)]
     if missing:
@@ -222,64 +249,64 @@ def w4_leader_send_gating() -> None:
 
 
 # ---------------------------------------------------------------------------
-# W5 — Context protocol shape
+# W5 — ContextProvider shape
 # ---------------------------------------------------------------------------
 
 
 def w5_context_protocol_shape() -> None:
-    from scout.context.base import Context
+    from scout.context.base import ContextProvider
     from scout.context.config import build_contexts
 
     built = build_contexts()
-    # Empty list is fine (SCOUT_CONTEXTS unset) — protocol check is vacuous
+    # Empty list is fine (SCOUT_CONTEXTS unset) — shape check is vacuous
     # but we still want the import path to work.
     for ctx in built:
         for attr in ("id", "name", "kind"):
             if not isinstance(getattr(ctx, attr, None), str):
-                raise AssertionError(f"Context {type(ctx).__name__!s} missing/non-string attr {attr!r}")
+                raise AssertionError(f"ContextProvider {type(ctx).__name__!s} missing/non-string attr {attr!r}")
         for method in ("health", "query"):
             if not callable(getattr(ctx, method, None)):
-                raise AssertionError(f"Context {ctx.id!r} missing callable method {method!r}")
-        if not isinstance(ctx, Context):
-            raise AssertionError(f"Context {ctx.id!r} is not a structural Context (runtime_checkable failed)")
+                raise AssertionError(f"ContextProvider {ctx.id!r} missing callable method {method!r}")
+        if not isinstance(ctx, ContextProvider):
+            raise AssertionError(f"ContextProvider {ctx.id!r} is not a subclass of ContextProvider")
 
 
 # ---------------------------------------------------------------------------
-# W6 — WikiContext five-method shape
+# W6 — WikiContextProvider five-method shape
 # ---------------------------------------------------------------------------
 
 
 def w6_wiki_context_shape() -> None:
-    from scout.context.wiki import WikiContext
+    from scout.context.wiki.provider import WikiContextProvider
 
     for attr in ("id", "name", "kind"):
-        if not isinstance(getattr(WikiContext, attr, None), str):
-            raise AssertionError(f"WikiContext missing/non-string class attr {attr!r}")
+        if not isinstance(getattr(WikiContextProvider, attr, None), str):
+            raise AssertionError(f"WikiContextProvider missing/non-string class attr {attr!r}")
     for method in ("health", "query", "ingest_url", "ingest_text", "compile"):
-        if not callable(getattr(WikiContext, method, None)):
-            raise AssertionError(f"WikiContext missing callable method {method!r}")
+        if not callable(getattr(WikiContextProvider, method, None)):
+            raise AssertionError(f"WikiContextProvider missing callable method {method!r}")
 
 
 # ---------------------------------------------------------------------------
-# W7 — LocalBackend path-escape guard (port of old _smoke_gating)
+# W7 — LocalWikiBackend path-escape guard
 # ---------------------------------------------------------------------------
 
 
 def w7_local_backend_path_escape() -> None:
-    from scout.context.backends.local import LocalBackend
+    from scout.context.wiki.backends.local import LocalWikiBackend
 
     with tempfile.TemporaryDirectory() as tmp:
-        backend = LocalBackend(tmp)
+        backend = LocalWikiBackend(tmp)
         try:
             backend.read_bytes("../escape.txt")
         except ValueError:
             pass
         except Exception as exc:
             raise AssertionError(
-                f"LocalBackend.read_bytes('../escape.txt') raised {type(exc).__name__} (want ValueError): {exc}"
+                f"LocalWikiBackend.read_bytes('../escape.txt') raised {type(exc).__name__} (want ValueError): {exc}"
             ) from exc
         else:
-            raise AssertionError("LocalBackend.read_bytes accepted '../escape.txt' — path escape guard broken")
+            raise AssertionError("LocalWikiBackend.read_bytes accepted '../escape.txt' — path escape guard broken")
 
         try:
             backend.write_bytes("../escape.txt", b"oops")
@@ -287,14 +314,14 @@ def w7_local_backend_path_escape() -> None:
             pass
         except Exception as exc:
             raise AssertionError(
-                f"LocalBackend.write_bytes('../escape.txt') raised {type(exc).__name__} (want ValueError): {exc}"
+                f"LocalWikiBackend.write_bytes('../escape.txt') raised {type(exc).__name__} (want ValueError): {exc}"
             ) from exc
         else:
             # Clean up the file that escaped, so the next run starts clean.
             escaped = Path(tmp).parent / "escape.txt"
             if escaped.exists():
                 escaped.unlink()
-            raise AssertionError("LocalBackend.write_bytes accepted '../escape.txt' — path escape guard broken")
+            raise AssertionError("LocalWikiBackend.write_bytes accepted '../escape.txt' — path escape guard broken")
 
 
 # ---------------------------------------------------------------------------

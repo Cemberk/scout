@@ -1,7 +1,7 @@
-"""LocalContext — agentic read-only context over a local directory.
+"""LocalContextProvider — agentic read-only context over a local directory.
 
-Wraps an internal Agno agent that has read_file + grep + list_dir
-scoped to the configured path. No ingest, no compile.
+Wraps an internal agent with ``read_file`` / ``grep`` / ``list_dir`` /
+``find`` scoped to the configured path.
 """
 
 from __future__ import annotations
@@ -13,10 +13,10 @@ from agno.models.openai import OpenAIResponses
 from agno.tools.coding import CodingTools
 
 from scout.context._shared import answer_from_run
-from scout.context.base import Answer, HealthState, HealthStatus
+from scout.context.base import Answer, ContextProvider, HealthState, HealthStatus
 
 
-class LocalContext:
+class LocalContextProvider(ContextProvider):
     """Agentic context over a directory on disk."""
 
     kind: str = "local"
@@ -34,22 +34,11 @@ class LocalContext:
             return HealthStatus(HealthState.DISCONNECTED, f"{self.root} is not a directory")
         return HealthStatus(HealthState.CONNECTED, str(self.root))
 
-    def query(
-        self,
-        question: str,
-        *,
-        limit: int = 10,
-        filters: dict | None = None,
-    ) -> Answer:
-        """Ask the internal agent. Returns Answer with text; citation
-        hits are inlined in the text for now (Agno's tool calls surface
-        paths already)."""
-        del filters, limit  # not used by LocalContext today
+    def query(self, question: str, *, limit: int = 10) -> Answer:
+        del limit
         agent = self._ensure_agent()
         return answer_from_run(agent.run(question))
 
-    # Fresh-per-query today (spec §5.3). Instantiation is cheap; cache if
-    # traffic warrants.
     def _ensure_agent(self) -> Agent:
         if self._agent is None:
             self._agent = self._build_agent()
@@ -58,7 +47,7 @@ class LocalContext:
     def _build_agent(self) -> Agent:
         return Agent(
             id=f"local-context-{self.root.name or 'root'}",
-            name=f"LocalContext({self.root})",
+            name=f"LocalContextProvider({self.root})",
             role="Read-only exploration of a local directory",
             model=OpenAIResponses(id="gpt-5.4"),
             instructions=_instructions(self.root),

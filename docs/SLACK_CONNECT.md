@@ -164,14 +164,10 @@ Scout uses [Agno's Slack interface](https://docs.agno.com) which handles:
 
 The Slack interface is registered conditionally in `app/main.py` — only when both `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET` are set. Channel scope is governed by which channels the bot is invited into — no server-side allowlist middleware.
 
-### Slack Channel for Scheduled Tasks
-
-Scheduled tasks (daily briefing, inbox digest, weekly review, learning summary, daily doctor report) post results to `#scout-updates` by default. Create this channel in your workspace, or update the channel name in the task prompts in `app/main.py` (`_register_schedules`). The hourly wiki compile and 15-minute source health check run headlessly (no Slack post).
-
-### SlackTools vs Slack Interface vs SlackContext
+### SlackTools vs Slack Interface vs SlackContextProvider
 
 Three separate things — all off by default:
 
 - **Slack Interface** (`app/main.py`) — receives incoming events from Slack. Requires both `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`.
 - **SlackTools** (`scout/team.py`) — lets the team Leader post into channels. Requires only `SLACK_BOT_TOKEN`. Enabled: `send_message`, `list_channels`, `send_message_thread`.
-- **SlackContext** (`scout/context/slack.py`) — live-read context so Explorer can answer questions by searching threads, channels, and users. Activate by adding `slack` to `SCOUT_CONTEXTS`. Requires only `SLACK_BOT_TOKEN`. Read-only: send/upload/download are disabled.
+- **SlackContextProvider** (`scout/context/slack/provider.py`) — live-read context so Explorer can answer questions by searching threads, channels, and users. Activate by adding `slack` to `SCOUT_CONTEXTS`. Requires only `SLACK_BOT_TOKEN`. Read-only: send/upload/download are disabled. Exposes `query_slack` as a tool.

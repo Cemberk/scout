@@ -19,6 +19,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from scout.tools.ask_context import get_contexts, get_wiki
+
 
 class WikiCompileRequest(BaseModel):
     force: bool = False
@@ -37,22 +39,10 @@ class QueryRequest(BaseModel):
     limit: int = 10
 
 
-def _get_wiki():
-    from scout.tools.ask_context import get_wiki
-
-    return get_wiki()
-
-
-def _get_contexts():
-    from scout.tools.ask_context import get_contexts
-
-    return get_contexts()
-
-
 def _target(target_id: str):
     if target_id == "wiki":
-        return _get_wiki()
-    for ctx in _get_contexts():
+        return get_wiki()
+    for ctx in get_contexts():
         if ctx.id == target_id:
             return ctx
     return None
@@ -64,8 +54,8 @@ def _health_row(target) -> dict:
         return {"id": target.id, "kind": target.kind, "state": h.state.value, "detail": h.detail}
     except Exception as exc:
         return {
-            "id": getattr(target, "id", "?"),
-            "kind": getattr(target, "kind", "?"),
+            "id": target.id,
+            "kind": target.kind,
             "state": "disconnected",
             "detail": f"{type(exc).__name__}: {exc}",
         }
@@ -82,14 +72,14 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
 
     @router.get("/wiki/health")
     def wiki_health():
-        wiki = _get_wiki()
+        wiki = get_wiki()
         if wiki is None:
             return JSONResponse({"error": "wiki not configured"}, status_code=503)
         return _health_row(wiki)
 
     @router.post("/wiki/compile")
     def wiki_compile(body: WikiCompileRequest = WikiCompileRequest()):
-        wiki = _get_wiki()
+        wiki = get_wiki()
         if wiki is None:
             return JSONResponse({"error": "wiki not configured"}, status_code=503)
         counts = wiki.compile(force=body.force)
@@ -97,28 +87,22 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
 
     @router.post("/wiki/ingest")
     def wiki_ingest(body: WikiIngestRequest):
-        wiki = _get_wiki()
+        wiki = get_wiki()
         if wiki is None:
             return JSONResponse({"error": "wiki not configured"}, status_code=503)
-        try:
-            if body.kind == "url":
-                if not body.url:
-                    return JSONResponse({"error": "kind=url requires url"}, status_code=400)
-                entry = wiki.ingest_url(body.url, title=body.title, tags=body.tags)
-            else:
-                if body.text is None:
-                    return JSONResponse({"error": "kind=text requires text"}, status_code=400)
-                entry = wiki.ingest_text(body.text, title=body.title, tags=body.tags)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"{type(exc).__name__}: {exc}"},
-                status_code=500,
-            )
+        if body.kind == "url":
+            if not body.url:
+                return JSONResponse({"error": "kind=url requires url"}, status_code=400)
+            entry = wiki.ingest_url(body.url, title=body.title, tags=body.tags)
+        else:
+            if body.text is None:
+                return JSONResponse({"error": "kind=text requires text"}, status_code=400)
+            entry = wiki.ingest_text(body.text, title=body.title, tags=body.tags)
         return {"status": "ingested", "entry_id": entry.id, "name": entry.name, "path": entry.path}
 
     @router.post("/wiki/query")
     def wiki_query(body: QueryRequest):
-        wiki = _get_wiki()
+        wiki = get_wiki()
         if wiki is None:
             return JSONResponse({"error": "wiki not configured"}, status_code=503)
         answer = wiki.query(body.question, limit=body.limit)
@@ -131,10 +115,10 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
     @router.get("/contexts")
     def list_contexts():
         rows = []
-        wiki = _get_wiki()
+        wiki = get_wiki()
         if wiki is not None:
             rows.append(_health_row(wiki))
-        for ctx in _get_contexts():
+        for ctx in get_contexts():
             rows.append(_health_row(ctx))
         return rows
 

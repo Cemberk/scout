@@ -1,7 +1,8 @@
 """Context/wiki config loader.
 
-Reads SCOUT_WIKI and SCOUT_CONTEXTS env vars, builds the WikiContext
-and the list of live-read Contexts. Called once at app startup.
+Reads SCOUT_WIKI and SCOUT_CONTEXTS env vars, builds the
+WikiContextProvider and the list of live-read ContextProviders. Called
+once at app startup.
 
 Spec syntax: ``<kind>[:<param>]``
 
@@ -18,8 +19,8 @@ from os import getenv
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from scout.context.base import Context
-    from scout.context.wiki import WikiContext
+    from scout.context.base import ContextProvider
+    from scout.context.wiki.provider import WikiContextProvider
 
 
 log = logging.getLogger(__name__)
@@ -69,87 +70,113 @@ def parse_spec(spec: str) -> tuple[str, dict]:
     raise ValueError(f"unknown spec kind {kind!r} in {spec!r}")
 
 
-def build_wiki() -> WikiContext:
-    """Read ``SCOUT_WIKI`` env, instantiate the backend, return WikiContext.
+def build_wiki() -> WikiContextProvider:
+    """Read ``SCOUT_WIKI`` env, instantiate the backend, return a
+    ``WikiContextProvider``.
 
-    Default: ``SCOUT_WIKI=local:./context`` (LocalBackend).
+    Default: ``SCOUT_WIKI=local:./context`` (``LocalWikiBackend``).
     """
-    # Local imports avoid cycles — config is imported before the classes it builds.
-    # Several targets land in later sub-steps; type: ignore keeps mypy quiet until then.
     from scout.context.base import WikiBackend
-    from scout.context.wiki import WikiContext
+    from scout.context.wiki.provider import WikiContextProvider
 
     spec = getenv("SCOUT_WIKI", "local:./context")
     kind, params = parse_spec(spec)
 
     backend: WikiBackend
     if kind == "local":
-        from scout.context.backends.local import LocalBackend
+        from scout.context.wiki.backends.local import LocalWikiBackend
 
-        backend = LocalBackend(params["path"])
+        backend = LocalWikiBackend(params["path"])
     elif kind == "github":
-        from scout.context.backends.github import GithubBackend
+        from scout.context.wiki.backends.github import GithubWikiBackend
 
-        backend = GithubBackend(params["repo"])
+        backend = GithubWikiBackend(params["repo"])
     elif kind == "s3":
-        from scout.context.backends.s3 import S3Backend
+        from scout.context.wiki.backends.s3 import S3WikiBackend
 
-        backend = S3Backend(params["bucket"], params["prefix"])
+        backend = S3WikiBackend(params["bucket"], params["prefix"])
     else:
         raise ValueError(f"SCOUT_WIKI: unsupported backend kind {kind!r}")
 
     log.info("wiki: %s", spec)
-    return WikiContext(backend)
+    return WikiContextProvider(backend)
 
 
-def build_contexts() -> list[Context]:
+def build_contexts() -> list[ContextProvider]:
     """Read ``SCOUT_CONTEXTS`` env, instantiate each spec, return the list.
 
-    Empty list if unset. Entries that fail to instantiate are logged and
-    skipped so one broken spec doesn't take the app down.
-    """
-    raw = getenv("SCOUT_CONTEXTS", "").strip()
-    if not raw:
-        return []
+    The ``WebContextProvider`` is prepended by default (so Scout can
+    answer research questions on day 1 with no config) unless
+    ``SCOUT_DISABLE_WEB=true`` is set. Parallel backend wins when
+    ``PARALLEL_API_KEY`` is present, else keyless Exa MCP.
 
-    out: list[Context] = []
-    for spec in (s.strip() for s in raw.split(",") if s.strip()):
-        try:
-            kind, params = parse_spec(spec)
-            ctx = _build_one(kind, params)
-        except Exception:
-            log.exception("context: failed to build %r; skipping", spec)
-            continue
-        out.append(ctx)
-        log.info("context: %s", spec)
+    Entries that fail to instantiate are logged and skipped so one
+    broken spec doesn't take the app down.
+    """
+    out: list[ContextProvider] = []
+
+    web = _build_default_web()
+    if web is not None:
+        out.append(web)
+        log.info("context: web (default)")
+
+    raw = getenv("SCOUT_CONTEXTS", "").strip()
+    if raw:
+        for spec in (s.strip() for s in raw.split(",") if s.strip()):
+            try:
+                kind, params = parse_spec(spec)
+                ctx = _build_one(kind, params)
+            except Exception:
+                log.exception("context: failed to build %r; skipping", spec)
+                continue
+            out.append(ctx)
+            log.info("context: %s", spec)
     return out
 
 
-def _build_one(kind: str, params: dict) -> Context:
-    # Several context modules land in later sub-steps; type: ignore keeps
-    # mypy quiet until they exist.
+def _build_default_web() -> ContextProvider | None:
+    """Default web provider: Parallel if ``PARALLEL_API_KEY`` is set,
+    else keyless Exa MCP. Disable with ``SCOUT_DISABLE_WEB=true``."""
+    if getenv("SCOUT_DISABLE_WEB", "").lower() in ("true", "1", "yes"):
+        return None
+    try:
+        from scout.context.web.provider import WebContextProvider
+
+        if getenv("PARALLEL_API_KEY"):
+            from scout.context.web.backends.parallel import ParallelBackend
+
+            return WebContextProvider(backend=ParallelBackend())
+        from scout.context.web.backends.exa_mcp import ExaMCPBackend
+
+        return WebContextProvider(backend=ExaMCPBackend())
+    except Exception:
+        log.exception("context: default web provider failed to build; skipping")
+        return None
+
+
+def _build_one(kind: str, params: dict) -> ContextProvider:
     if kind == "local":
-        from scout.context.local import LocalContext
+        from scout.context.local.provider import LocalContextProvider
 
-        return LocalContext(params["path"])
+        return LocalContextProvider(params["path"])
     if kind == "github":
-        from scout.context.github import GithubContext
+        from scout.context.github.provider import GithubContextProvider
 
-        return GithubContext(params["repo"])
+        return GithubContextProvider(params["repo"])
     if kind == "s3":
-        from scout.context.s3 import S3Context
+        from scout.context.s3.provider import S3ContextProvider
 
-        return S3Context(params["bucket"], params["prefix"])
+        return S3ContextProvider(params["bucket"], params["prefix"])
     if kind == "slack":
-        from scout.context.slack import SlackContext
+        from scout.context.slack.provider import SlackContextProvider
 
-        return SlackContext()
+        return SlackContextProvider()
     if kind == "gmail":
-        from scout.context.gmail import GmailContext
+        from scout.context.gmail.provider import GmailContextProvider
 
-        return GmailContext()
+        return GmailContextProvider()
     if kind == "drive":
-        from scout.context.drive import DriveContext
+        from scout.context.drive.provider import DriveContextProvider
 
-        return DriveContext()
+        return DriveContextProvider()
     raise ValueError(f"unknown context kind {kind!r}")

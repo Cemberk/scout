@@ -1,8 +1,8 @@
 """Shared Learnings tool — all three specialists write to scout_learnings.
 
-One operational-memory store (§4.4). Routing hints, corrections, per-user
-preferences. Per §7.2, the old scout_knowledge goes away; its routing
-content folds in here.
+One operational-memory store: routing hints, corrections, per-user
+preferences. Explorer / Engineer / Doctor attach it as their
+LearningMachine's knowledge base in agentic mode.
 """
 
 from __future__ import annotations

@@ -16,23 +16,20 @@ from pathlib import Path
 from db import create_knowledge, get_postgres_db
 
 # --- Paths ----------------------------------------------------------------
-# context/compiled/ is gone — the active WikiContext's backend is the
-# source of truth for compiled articles now (LocalBackend root is
-# configured via SCOUT_WIKI, default local:./context). raw/ is likewise
-# addressed through the backend, not this path.
+# The active ``WikiContextProvider``'s backend owns raw/ + compiled/ +
+# .scout/state.json. These repo-level paths only expose the voice guides
+# the Leader reads before drafting.
 _REPO_ROOT = Path(__file__).parent.parent
 CONTEXT_DIR = _REPO_ROOT / "context"
 CONTEXT_VOICE_DIR = CONTEXT_DIR / "voice"
 DOCS_DIR = _REPO_ROOT / "docs"
 
 # --- Web research: Parallel (premium) or keyless Exa MCP fallback ----------
+# The web provider is built in scout/context/config.py::_build_default_web —
+# these vars are read from os.getenv inside the backend constructors, but we
+# keep them exposed here so other consumers (ingest, health) can reach them.
 PARALLEL_API_KEY = getenv("PARALLEL_API_KEY", "")
 EXA_API_KEY = getenv("EXA_API_KEY", "")
-EXA_MCP_URL = (
-    f"https://mcp.exa.ai/mcp?exaApiKey={EXA_API_KEY}&tools=web_search_exa,web_fetch_exa"
-    if EXA_API_KEY
-    else "https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa"
-)
 
 # --- Slack (Scout's own bot identity) --------------------------------------
 SLACK_BOT_TOKEN = getenv("SLACK_BOT_TOKEN", "")
@@ -49,18 +46,18 @@ GOOGLE_CLIENT_ID = getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = getenv("GOOGLE_CLIENT_SECRET", "")
 GOOGLE_PROJECT_ID = getenv("GOOGLE_PROJECT_ID", "")
 
-# --- CodeExplorer ----------------------------------------------------------
+# --- GitHub (GithubContextProvider + GithubWikiBackend) --------------------
 GITHUB_ACCESS_TOKEN = getenv("GITHUB_ACCESS_TOKEN", "")
 REPOS_DIR = Path(getenv("REPOS_DIR", ".scout/repos"))
 
-# --- S3Source (compile-only) -----------------------------------------------
+# --- AWS (S3ContextProvider + S3WikiBackend) --------------------------------
 AWS_ACCESS_KEY_ID = getenv("AWS_ACCESS_KEY_ID", "")
 AWS_SECRET_ACCESS_KEY = getenv("AWS_SECRET_ACCESS_KEY", "")
 AWS_REGION = getenv("AWS_REGION", "")
 
 # --- Runtime objects (DB-dependent) ----------------------------------------
-# scout_knowledge is gone per §7.2 — routing content folds into
-# scout_learnings (one operational-memory store, shared by Explorer /
-# Engineer / Doctor).
+# One shared operational-memory store: routing hints, corrections, and
+# per-user preferences land here. Explorer / Engineer / Doctor all
+# attach it as their LearningMachine's knowledge base in agentic mode.
 agent_db = get_postgres_db()
 scout_learnings = create_knowledge("Scout Learnings", "scout_learnings")

@@ -54,7 +54,7 @@ SCOUT_CONTEXTS=github:agno-agi/scout
 
 Restart `scout-api` and ask:
 
-> *Walk me through how WikiContext turns raw files into a wiki.*
+> *Walk me through how the wiki provider turns raw files into a wiki.*
 
 Scout clones the repo on first use and reads the source to answer.
 
@@ -90,8 +90,8 @@ Scout splits knowledge into two shapes and runs a four-role team on top.
 
 | Shape | What it is | Examples |
 |---|---|---|
-| **Context** (live-read) | Sources queried on their own terms, in place | `LocalContext`, `GithubContext`, `S3Context`, `SlackContext`, `GmailContext`, `DriveContext` |
-| **WikiContext** (compile-capable) | One curated store compiled from raw inputs, with a pluggable backend | `LocalBackend` (dev), `GithubBackend` (git-coordinated), `S3Backend` (conditional PUT) |
+| **ContextProvider** (live-read) | Sources queried on their own terms, in place | `LocalContextProvider`, `GithubContextProvider`, `S3ContextProvider`, `SlackContextProvider`, `GmailContextProvider`, `DriveContextProvider` |
+| **WikiContextProvider** (compile-capable) | One curated store compiled from raw inputs, with a pluggable backend | `LocalWikiBackend` (dev), `GithubWikiBackend` (git-coordinated), `S3WikiBackend` (conditional PUT) |
 
 Both are pre-configured at startup via env:
 
@@ -183,9 +183,9 @@ A scheduler pod posting to `/wiki/compile` on the API LB is the recommended shap
 | `PARALLEL_API_KEY` | No | Premium web search + URL extraction. Without it, Scout uses Exa's keyless MCP server — research still works. |
 | `EXA_API_KEY` | No | Optional. Raises rate limits on the Exa MCP fallback. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_PROJECT_ID` | No | Scout's Google app — Gmail + Calendar + Drive. Drive scope is managed by sharing folders with Scout's account. Run `python scripts/google_auth.py` once to generate `token.json`. |
-| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` | No | Scout's Slack bot (xoxb-…) — interface, SlackTools, and SlackContext |
+| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` | No | Scout's Slack bot (xoxb-…) — interface, SlackTools, and `SlackContextProvider` |
 | `SCOUT_ALLOW_SENDS` | No | `true` to let the Leader actually send Gmail / modify Calendar. Default `false` = drafts-only. |
-| `GITHUB_ACCESS_TOKEN` | No | Optional PAT. Public repos clone tokenless; set this for private repos (both `GithubContext` and `GithubBackend`) or to raise the API rate ceiling. |
+| `GITHUB_ACCESS_TOKEN` | No | Optional PAT. Public repos clone tokenless; set this for private repos (both `GithubContextProvider` and `GithubWikiBackend`) or to raise the API rate ceiling. |
 | `REPOS_DIR` | No | Where Scout clones repos. Compose sets `/repos` (the `repos` named volume); local defaults to `.scout/repos`. |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | No | Required when `SCOUT_WIKI` or `SCOUT_CONTEXTS` reference `s3:...`. |
 | `DB_*` | No | Postgres (compose defaults work) |
@@ -195,7 +195,7 @@ Full list in `example.env`.
 ## Troubleshooting
 
 - **Google token expired.** Testing-mode OAuth expires every 7 days. Re-run `python scripts/google_auth.py`.
-- **`DriveContext` / `GmailContext` report "no Google auth material".** `token.json` isn't present in the container. Run `python scripts/google_auth.py` on the host; the file is bind-mounted in via the `.:/app` volume in `compose.yaml`.
+- **`DriveContextProvider` / `GmailContextProvider` report "no Google auth material".** `token.json` isn't present in the container. Run `python scripts/google_auth.py` on the host; the file is bind-mounted in via the `.:/app` volume in `compose.yaml`.
 - **Port 5432 or 8000 in use.** Edit the host-side port in `compose.yaml` (e.g. `"8001:8000"`), or drop `ports:` from `scout-db` if Postgres is already on the host.
 - **A context shows `disconnected`.** Env missing or wrong. Ask Doctor: `"why is <context id> disconnected?"` — it reads `health` + `env_report` and tells you which var to set.
 - **Live response says "Incorrect API key".** `OPENAI_API_KEY` rotated; fix and `docker compose restart scout-api`.

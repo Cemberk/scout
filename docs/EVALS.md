@@ -20,9 +20,9 @@ Each invariant is a function that returns `None` on PASS and raises `AssertionEr
 - `W2` Engineer wires `ingest_url` / `ingest_text` / `trigger_compile` / `introspect_schema` / `update_learnings`; no send tools.
 - `W3` Doctor wires `health` / `health_all` / `db_health` / `env_report` / `update_learnings`; no writers.
 - `W4` Leader's send tools align with `SCOUT_ALLOW_SENDS` + Slack/Google env.
-- `W5` Every registered `Context` satisfies the protocol (`id`/`name`/`kind` + `health`/`query`).
-- `W6` `WikiContext` has the five-method shape (`health` / `query` / `ingest_url` / `ingest_text` / `compile`).
-- `W7` `LocalBackend` rejects `../` path escapes on `read_bytes` + `write_bytes`.
+- `W5` Every registered `ContextProvider` has the expected shape (`id`/`name`/`kind` + `health`/`query`).
+- `W6` `WikiContextProvider` has the five-method shape (`health` / `query` / `ingest_url` / `ingest_text` / `compile`).
+- `W7` `LocalWikiBackend` rejects `../` path escapes on `read_bytes` + `write_bytes`.
 
 ```bash
 python -m evals wiring          # exits 0 on PASS, non-zero on FAIL
@@ -40,7 +40,7 @@ One flat `CASES` tuple. Each case names the section of [`tmp/spec.md`](../tmp/sp
 - `response_contains` / `response_forbids` / `response_matches` (regex) — deterministic assertions
 - `expected_tools` / `forbidden_tools` — substring match against tool names across leader + every delegated specialist
 - `requires` / `requires_not` — env gating (SKIP, not FAIL)
-- `fixture` — `"default"` (stub wiki + stubs for one local + one slack), `"none"` (empty), `"writable_wiki"` (real `LocalBackend` in a tmpdir)
+- `fixture` — `"default"` (stub wiki + stubs for one local + one slack), `"none"` (empty), `"writable_wiki"` (real `LocalWikiBackend` in a tmpdir)
 - `max_duration_s`, `target_file`
 
 Two transports share the case inventory:
@@ -52,7 +52,7 @@ python -m evals --live                # POST /teams/scout/runs + parse SSE
 python -m evals --verbose             # response + tool previews
 ```
 
-Live mode uses whatever `SCOUT_WIKI` / `SCOUT_CONTEXTS` the container has running. The in-process path installs the fixture via `scout.tools.ask_context.set_runtime(wiki, contexts)` around each case.
+Live mode uses whatever `SCOUT_WIKI` / `SCOUT_CONTEXTS` the container has running. The in-process path installs the fixture via `scout.tools.ask_context.set_runtime(wiki, contexts)` and then refreshes Explorer + Engineer tools around each case so the per-provider `query_<id>` tools match the fixture.
 
 On FAIL, a per-case diagnostic is written to [`evals/results/<case_id>.md`](../evals/results/). `scripts/eval_loop.sh` feeds that file to `claude -p` without re-running the case — each attempt edits the case's `target_file`, restarts the service, and loops until PASS or `MAX_ATTEMPTS`.
 

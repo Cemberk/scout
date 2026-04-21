@@ -78,6 +78,9 @@ sleep 15
 echo ""
 echo -e "${BOLD}Creating application service...${NC}"
 echo ""
+# Forward every relevant env var the first deploy might need. Keys not
+# set in the local shell become empty strings (harmless). Use
+# ./scripts/railway_env.sh to sync from .env after the fact.
 railway add -s scout \
     -v "DB_USER=${DB_USER:-ai}" \
     -v "DB_PASS=${DB_PASS:-ai}" \
@@ -87,11 +90,32 @@ railway add -s scout \
     -v "DB_DRIVER=postgresql+psycopg" \
     -v "WAIT_FOR_DB=True" \
     -v "REPOS_DIR=/repos" \
+    -v "PORT=8000" \
     -v "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+    -v "SCOUT_WIKI=${SCOUT_WIKI:-}" \
+    -v "SCOUT_CONTEXTS=${SCOUT_CONTEXTS:-}" \
+    -v "SCOUT_DISABLE_WEB=${SCOUT_DISABLE_WEB:-}" \
+    -v "SCOUT_ALLOW_SENDS=${SCOUT_ALLOW_SENDS:-}" \
     -v "PARALLEL_API_KEY=${PARALLEL_API_KEY:-}" \
     -v "EXA_API_KEY=${EXA_API_KEY:-}" \
     -v "GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:-}" \
-    -v "PORT=8000"
+    -v "SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}" \
+    -v "SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}" \
+    -v "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}" \
+    -v "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}" \
+    -v "GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID:-}" \
+    -v "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}" \
+    -v "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}" \
+    -v "AWS_REGION=${AWS_REGION:-}"
+
+# Warn on multi-container shapes that won't work with the default local wiki.
+# Railway defaults numReplicas=1 (see railway.json) so single-container is fine,
+# but if the user ever flips to 2+ they MUST also set SCOUT_WIKI to github:... or s3:...
+if [[ -z "${SCOUT_WIKI:-}" ]]; then
+    echo ""
+    echo -e "${DIM}Note: SCOUT_WIKI unset → defaults to local:./context.${NC}"
+    echo -e "${DIM}      Fine for numReplicas=1. For multi-replica, set to github:... or s3:...${NC}"
+fi
 
 echo ""
 echo -e "${BOLD}Deploying application...${NC}"
@@ -106,5 +130,5 @@ railway domain --service scout
 echo ""
 echo -e "${BOLD}Done.${NC} Domain may take ~5 minutes."
 echo -e "${DIM}Logs:       railway logs --service scout${NC}"
-echo -e "${DIM}Sync .env:  ./scripts/railway_env.sh  (for Slack / Google / S3 vars)${NC}"
+echo -e "${DIM}Sync .env:  ./scripts/railway_env.sh  (re-syncs any env that changes)${NC}"
 echo ""

@@ -1,4 +1,4 @@
-"""Shared boto3 helpers for S3Context + S3Backend."""
+"""Shared boto3 helpers for S3ContextProvider + S3WikiBackend."""
 
 from __future__ import annotations
 

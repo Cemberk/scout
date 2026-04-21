@@ -1,18 +1,20 @@
-"""
-Engineer Agent
-==============
+"""Engineer — owns every non-outbound write.
 
-Owns the two write paths that are not Leader's (§4.3):
+Two write surfaces:
 
 1. ``scout_*`` user-data tables (DDL + DML in the ``scout`` schema).
-2. The wiki — ``ingest_url`` / ``ingest_text`` / ``trigger_compile``
-   all act on the one active WikiContext.
+2. The wiki — ``ingest_url`` / ``ingest_text`` / ``trigger_compile``,
+   provided by ``wiki.get_tools(include_writes=True)``.
+
+The provider owns its tool surface; ``engineer_tools()`` pulls the wiki
+tools in and adds Engineer's SQL + schema tools. ``set_runtime`` rewires
+``.tools`` when the registry changes.
+
+SQLTools is bound to ``get_sql_engine()`` — Engineer can CREATE /
+ALTER / INSERT / UPDATE / DELETE. The session-level guard rejects any
+statement that targets ``public`` or ``ai``.
 
 Shares the ``scout_learnings`` memory store with Explorer and Doctor.
-
-The SQLTools is bound to ``get_sql_engine()`` so the Engineer can
-CREATE / ALTER / INSERT / UPDATE / DELETE — the session-level guard
-rejects any statement that targets ``public`` or ``ai``.
 """
 
 from __future__ import annotations
@@ -23,23 +25,30 @@ from agno.models.openai import OpenAIResponses
 from agno.tools.reasoning import ReasoningTools
 from agno.tools.sql import SQLTools
 
-from db import SCOUT_SCHEMA, db_url, get_sql_engine
+from db import SCOUT_SCHEMA, db_url, get_readonly_engine, get_sql_engine
 from scout.settings import agent_db, scout_learnings
-from scout.tools.ingest import ingest_text, ingest_url, trigger_compile
+from scout.tools.ask_context import get_wiki
 from scout.tools.introspect import create_introspect_schema_tool
 from scout.tools.learnings import create_update_learnings
 
 
-def _engineer_tools() -> list:
-    return [
-        SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
-        create_introspect_schema_tool(db_url, engine=get_sql_engine()),
-        ingest_url,
-        ingest_text,
-        trigger_compile,
-        create_update_learnings(scout_learnings),
-        ReasoningTools(),
-    ]
+def engineer_tools() -> list:
+    """Build Engineer's tool list: wiki writes + SQL + introspect + learnings."""
+    tools: list = []
+    wiki = get_wiki()
+    if wiki is not None:
+        tools.extend(wiki.get_tools(include_writes=True))
+    tools.extend(
+        [
+            SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
+            # Introspection is read-only — bound to the readonly engine so any
+            # accidental-write path is rejected at the DB.
+            create_introspect_schema_tool(db_url, engine=get_readonly_engine()),
+            create_update_learnings(scout_learnings),
+            ReasoningTools(),
+        ]
+    )
+    return tools
 
 
 ENGINEER_INSTRUCTIONS = """\
@@ -47,7 +56,7 @@ You are Engineer. You own two write surfaces:
 
 1. **Structured memory** — `scout_*` tables under the `scout` schema.
 2. **The wiki** — `ingest_url` / `ingest_text` / `trigger_compile` act on
-   the one active WikiContext (configured at startup via `SCOUT_WIKI`).
+   the one active wiki provider (configured at startup via `SCOUT_WIKI`).
 
 You share `scout_learnings` with Explorer and Doctor — save routing
 hints, corrections, per-user preferences with `update_learnings`.
@@ -95,8 +104,7 @@ there's no reasonable fit.
   under `raw/`.
 - `trigger_compile(force=False)` — runs one compile pass: iterates
   `raw/`, diffs against wiki state, LLM-transforms changed entries, and
-  writes to `compiled/`. Default schedule runs this hourly; call it
-  only when the user asks to compile now.
+  writes to `compiled/`. Call it only when the user asks to compile now.
 
 Ingest does not compile. Tell the user something like "ingested — the
 next scheduled compile will pick it up, or say 'compile now' if you
@@ -129,7 +137,7 @@ engineer = Agent(
         knowledge=scout_learnings,
         learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
     ),
-    tools=_engineer_tools(),
+    tools=engineer_tools(),
     add_datetime_to_context=True,
     add_history_to_context=True,
     num_history_runs=5,

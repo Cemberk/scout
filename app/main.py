@@ -1,5 +1,5 @@
 """
-Scout Entrypoint
+Scout AgentOS
 ================
 """
 
@@ -11,7 +11,9 @@ from agno.os import AgentOS
 
 from app.router import create_router
 from db import get_postgres_db
-from scout.agents import doctor, engineer, explorer
+from scout.agents.doctor import doctor
+from scout.agents.engineer import engineer
+from scout.agents.explorer import explorer
 from scout.context.config import build_contexts, build_wiki
 from scout.settings import (
     SLACK_BOT_TOKEN,
@@ -93,12 +95,12 @@ def _create_tables() -> None:
 
 
 def _build_wiki_and_contexts() -> None:
-    """Build the WikiContext + Context list from env and publish them
-    via ``scout.tools.ask_context.set_runtime`` so the Explorer /
-    Engineer / Doctor tools can resolve the active instances.
+    """Build the wiki + contexts from env and publish via ``set_runtime``.
 
-    Failures are logged but don't block startup — agents can still chat
-    even if a context is misconfigured; Doctor surfaces the issue.
+    ``set_runtime`` installs the registry singletons and rewires
+    Explorer + Engineer tool lists in one call. Failures are logged but
+    don't block startup — agents can still chat even if a context is
+    misconfigured; Doctor surfaces the issue.
     """
     try:
         wiki = build_wiki()

@@ -71,70 +71,79 @@ class Fixture:
 
 
 class _StubWiki:
-    id: str = "wiki"
-    name: str = "Wiki (stub)"
-    kind: str = "wiki"
+    """Wiki stub that subclasses ``WikiContextProvider`` at call time.
 
-    def __init__(
-        self,
-        answer: str = "(stub wiki)",
-        hits: list[Any] | None = None,
-    ) -> None:
-        self._answer = answer
-        self._hits = hits or []
+    Done lazily (built inside ``_stub_wiki()``) so the module-level
+    ``evals.runner`` import doesn't drag in the full wiki module — fast
+    unit tests can still import the runner without triggering heavy
+    providers.
+    """
 
-    def health(self):
-        from scout.context.base import HealthState, HealthStatus
-
-        return HealthStatus(HealthState.CONNECTED, "stub wiki")
-
-    def query(self, question: str, *, limit: int = 10, filters: dict | None = None):
-        from scout.context.base import Answer
-
-        return Answer(text=self._answer, hits=list(self._hits))
-
-    def ingest_url(self, url: str, *, title: str, tags: list[str] | None = None):
-        from scout.context.base import Entry
-
-        return Entry(id=f"raw/stub-{hash(url) & 0xFFFF:x}.md", name=title, kind="raw", path="raw/stub.md")
-
-    def ingest_text(self, text: str, *, title: str, tags: list[str] | None = None):
-        from scout.context.base import Entry
-
-        if not title:
-            raise ValueError("title is required for ingest_text")
-        return Entry(id=f"raw/stub-{hash(text) & 0xFFFF:x}.md", name=title, kind="raw", path="raw/stub.md")
-
-    def compile(self, *, force: bool = False):
-        return {"compiled": 0, "skipped-unchanged": 0, "skipped-empty": 0, "pruned": 0, "error": 0}
+    pass  # filled in by _stub_wiki()
 
 
 class _StubContext:
-    """Canned-answer context implementing the 2-method Context protocol."""
+    """Stub that subclasses ``ContextProvider`` at call time.
 
-    def __init__(self, ctx_id: str, kind: str, display_name: str, answer_text: str) -> None:
-        self.id = ctx_id
-        self.kind = kind
-        self.name = display_name
-        self._answer = answer_text
+    Same reason as ``_StubWiki``: deferred so imports stay light.
+    """
 
-    def health(self):
-        from scout.context.base import HealthState, HealthStatus
-
-        return HealthStatus(HealthState.CONNECTED, f"stub {self.kind}")
-
-    def query(self, question: str, *, limit: int = 10, filters: dict | None = None):
-        from scout.context.base import Answer
-
-        return Answer(text=self._answer, hits=[])
+    pass  # filled in by _stub_context()
 
 
-def _stub_wiki(answer: str = "(stub wiki)", hits: list[Any] | None = None) -> _StubWiki:
-    return _StubWiki(answer, hits)
+def _stub_wiki(answer: str = "(stub wiki)", hits: list[Any] | None = None):
+    """A WikiContextProvider subclass with canned query output + stub ingest/compile."""
+    from scout.context.base import Answer, Entry, HealthState, HealthStatus
+    from scout.context.wiki.provider import WikiContextProvider
+
+    class StubWiki(WikiContextProvider):
+        id = "wiki"
+        name = "Wiki (stub)"
+        kind = "wiki"
+
+        def __init__(self, answer_text: str, hits_list: list) -> None:
+            self._answer = answer_text
+            self._hits = hits_list
+            # Skip super().__init__ — we don't need a real backend, and
+            # our overrides never touch it.
+
+        def health(self):
+            return HealthStatus(HealthState.CONNECTED, "stub wiki")
+
+        def query(self, question, *, limit=10):
+            return Answer(text=self._answer, hits=list(self._hits))
+
+        def ingest_url(self, url, *, title, tags=None):
+            return Entry(id=f"raw/stub-{hash(url) & 0xFFFF:x}.md", name=title, kind="raw", path="raw/stub.md")
+
+        def ingest_text(self, text, *, title, tags=None):
+            if not title:
+                raise ValueError("title is required for ingest_text")
+            return Entry(id=f"raw/stub-{hash(text) & 0xFFFF:x}.md", name=title, kind="raw", path="raw/stub.md")
+
+        def compile(self, *, force=False):
+            return {"compiled": 0, "skipped-unchanged": 0, "skipped-empty": 0, "pruned": 0, "error": 0}
+
+    return StubWiki(answer, hits or [])
 
 
-def _stub_context(ctx_id: str, kind: str, display_name: str, answer_text: str) -> _StubContext:
-    return _StubContext(ctx_id, kind, display_name, answer_text)
+def _stub_context(ctx_id: str, kind_: str, display_name: str, answer_text: str):
+    """A ContextProvider subclass with a canned ``query()`` answer."""
+    from scout.context.base import Answer, ContextProvider, HealthState, HealthStatus
+
+    class StubContext(ContextProvider):
+        def __init__(self) -> None:
+            self.id = ctx_id
+            self.kind = kind_
+            self.name = display_name
+
+        def health(self):
+            return HealthStatus(HealthState.CONNECTED, f"stub {kind_}")
+
+        def query(self, question, *, limit=10):
+            return Answer(text=answer_text, hits=[])
+
+    return StubContext()
 
 
 def _build_fixture(case: Case) -> Fixture:
@@ -170,12 +179,12 @@ def _build_fixture(case: Case) -> Fixture:
         return Fixture(wiki=wiki, contexts=contexts)
 
     if name == "writable_wiki":
-        from scout.context.backends.local import LocalBackend
-        from scout.context.wiki import WikiContext
+        from scout.context.wiki.backends.local import LocalWikiBackend
+        from scout.context.wiki.provider import WikiContextProvider
 
         tmp = tempfile.mkdtemp(prefix="eval-wiki-")
-        backend = LocalBackend(tmp)
-        real_wiki = WikiContext(backend)
+        backend = LocalWikiBackend(tmp)
+        real_wiki = WikiContextProvider(backend)
 
         def _cleanup() -> None:
             import shutil
@@ -196,8 +205,9 @@ def _build_fixture(case: Case) -> Fixture:
 
 
 def _install_fixture(fixture: Fixture) -> tuple[Any, list[Any]]:
-    """Install the fixture via set_runtime. Returns the (wiki, contexts)
-    that were there before, so the caller can restore."""
+    """Install the fixture via ``set_runtime`` (which also rewires
+    Explorer + Engineer's tool lists). Returns the prior (wiki, contexts)
+    so the caller can restore."""
     from scout.tools.ask_context import get_contexts, get_wiki, set_runtime
 
     prev_wiki = get_wiki()

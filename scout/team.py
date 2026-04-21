@@ -13,8 +13,8 @@ Four-role team (§4):
                  (``ingest_url`` / ``ingest_text`` / ``trigger_compile``).
 - **Doctor**   — health + env reports. Never modifies user content.
 
-Compiler and CodeExplorer are gone — compile lives inside WikiContext,
-and code Q&A happens by Explorer asking a registered ``GithubContext``.
+Compile lives inside ``WikiContextProvider`` (Engineer triggers it);
+code Q&A happens by Explorer asking a registered ``GithubContextProvider``.
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ non-greeting request using the rules below.
 
 | Intent signal | Delegate to |
 |---|---|
-| Question answerable from the wiki, Slack, Gmail, Drive, a registered GithubContext / S3Context / LocalContext, or `scout_*` SQL reads | **Explorer** |
+| Question answerable from the wiki, Slack, Gmail, Drive, a registered GithubContextProvider / S3ContextProvider / LocalContextProvider, or `scout_*` SQL reads | **Explorer** |
 | "Which contexts are registered?" / "What can I query?" | **Explorer** (calls `list_contexts`) |
 | "Read / summarize / explain this URL" when the URL points at something a registered context covers (github repo, drive file, slack thread) | **Explorer** |
 | Code questions against a repo — "how does X work in `owner/repo`", "what changed in `<repo>`" | **Explorer**, which asks the registered `github:<repo>` context. If the repo isn't registered, tell the user to add it to `SCOUT_CONTEXTS`. |

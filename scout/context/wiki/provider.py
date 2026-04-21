@@ -1,7 +1,7 @@
-"""WikiContext — the one compile-capable knowledge store.
+"""WikiContextProvider — the one compile-capable knowledge store.
 
-Implements the Context protocol (query + health) and adds ingest + compile.
-Holds a WikiBackend which handles raw-bytes I/O against the substrate
+Subclass of ``ContextProvider`` that adds ingest + compile. Holds a
+``WikiBackend`` which handles raw-bytes I/O against the substrate
 (local filesystem, git repo, or S3 bucket).
 
 Layout managed on the backend:
@@ -28,7 +28,7 @@ from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 
 from scout.context._shared import answer_from_run
-from scout.context.base import Answer, Entry, HealthStatus
+from scout.context.base import Answer, ContextProvider, Entry, HealthStatus
 
 if TYPE_CHECKING:
     from scout.context.base import WikiBackend
@@ -172,11 +172,11 @@ SOURCE TEXT:
 
 
 # ----------------------------------------------------------------------
-# WikiContext
+# WikiContextProvider
 # ----------------------------------------------------------------------
 
 
-class WikiContext:
+class WikiContextProvider(ContextProvider):
     """The one compile-capable knowledge store. Configured via SCOUT_WIKI."""
 
     id: str = "wiki"
@@ -194,16 +194,109 @@ class WikiContext:
     def health(self) -> HealthStatus:
         return self.backend.health()
 
-    def query(
-        self,
-        question: str,
-        *,
-        limit: int = 10,
-        filters: dict | None = None,
-    ) -> Answer:
-        del filters, limit
+    def query(self, question: str, *, limit: int = 10) -> Answer:
+        del limit
         agent = self._ensure_query_agent()
         return answer_from_run(agent.run(question))
+
+    # ------------------------------------------------------------------
+    # Tool surface — readers get the query tool; writers opt in to ingest + compile.
+    # ------------------------------------------------------------------
+
+    def get_tools(self, *, granular: bool = False, include_writes: bool = False) -> list:
+        """Tools for an Agent to consume.
+
+        Default: ``[query_wiki]`` — safe to wire onto a read-only agent.
+        ``include_writes=True`` adds ``ingest_url`` / ``ingest_text`` /
+        ``trigger_compile`` — wire this onto the single writer (Engineer,
+        in Scout) so the provider stays the one owner of its surface.
+        """
+        tools = super().get_tools(granular=granular)
+        if include_writes:
+            tools.extend(
+                [
+                    self._ingest_url_tool(),
+                    self._ingest_text_tool(),
+                    self._trigger_compile_tool(),
+                ]
+            )
+        return tools
+
+    def _ingest_url_tool(self):
+        provider = self
+
+        @tool(name="ingest_url")
+        def _ingest_url(url: str, title: str, tags: list[str] | None = None) -> str:
+            """Ingest a URL into the wiki. Writes raw/ via the active backend.
+
+            Args:
+                url: The source URL.
+                title: Human-readable title — drives the slug.
+                tags: Optional list of topic tags.
+
+            Returns:
+                JSON ``{"status": "ingested"|"error", "entry_id": ..., "detail": ...}``.
+            """
+            try:
+                entry = provider.ingest_url(url, title=title, tags=tags)
+            except Exception as exc:
+                log.exception("ingest_url failed for %s", url)
+                return json.dumps({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
+            return json.dumps(
+                {"status": "ingested", "entry_id": entry.id, "name": entry.name, "path": entry.path}
+            )
+
+        return _ingest_url
+
+    def _ingest_text_tool(self):
+        provider = self
+
+        @tool(name="ingest_text")
+        def _ingest_text(text: str, title: str, tags: list[str] | None = None) -> str:
+            """Ingest raw text into the wiki. Writes raw/ via the active backend.
+
+            Args:
+                text: The markdown body.
+                title: Required — drives the slug.
+                tags: Optional topic tags.
+
+            Returns:
+                JSON ``{"status": "ingested"|"error", "entry_id": ..., "detail": ...}``.
+            """
+            if not title:
+                return json.dumps({"status": "error", "detail": "title required"})
+            try:
+                entry = provider.ingest_text(text, title=title, tags=tags)
+            except Exception as exc:
+                log.exception("ingest_text failed")
+                return json.dumps({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
+            return json.dumps(
+                {"status": "ingested", "entry_id": entry.id, "name": entry.name, "path": entry.path}
+            )
+
+        return _ingest_text
+
+    def _trigger_compile_tool(self):
+        provider = self
+
+        @tool(name="trigger_compile")
+        def _trigger_compile(force: bool = False) -> str:
+            """Run one wiki compile pass. Returns the compile report.
+
+            Args:
+                force: Recompile even unchanged entries.
+
+            Returns:
+                JSON ``{"status": "ok"|"error", "counts": {...}, "detail": ...}``.
+            """
+            try:
+                counts = provider.compile(force=force)
+            except Exception as exc:
+                log.exception("trigger_compile failed")
+                return json.dumps({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
+            return json.dumps({"status": "ok", "counts": counts})
+
+        return _trigger_compile
 
     # ------------------------------------------------------------------
     # Ingest — writes into raw/ via the backend.
@@ -489,4 +582,4 @@ class WikiContext:
         )
 
 
-__all__ = ["WikiContext"]
+__all__ = ["WikiContextProvider"]

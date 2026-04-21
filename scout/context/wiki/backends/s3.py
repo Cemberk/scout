@@ -1,4 +1,4 @@
-"""S3Backend — WikiBackend backed by an S3 bucket + prefix.
+"""S3WikiBackend — WikiBackend backed by an S3 bucket + prefix.
 
 Raw + compiled + state live as S3 keys. Concurrency on the state key
 (``.scout/state.json``) uses S3 conditional PUT via ``If-Match: <etag>``:
@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import time
 
-from scout.context.backends._s3 import build_client, normalize_prefix
+from scout.context._s3 import build_client, normalize_prefix
 from scout.context.base import HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ STATE_KEY_SUFFIX = ".scout/state.json"
 _STATE_PUT_RETRIES = 3
 
 
-class S3Backend:
+class S3WikiBackend:
     """WikiBackend whose substrate is an S3 bucket + prefix."""
 
     kind: str = "s3"
@@ -110,7 +110,7 @@ class S3Backend:
                 code = (exc.response.get("Error") or {}).get("Code", "")
                 if code in ("PreconditionFailed", "ConditionalRequestConflict"):
                     log.warning(
-                        "S3Backend: state PUT 412 (attempt %d/%d); re-reading and retrying",
+                        "S3WikiBackend: state PUT 412 (attempt %d/%d); re-reading and retrying",
                         attempt,
                         _STATE_PUT_RETRIES,
                     )
@@ -125,4 +125,4 @@ class S3Backend:
                 raise
             self._state_etag = resp.get("ETag")
             return
-        raise RuntimeError(f"S3Backend.state PUT failed after {_STATE_PUT_RETRIES} retries (etag conflict)")
+        raise RuntimeError(f"S3WikiBackend.state PUT failed after {_STATE_PUT_RETRIES} retries (etag conflict)")

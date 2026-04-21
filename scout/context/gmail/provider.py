@@ -1,4 +1,4 @@
-"""GmailContext — agentic read-only context over Gmail.
+"""GmailContextProvider — agentic read-only context over Gmail.
 
 Registered when ``GOOGLE_CLIENT_ID`` / ``GOOGLE_CLIENT_SECRET`` /
 ``GOOGLE_PROJECT_ID`` are all set. Agno's ``GmailTools`` handles the
@@ -14,7 +14,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
 from scout.context._shared import answer_from_run, google_auth_material_missing, google_env_missing
-from scout.context.base import Answer, HealthState, HealthStatus
+from scout.context.base import Answer, ContextProvider, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ _WRITE_TOOLS = [
 ]
 
 
-class GmailContext:
+class GmailContextProvider(ContextProvider):
     """Agentic context over Gmail's API. Read-only."""
 
     id: str = "gmail"
@@ -68,14 +68,8 @@ class GmailContext:
         email = profile.get("emailAddress", "authenticated")
         return HealthStatus(HealthState.CONNECTED, email)
 
-    def query(
-        self,
-        question: str,
-        *,
-        limit: int = 10,
-        filters: dict | None = None,
-    ) -> Answer:
-        del filters, limit
+    def query(self, question: str, *, limit: int = 10) -> Answer:
+        del limit
         agent = self._ensure_agent()
         if agent is None:
             return Answer(text="Gmail not configured (GOOGLE_* env missing)", hits=[])
@@ -95,7 +89,7 @@ class GmailContext:
         tools = [GmailTools(exclude_tools=_WRITE_TOOLS)]
         return Agent(
             id="gmail-context",
-            name="GmailContext",
+            name="GmailContextProvider",
             role="Read-only search over the user's Gmail",
             model=OpenAIResponses(id="gpt-5.4"),
             instructions=_INSTRUCTIONS,

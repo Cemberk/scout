@@ -1,14 +1,10 @@
-"""Diagnostic tools for the Doctor agent (§7.1).
+"""Diagnostic tools for the Doctor agent.
 
 Doctor surface:
 - ``health(target_id)``  — one target, 'wiki' or a context id.
 - ``health_all()``       — wiki + every registered context.
 - ``db_health()``        — Postgres connectivity + table existence.
 - ``env_report()``       — env var presence (redacted, grouped by integration).
-
-The old manifest / compile / repo-cache tools are gone — the manifest
-itself is gone (§7.2), compile lives inside WikiContext, and the repo
-cache goes with the CodeExplorer agent.
 """
 
 from __future__ import annotations
@@ -39,16 +35,16 @@ _EXPECTED_ENV: dict[str, dict[str, str]] = {
         "GOOGLE_PROJECT_ID": "Google OAuth",
     },
     "slack": {
-        "SLACK_BOT_TOKEN": "Scout's Slack bot token — enables SlackContext + SlackTools",
+        "SLACK_BOT_TOKEN": "Scout's Slack bot token — enables SlackContextProvider + SlackTools",
         "SLACK_SIGNING_SECRET": "Verifies inbound Slack events",
     },
     "github": {
         "GITHUB_ACCESS_TOKEN": "Optional PAT — public repos clone tokenless",
-        "REPOS_DIR": "Clone cache for GithubContext / GithubBackend",
+        "REPOS_DIR": "Clone cache for GithubContextProvider / GithubWikiBackend",
     },
     "s3": {
-        "AWS_ACCESS_KEY_ID": "AWS credentials for S3Context / S3Backend",
-        "AWS_SECRET_ACCESS_KEY": "AWS credentials for S3Context / S3Backend",
+        "AWS_ACCESS_KEY_ID": "AWS credentials for S3ContextProvider / S3WikiBackend",
+        "AWS_SECRET_ACCESS_KEY": "AWS credentials for S3ContextProvider / S3WikiBackend",
         "AWS_REGION": "AWS region",
     },
     "db": {

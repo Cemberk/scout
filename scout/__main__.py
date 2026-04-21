@@ -5,10 +5,6 @@ Usage:
     python -m scout compile             # run one wiki compile pass
     python -m scout compile --force     # recompile unchanged entries too
     python -m scout contexts            # list registered contexts + wiki health
-
-Invariants that used to live under ``_smoke_gating`` (LocalBackend
-path-escape, tool-wiring shape, Context protocol conformance) have
-moved to ``python -m evals wiring``.
 """
 
 from __future__ import annotations

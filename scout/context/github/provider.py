@@ -1,4 +1,4 @@
-"""GithubContext — agentic read-only context over a cloned git repo.
+"""GithubContextProvider — agentic read-only context over a cloned git repo.
 
 Clones on first health/query into ``$REPOS_DIR/<owner>__<repo>``. The
 repo argument is either ``"owner/name"`` shorthand or a full HTTPS URL.
@@ -20,14 +20,14 @@ from agno.models.openai import OpenAIResponses
 from agno.tools import tool
 from agno.tools.coding import CodingTools
 
+from scout.context._git import clone_url, ensure_clone, repo_dir_name, run
 from scout.context._shared import answer_from_run
-from scout.context.backends._git import clone_url, ensure_clone, repo_dir_name, run
-from scout.context.base import Answer, HealthState, HealthStatus
+from scout.context.base import Answer, ContextProvider, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
 
 
-class GithubContext:
+class GithubContextProvider(ContextProvider):
     """Agentic context over a cloned GitHub repo."""
 
     kind: str = "github"
@@ -72,18 +72,12 @@ class GithubContext:
     # Context protocol
     # ------------------------------------------------------------------
 
-    def query(
-        self,
-        question: str,
-        *,
-        limit: int = 10,
-        filters: dict | None = None,
-    ) -> Answer:
-        del filters, limit
+    def query(self, question: str, *, limit: int = 10) -> Answer:
+        del limit
         try:
             self._ensure_clone()
         except Exception as exc:
-            log.exception("GithubContext.query: clone failed")
+            log.exception("GithubContextProvider.query: clone failed")
             return Answer(text=f"clone failed: {exc}", hits=[])
         agent = self._ensure_agent()
         return answer_from_run(agent.run(question))
@@ -100,7 +94,7 @@ class GithubContext:
     def _build_agent(self) -> Agent:
         return Agent(
             id=f"github-context-{repo_dir_name(self.repo)}",
-            name=f"GithubContext({self.repo})",
+            name=f"GithubContextProvider({self.repo})",
             role=f"Read-only exploration of the {self.repo} git repo",
             model=OpenAIResponses(id="gpt-5.4"),
             instructions=_instructions(self.repo, self.clone_dir),

@@ -1,9 +1,8 @@
 """Instruction assembly for Scout's agents.
 
-Post-migration, only ``explorer_instructions()`` lives here. The old
-Navigator prompt + manifest-derived ``sources_header`` are gone — the
-manifest itself is gone (§7.2), and Explorer calls ``list_contexts``
-live when it needs to know what's reachable.
+Explorer's prompt tells it to look at its own tool list to see what's
+reachable — each registered context exposes a ``query_<id>`` tool, and
+``list_contexts`` answers meta questions about what's wired.
 """
 
 EXPLORER_INSTRUCTIONS = """\
@@ -14,28 +13,34 @@ You are serving user `{user_id}`.
 
 ## What you do
 
-Answer questions by asking the wiki + registered contexts. Model picks
-which target(s) to query. You share an operational-memory store
-(`scout_learnings`) with Engineer and Doctor — use it to remember
-routing hints that work ("handbook stuff is in wiki", "infra is in
-slack"), corrections, and per-user preferences.
+Answer questions by asking the wiki + registered contexts. Each
+context exposes its own tool in your tool list — you call them
+directly. Model picks which target(s) to query. You share an
+operational-memory store (`scout_learnings`) with Engineer and Doctor
+— use it to remember routing hints that work ("handbook stuff is in
+wiki", "infra is in slack"), corrections, and per-user preferences.
 
 ## How you work
 
-1. **Inventory.** Call `list_contexts` first if you're unsure what's
-   registered. It returns every target + id + health.
-2. **Route.** Pick the target(s) most likely to answer:
-   - Policy / handbook / compiled knowledge → `ask_context("wiki", ...)`
-   - Discussions / threads / messages → `ask_context("slack", ...)`
-   - Email / people threads → `ask_context("gmail", ...)`
-   - Files / documents → `ask_context("drive", ...)`
-   - Code / repo questions → `ask_context("github:<repo>", ...)`
+1. **Your `query_*` tools ARE the list of registered contexts.**
+   `query_wiki` is always there; others depend on `SCOUT_CONTEXTS`
+   (`query_slack`, `query_gmail`, `query_drive`, `query_github_<repo>`,
+   `query_local_<path>`, `query_s3_<bucket>`). No discovery step —
+   look at your tool list.
+2. **Route by source shape:**
+   - Policy / handbook / compiled knowledge → `query_wiki`
+   - Discussions / threads / messages → `query_slack`
+   - Email / people threads → `query_gmail`
+   - Files / documents → `query_drive`
+   - Code / repo questions → `query_github_<repo>` (if registered)
    - Structured user data (contacts / projects / notes / decisions) →
      read-only SQL on `scout_*` tables.
-3. **Fan out when the question spans sources.** Concat the answers
+3. **Use `list_contexts` for meta questions** — "what data sources
+   are reachable?" — not for routing. For routing, trust your tool list.
+4. **Fan out when the question spans sources.** Concat the answers
    with source headings; the Leader synthesizes on top.
-4. **Cite.** Every answer includes where it came from.
-5. **Learn.** Save a `update_learnings` note when a routing choice was
+5. **Cite.** Every answer includes where it came from.
+6. **Learn.** Save an `update_learnings` note when a routing choice was
    non-obvious, or when the user corrects your approach. Search first —
    don't duplicate.
 
@@ -50,10 +55,5 @@ slack"), corrections, and per-user preferences.
 
 
 def explorer_instructions() -> str:
-    """Assemble the Explorer's prompt.
-
-    Unlike the old Navigator prompt, this one does NOT depend on the
-    manifest — Explorer calls ``list_contexts`` live when it needs to
-    know what's reachable.
-    """
+    """Assemble the Explorer's prompt."""
     return EXPLORER_INSTRUCTIONS

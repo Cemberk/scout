@@ -1,9 +1,9 @@
-"""GithubBackend — WikiBackend that commits + pushes to a GitHub repo.
+"""GithubWikiBackend — WikiBackend that commits + pushes to a GitHub repo.
 
 Operates on a local clone (full history — ``shallow=False`` — so rebase
 works). Every ``write_bytes`` / ``delete`` commits one file and pushes;
 on push rejection, pulls --rebase and retries up to 3 times. This is the
-concurrency story (§6.2.2): git coordinates, not Scout.
+concurrency story: git coordinates, not Scout.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import time
 from os import getenv
 from pathlib import Path
 
-from scout.context.backends._git import clone_url, ensure_clone, repo_dir_name, run
+from scout.context._git import clone_url, ensure_clone, repo_dir_name, run
 from scout.context.base import HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 _PUSH_RETRIES = 3
 
 
-class GithubBackend:
+class GithubWikiBackend:
     """WikiBackend whose substrate is a GitHub repo."""
 
     kind: str = "github"
@@ -122,7 +122,7 @@ class GithubBackend:
         rc_diff, out_diff, _ = run(["git", "diff", "--cached", "--quiet"], cwd=self.clone_dir, timeout=10)
         # git diff --quiet returns 0 if no diff, 1 if diff present.
         if rc_diff == 0:
-            log.debug("GithubBackend: nothing staged for %s; skipping commit", path)
+            log.debug("GithubWikiBackend: nothing staged for %s; skipping commit", path)
             return
 
         rc_commit, _, err_commit = run(["git", "commit", "-m", message], cwd=self.clone_dir, timeout=30)
@@ -138,7 +138,7 @@ class GithubBackend:
             if rc_push == 0:
                 return
             log.warning(
-                "GithubBackend: push rejected (attempt %d/%d): %s",
+                "GithubWikiBackend: push rejected (attempt %d/%d): %s",
                 attempt,
                 _PUSH_RETRIES,
                 err_push.strip(),

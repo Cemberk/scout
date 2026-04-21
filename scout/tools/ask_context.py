@@ -1,8 +1,19 @@
-"""Explorer's tools: ask_context + list_contexts.
+"""Context registry.
 
-Both tools read from module-level singletons populated at startup by
-``scout.context.config.build_wiki`` + ``build_contexts``. Set them via
-``set_runtime(wiki, contexts)`` from ``app/main.py`` lifespan.
+Owns the pair of singletons every agent's tool list depends on:
+- ``_wiki``     — the one ``WikiContextProvider``
+- ``_contexts`` — the list of live-read ``ContextProvider`` instances
+
+Each provider exposes its own ``query_<id>`` tool via
+``ContextProvider.get_tools()``; there is no dispatcher.
+
+``set_runtime(wiki, contexts)`` installs the pair AND rewires Explorer
+and Engineer so their per-provider tools match the new registry. One
+call, one state change. The app lifespan calls it once at startup; eval
+fixtures call it per case when they swap providers.
+
+``list_contexts`` is a meta tool for answering "what's reachable?"
+without asking each provider individually.
 """
 
 from __future__ import annotations
@@ -14,83 +25,62 @@ from typing import TYPE_CHECKING
 from agno.tools import tool
 
 if TYPE_CHECKING:
-    from scout.context.base import Context
-    from scout.context.wiki import WikiContext
+    from scout.context.base import ContextProvider
+    from scout.context.wiki.provider import WikiContextProvider
 
 log = logging.getLogger(__name__)
 
 
-_wiki: WikiContext | None = None
-_contexts: list[Context] = []
+_wiki: WikiContextProvider | None = None
+_contexts: list[ContextProvider] = []
 
 
-def set_runtime(wiki: WikiContext, contexts: list[Context]) -> None:
-    """Install the singletons. Called once from the app lifespan."""
+def set_runtime(wiki: WikiContextProvider | None, contexts: list[ContextProvider]) -> None:
+    """Install the registry singletons and rewire agent tool lists.
+
+    ``wiki`` may be None — agents come up with just their base tools
+    until a real wiki is wired (in practice this only happens during
+    module-load before the lifespan runs).
+    """
     global _wiki, _contexts
     _wiki = wiki
     _contexts = list(contexts)
 
+    # Rewire agents whose tools derive from the registry. Imports are
+    # runtime-local to avoid a circular import at module load (the agent
+    # modules import ``get_wiki`` / ``get_contexts`` from here).
+    from scout.agents.engineer import engineer, engineer_tools
+    from scout.agents.explorer import explorer, explorer_tools
 
-def get_wiki() -> WikiContext | None:
+    explorer.tools = explorer_tools()  # type: ignore[assignment]
+    engineer.tools = engineer_tools()  # type: ignore[assignment]
+
+
+def get_wiki() -> WikiContextProvider | None:
     return _wiki
 
 
-def get_contexts() -> list[Context]:
+def get_contexts() -> list[ContextProvider]:
     return list(_contexts)
-
-
-def _targets() -> dict[str, Context | WikiContext]:
-    targets: dict[str, Context | WikiContext] = {}
-    if _wiki is not None:
-        targets["wiki"] = _wiki
-    for ctx in _contexts:
-        targets[ctx.id] = ctx
-    return targets
-
-
-@tool
-def ask_context(context_id: str, question: str, limit: int = 10) -> str:
-    """Ask a registered context or the wiki. ``context_id='wiki'`` targets the wiki.
-
-    Args:
-        context_id: One of the ids returned by ``list_contexts()``, or ``'wiki'``.
-        question: Natural-language question.
-        limit: Soft cap on internal retrieval breadth (context-specific).
-
-    Returns:
-        JSON string ``{"answer": ..., "hits": [...]}`` or ``{"error": ...}``.
-    """
-    targets = _targets()
-    target = targets.get(context_id)
-    if target is None:
-        return json.dumps(
-            {
-                "error": f"unknown context {context_id!r}",
-                "available": sorted(targets.keys()),
-            }
-        )
-    try:
-        answer = target.query(question, limit=limit)
-    except Exception as exc:
-        log.exception("ask_context: %s failed", context_id)
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-    return json.dumps(
-        {
-            "answer": answer.text,
-            "hits": [h.__dict__ for h in answer.hits],
-        }
-    )
 
 
 @tool
 def list_contexts() -> str:
     """List registered contexts + the wiki, with current health.
 
+    Use this when the user asks what data sources are reachable, or
+    when you need a meta view. For actually querying a source, call the
+    source's ``query_<id>`` tool directly.
+
     Returns:
         JSON list of ``{id, name, kind, health, detail}``.
     """
     rows = []
-    for ctx_id, target in _targets().items():
+    targets: list = []
+    if _wiki is not None:
+        targets.append(_wiki)
+    targets.extend(_contexts)
+    for target in targets:
         try:
             health = target.health()
             state = health.state.value if hasattr(health.state, "value") else str(health.state)
@@ -100,7 +90,7 @@ def list_contexts() -> str:
             detail = f"{type(exc).__name__}: {exc}"
         rows.append(
             {
-                "id": ctx_id,
+                "id": target.id,
                 "name": target.name,
                 "kind": target.kind,
                 "health": state,

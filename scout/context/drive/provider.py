@@ -1,8 +1,8 @@
-"""DriveContext — agentic read-only context over Google Drive.
+"""DriveContextProvider — agentic read-only context over Google Drive.
 
 Registered when ``GOOGLE_CLIENT_ID`` / ``GOOGLE_CLIENT_SECRET`` /
 ``GOOGLE_PROJECT_ID`` are all set. Shares the same OAuth app as
-GmailContext.
+``GmailContextProvider``.
 
 Drive access is scoped on the Google side by sharing folders with the
 Scout bot account — this code does not filter further.
@@ -16,7 +16,7 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
 from scout.context._shared import answer_from_run, google_auth_material_missing, google_env_missing
-from scout.context.base import Answer, HealthState, HealthStatus
+from scout.context.base import Answer, ContextProvider, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ _WRITE_TOOLS = [
 ]
 
 
-class DriveContext:
+class DriveContextProvider(ContextProvider):
     """Agentic context over Google Drive. Read-only."""
 
     id: str = "drive"
@@ -59,14 +59,8 @@ class DriveContext:
         email = (about.get("user") or {}).get("emailAddress", "authenticated")
         return HealthStatus(HealthState.CONNECTED, email)
 
-    def query(
-        self,
-        question: str,
-        *,
-        limit: int = 10,
-        filters: dict | None = None,
-    ) -> Answer:
-        del filters, limit
+    def query(self, question: str, *, limit: int = 10) -> Answer:
+        del limit
         agent = self._ensure_agent()
         if agent is None:
             return Answer(text="Drive not configured (GOOGLE_* env missing)", hits=[])
@@ -86,7 +80,7 @@ class DriveContext:
         tools = [GoogleDriveTools(exclude_tools=_WRITE_TOOLS)]
         return Agent(
             id="drive-context",
-            name="DriveContext",
+            name="DriveContextProvider",
             role="Read-only search over the user's Google Drive",
             model=OpenAIResponses(id="gpt-5.4"),
             instructions=_INSTRUCTIONS,

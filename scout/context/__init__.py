@@ -1,15 +1,8 @@
-"""Scout context + wiki layer.
-
-Public surface:
-    - Context / HealthState / HealthStatus / Answer / Hit / Entry / WikiBackend
-      from scout.context.base
-    - WikiContext from scout.context.wiki (added in 1f)
-    - build_wiki / build_contexts / parse_spec from scout.context.config (added in 1b)
-"""
+"""Context + wiki layer."""
 
 from scout.context.base import (
     Answer,
-    Context,
+    ContextProvider,
     Entry,
     HealthState,
     HealthStatus,
@@ -19,7 +12,7 @@ from scout.context.base import (
 
 __all__ = [
     "Answer",
-    "Context",
+    "ContextProvider",
     "Entry",
     "HealthState",
     "HealthStatus",

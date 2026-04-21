@@ -1,4 +1,4 @@
-"""SlackContext — agentic read-only context over Slack's API.
+"""SlackContextProvider — agentic read-only context over Slack's API.
 
 Registered when ``SLACK_BOT_TOKEN`` is set. Health check hits Slack's
 ``auth.test``. The internal agent wraps Agno's ``SlackTools`` with only
@@ -14,12 +14,12 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
 from scout.context._shared import answer_from_run
-from scout.context.base import Answer, HealthState, HealthStatus
+from scout.context.base import Answer, ContextProvider, HealthState, HealthStatus
 
 log = logging.getLogger(__name__)
 
 
-class SlackContext:
+class SlackContextProvider(ContextProvider):
     """Agentic context over Slack's API."""
 
     id: str = "slack"
@@ -46,14 +46,8 @@ class SlackContext:
         user = resp.get("user") or "bot"
         return HealthStatus(HealthState.CONNECTED, f"{user}@{team}")
 
-    def query(
-        self,
-        question: str,
-        *,
-        limit: int = 10,
-        filters: dict | None = None,
-    ) -> Answer:
-        del filters, limit
+    def query(self, question: str, *, limit: int = 10) -> Answer:
+        del limit
         agent = self._ensure_agent()
         if agent is None:
             return Answer(text="Slack not configured (SLACK_BOT_TOKEN missing)", hits=[])
@@ -90,7 +84,7 @@ class SlackContext:
         ]
         return Agent(
             id="slack-context",
-            name="SlackContext",
+            name="SlackContextProvider",
             role="Read-only exploration of the Slack workspace",
             model=OpenAIResponses(id="gpt-5.4"),
             instructions=_INSTRUCTIONS,
