@@ -5,6 +5,7 @@ Assertions on content + tools + delegations from ``team.run()``.
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from dataclasses import dataclass, field
@@ -107,7 +108,7 @@ def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], f
     from scout.team import scout as team
 
     start = time.monotonic()
-    result = team.run(case.prompt)
+    result = asyncio.run(team.arun(case.prompt))
     duration = time.monotonic() - start
 
     content = getattr(result, "content", None) or ""

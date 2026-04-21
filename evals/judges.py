@@ -7,6 +7,7 @@ is ``passing_score`` on the ``Judged`` dataclass (default 7.0).
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from typing import Literal
@@ -69,7 +70,7 @@ def run_judged(case: Judged) -> JudgedResult:
 
     start = time.monotonic()
     try:
-        run_result = team.run(case.prompt)
+        run_result = asyncio.run(team.arun(case.prompt))
         response = getattr(run_result, "content", None) or ""
         duration = time.monotonic() - start
 
