@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from os import getenv
+from typing import Any
 
 from agno.tools import tool
 from agno.utils.log import log_error
@@ -20,12 +21,15 @@ from agno.utils.log import log_error
 from scout.context.backend import ContextBackend
 from scout.context.provider import Status
 
+_MAX_EXTRACT_CHARS = 50_000
+
 
 class ParallelBackend(ContextBackend):
     """Backend for `WebContextProvider` backed by Parallel's beta API."""
 
     def __init__(self, *, api_key: str | None = None) -> None:
         self.api_key = api_key if api_key is not None else (getenv("PARALLEL_API_KEY", "") or None)
+        self._client: Any = None
 
     def status(self) -> Status:
         if not self.api_key:
@@ -35,8 +39,15 @@ class ParallelBackend(ContextBackend):
     async def astatus(self) -> Status:
         return self.status()
 
+    def _get_client(self) -> Any:
+        if self._client is None:
+            from parallel import AsyncParallel  # type: ignore[import-not-found]
+
+            self._client = AsyncParallel(api_key=self.api_key)
+        return self._client
+
     def get_tools(self) -> list:
-        api_key = self.api_key
+        backend = self
 
         @tool(name="web_search")
         async def web_search(objective: str, max_results: int = 8) -> str:
@@ -49,13 +60,12 @@ class ParallelBackend(ContextBackend):
             Returns:
                 JSON with `results: [{url, title, excerpts: [...]}, ...]`.
             """
-            if not api_key:
+            if not backend.api_key:
                 return json.dumps({"error": "PARALLEL_API_KEY not configured"})
             try:
-                from parallel import AsyncParallel  # type: ignore[import-not-found]
-
-                client = AsyncParallel(api_key=api_key)
-                out = await client.beta.search(objective=objective, max_results=max_results, mode="agentic")
+                out = await backend._get_client().beta.search(
+                    objective=objective, max_results=max_results, mode="agentic"
+                )
             except Exception as exc:
                 log_error(f"web_search failed: {exc}")
                 return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
@@ -80,19 +90,16 @@ class ParallelBackend(ContextBackend):
             Returns:
                 JSON with `{url, content}` or `{error}`.
             """
-            if not api_key:
+            if not backend.api_key:
                 return json.dumps({"error": "PARALLEL_API_KEY not configured"})
             try:
-                from parallel import AsyncParallel  # type: ignore[import-not-found]
-
-                client = AsyncParallel(api_key=api_key)
-                result = await client.beta.extract(urls=[url], full_content=True)
+                result = await backend._get_client().beta.extract(urls=[url], full_content=True)
             except Exception as exc:
                 log_error(f"web_extract failed for {url}: {exc}")
                 return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
             if not result or not result.results:
                 return json.dumps({"url": url, "content": ""})
             body = result.results[0].full_content or ""
-            return json.dumps({"url": url, "content": body[:50_000]})
+            return json.dumps({"url": url, "content": body[:_MAX_EXTRACT_CHARS]})
 
         return [web_search, web_extract]

@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from agno.agent import Agent
-from agno.models.openai import OpenAIResponses
 
 from scout.context._utils import answer_from_run
 from scout.context.backend import ContextBackend
@@ -45,11 +44,11 @@ class WebContextProvider(ContextProvider):
     async def astatus(self) -> Status:
         return await self.backend.astatus()
 
-    def query(self, question: str, *, limit: int = 10) -> Answer:
+    def query(self, question: str) -> Answer:
         agent = self._ensure_agent()
         return answer_from_run(agent.run(question))
 
-    async def aquery(self, question: str, *, limit: int = 10) -> Answer:
+    async def aquery(self, question: str) -> Answer:
         agent = self._ensure_agent()
         return answer_from_run(await agent.arun(question))
 
@@ -88,7 +87,7 @@ class WebContextProvider(ContextProvider):
             id=self.id,
             name=self.name,
             role="Research the web and return cited answers",
-            model=self.model or OpenAIResponses(id="gpt-5.4"),
+            model=self.model,
             instructions=_AGENT_INSTRUCTIONS,
             tools=self.backend.get_tools(),
             markdown=True,

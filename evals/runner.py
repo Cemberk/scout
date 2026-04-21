@@ -98,10 +98,10 @@ def _stub_context(ctx_id: str, display_name: str, answer_text: str):
         async def astatus(self):
             return self.status()
 
-        def query(self, question, *, limit=10):
+        def query(self, question):
             return Answer(text=answer_text)
 
-        async def aquery(self, question, *, limit=10):
+        async def aquery(self, question):
             return Answer(text=answer_text)
 
     return StubContext()

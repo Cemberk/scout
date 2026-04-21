@@ -13,16 +13,9 @@ import sys
 
 
 async def _contexts_rows() -> list[dict]:
-    from scout.contexts import build_contexts
+    from scout.contexts import astatus_row, build_contexts
 
-    rows = []
-    for ctx in build_contexts():
-        try:
-            s = await ctx.astatus()
-            rows.append({"id": ctx.id, "name": ctx.name, "ok": s.ok, "detail": s.detail})
-        except Exception as exc:
-            rows.append({"id": ctx.id, "name": ctx.name, "ok": False, "detail": f"{type(exc).__name__}: {exc}"})
-    return rows
+    return [await astatus_row(ctx) for ctx in build_contexts()]
 
 
 def main() -> None:

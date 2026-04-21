@@ -86,10 +86,10 @@ class ContextProvider(ABC):
         self.query_tool_name = f"query_{_sanitize_id(id)}"
 
     @abstractmethod
-    def query(self, question: str, *, limit: int = 10) -> Answer: ...
+    def query(self, question: str) -> Answer: ...
 
     @abstractmethod
-    async def aquery(self, question: str, *, limit: int = 10) -> Answer: ...
+    async def aquery(self, question: str) -> Answer: ...
 
     @abstractmethod
     def status(self) -> Status: ...
@@ -128,9 +128,9 @@ class ContextProvider(ABC):
         provider = self
 
         @tool(name=self.query_tool_name)
-        async def _query(question: str, limit: int = 10) -> str:
+        async def _query(question: str) -> str:
             try:
-                answer = await provider.aquery(question, limit=limit)
+                answer = await provider.aquery(question)
             except Exception as exc:
                 return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
             payload: dict = {"results": [asdict(r) for r in answer.results]}

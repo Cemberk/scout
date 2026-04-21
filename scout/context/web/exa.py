@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from os import getenv
+from typing import Any
 
 from agno.tools import tool
 from agno.utils.log import log_error
@@ -19,12 +20,15 @@ from agno.utils.log import log_error
 from scout.context.backend import ContextBackend
 from scout.context.provider import Status
 
+_MAX_EXTRACT_CHARS = 50_000
+
 
 class ExaBackend(ContextBackend):
     """Backend for `WebContextProvider` using Exa's search + contents APIs."""
 
     def __init__(self, *, api_key: str | None = None) -> None:
         self.api_key = api_key if api_key is not None else (getenv("EXA_API_KEY", "") or None)
+        self._client: Any = None
 
     def status(self) -> Status:
         if not self.api_key:
@@ -34,8 +38,15 @@ class ExaBackend(ContextBackend):
     async def astatus(self) -> Status:
         return self.status()
 
+    def _get_client(self) -> Any:
+        if self._client is None:
+            from exa_py import AsyncExa  # type: ignore[import-not-found]
+
+            self._client = AsyncExa(api_key=self.api_key)
+        return self._client
+
     def get_tools(self) -> list:
-        api_key = self.api_key
+        backend = self
 
         @tool(name="web_search")
         async def web_search(query: str, max_results: int = 8) -> str:
@@ -48,13 +59,10 @@ class ExaBackend(ContextBackend):
             Returns:
                 JSON with `results: [{url, title, excerpt}, ...]`.
             """
-            if not api_key:
+            if not backend.api_key:
                 return json.dumps({"error": "EXA_API_KEY not configured"})
             try:
-                from exa_py import AsyncExa  # type: ignore[import-not-found]
-
-                client = AsyncExa(api_key=api_key)
-                out = await client.search_and_contents(query, num_results=max_results, text=True)
+                out = await backend._get_client().search_and_contents(query, num_results=max_results, text=True)
             except Exception as exc:
                 log_error(f"web_search failed: {exc}")
                 return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
@@ -79,13 +87,10 @@ class ExaBackend(ContextBackend):
             Returns:
                 JSON with `{url, content}` or `{error}`.
             """
-            if not api_key:
+            if not backend.api_key:
                 return json.dumps({"error": "EXA_API_KEY not configured"})
             try:
-                from exa_py import AsyncExa  # type: ignore[import-not-found]
-
-                client = AsyncExa(api_key=api_key)
-                out = await client.get_contents([url], text=True)
+                out = await backend._get_client().get_contents([url], text=True)
             except Exception as exc:
                 log_error(f"web_extract failed for {url}: {exc}")
                 return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
@@ -93,6 +98,6 @@ class ExaBackend(ContextBackend):
             if not results:
                 return json.dumps({"url": url, "content": ""})
             body = getattr(results[0], "text", "") or ""
-            return json.dumps({"url": url, "content": body[:50_000]})
+            return json.dumps({"url": url, "content": body[:_MAX_EXTRACT_CHARS]})
 
         return [web_search, web_extract]
