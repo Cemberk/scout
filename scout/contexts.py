@@ -17,8 +17,9 @@ from os import getenv
 from agno.tools import tool
 
 from scout.context.provider import ContextProvider
-from scout.context.web.backends.exa_mcp import ExaMCPBackend
-from scout.context.web.backends.parallel import ParallelBackend
+from scout.context.web.exa import ExaBackend
+from scout.context.web.exa_mcp import ExaMCPBackend
+from scout.context.web.parallel import ParallelBackend
 from scout.context.web.provider import WebContextProvider
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,8 @@ def _build_web() -> WebContextProvider | None:
     try:
         if getenv("PARALLEL_API_KEY"):
             return WebContextProvider(backend=ParallelBackend())
+        if getenv("EXA_API_KEY"):
+            return WebContextProvider(backend=ExaBackend())
         return WebContextProvider(backend=ExaMCPBackend())
     except Exception:
         log.exception("context: web build failed; skipping")
@@ -73,7 +76,7 @@ def get_contexts() -> list[ContextProvider]:
 
 
 @tool
-def list_contexts() -> str:
+async def list_contexts() -> str:
     """List registered contexts with current status.
 
     Returns:
@@ -82,7 +85,7 @@ def list_contexts() -> str:
     rows = []
     for ctx in _contexts:
         try:
-            s = ctx.status()
+            s = await ctx.astatus()
             ok = s.ok
             detail = s.detail
         except Exception as exc:

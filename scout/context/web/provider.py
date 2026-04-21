@@ -1,12 +1,10 @@
-"""WebContextProvider — web research via configurable backends.
+"""
+Web Context Provider
+====================
 
-Backends available:
-- `ExaMCPBackend` — keyless web search via Exa's public MCP server.
-- `ParallelBackend` — premium, requires `PARALLEL_API_KEY`.
-
-Modes available:
-- Default mode (`ContextMode.default`) exposes the backend's tools directly.
-- Switch to `ContextMode.agent` to wrap the backend in a sub-agent that does search-then-fetch internally.
+Makes the web queryable by an agent. A `ContextBackend` handles
+search + fetch; the provider glues it onto the agent. Swap backends
+without touching the agent interface.
 """
 
 from __future__ import annotations
@@ -44,9 +42,16 @@ class WebContextProvider(ContextProvider):
     def status(self) -> Status:
         return self.backend.status()
 
+    async def astatus(self) -> Status:
+        return await self.backend.astatus()
+
     def query(self, question: str, *, limit: int = 10) -> Answer:
         agent = self._ensure_agent()
         return answer_from_run(agent.run(question))
+
+    async def aquery(self, question: str, *, limit: int = 10) -> Answer:
+        agent = self._ensure_agent()
+        return answer_from_run(await agent.arun(question))
 
     def instructions(self) -> str:
         if self.mode == ContextMode.agent:

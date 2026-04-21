@@ -93,6 +93,6 @@ explorer = Agent(
     add_datetime_to_context=True,
     add_history_to_context=True,
     read_chat_history=True,
-    num_history_runs=10,
+    num_history_runs=5,
     markdown=True,
 )

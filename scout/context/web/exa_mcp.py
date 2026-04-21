@@ -3,18 +3,19 @@
 Exposes Exa's `web_search_exa` + `web_fetch_exa` tools to the calling
 agent. The default endpoint is keyless; passing `api_key` (or setting
 `EXA_API_KEY`) raises the rate ceiling.
+
+Fallback option — prefer `ExaBackend` (direct SDK) when `EXA_API_KEY`
+is set. MCP adds connection-setup overhead that isn't worth it when
+the SDK path is available.
 """
 
 from __future__ import annotations
 
-import logging
 from os import getenv
 from typing import Any
 
 from scout.context.backend import ContextBackend
 from scout.context.provider import Status
-
-log = logging.getLogger(__name__)
 
 _BASE_URL = "https://mcp.exa.ai/mcp"
 _TOOLS = "web_search_exa,web_fetch_exa"
@@ -33,6 +34,9 @@ class ExaMCPBackend(ContextBackend):
 
     def status(self) -> Status:
         return Status(ok=True, detail=f"mcp.exa.ai ({'keyed' if self.api_key else 'keyless'})")
+
+    async def astatus(self) -> Status:
+        return self.status()
 
     def get_tools(self) -> list:
         if self._mcp_tools is None:

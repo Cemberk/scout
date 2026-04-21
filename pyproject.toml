@@ -9,6 +9,7 @@ authors = [{ name = "Agno", email = "hello@agno.com" }]
 
 dependencies = [
   "agno[os]",
+  "exa-py",
   "mcp",
   "openai",
   "parallel-web",
@@ -47,6 +48,7 @@ module = [
   "agno.*",
   "httpx.*",
   "parallel.*",
+  "exa_py.*",
   "yaml.*",
   "sqlalchemy.*",
   "fastapi.*",

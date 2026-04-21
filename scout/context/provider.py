@@ -5,8 +5,8 @@ Context Providers
 A `ContextProvider` exposes a source of information — a folder of files,
 the web, a database, an inbox — to an agent. Subclasses implement two methods:
 
-- `query(question)` — natural-language access; returns an `Answer`
-- `status()` — is the source reachable?
+- `query(question)` / `aquery(question)` — natural-language access; returns an `Answer`
+- `status()` / `astatus()` — is the source reachable?
 
 `mode` controls how the provider surfaces itself to the calling agent:
 
@@ -89,7 +89,13 @@ class ContextProvider(ABC):
     def query(self, question: str, *, limit: int = 10) -> Answer: ...
 
     @abstractmethod
+    async def aquery(self, question: str, *, limit: int = 10) -> Answer: ...
+
+    @abstractmethod
     def status(self) -> Status: ...
+
+    @abstractmethod
+    async def astatus(self) -> Status: ...
 
     def instructions(self) -> str:
         """How a calling agent should use this provider.
@@ -122,9 +128,9 @@ class ContextProvider(ABC):
         provider = self
 
         @tool(name=self.query_tool_name)
-        def _query(question: str, limit: int = 10) -> str:
+        async def _query(question: str, limit: int = 10) -> str:
             try:
-                answer = provider.query(question, limit=limit)
+                answer = await provider.aquery(question, limit=limit)
             except Exception as exc:
                 return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
             payload: dict = {"results": [r.__dict__ for r in answer.results]}

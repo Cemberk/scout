@@ -7,48 +7,32 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
+import asyncio
 import json
+import sys
 
 
-def _cmd_chat() -> None:
-    from scout.team import scout
-
-    scout.cli_app(stream=True)
-
-
-def _cmd_contexts() -> None:
+async def _contexts_rows() -> list[dict]:
     from scout.contexts import build_contexts
 
-    contexts = build_contexts()
     rows = []
-    for ctx in contexts:
+    for ctx in build_contexts():
         try:
-            s = ctx.status()
+            s = await ctx.astatus()
             rows.append({"id": ctx.id, "name": ctx.name, "ok": s.ok, "detail": s.detail})
         except Exception as exc:
-            rows.append(
-                {
-                    "id": getattr(ctx, "id", "?"),
-                    "name": getattr(ctx, "name", "?"),
-                    "ok": False,
-                    "detail": f"{type(exc).__name__}: {exc}",
-                }
-            )
-    print(json.dumps(rows, indent=2))
+            rows.append({"id": ctx.id, "name": ctx.name, "ok": False, "detail": f"{type(exc).__name__}: {exc}"})
+    return rows
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="scout")
-    sub = parser.add_subparsers(dest="cmd")
-    sub.add_parser("chat", help="Interactive chat with the Scout team")
-    sub.add_parser("contexts", help="List registered contexts + status")
+    if len(sys.argv) > 1 and sys.argv[1] == "contexts":
+        print(json.dumps(asyncio.run(_contexts_rows()), indent=2))
+        return
 
-    args = parser.parse_args()
-    if args.cmd == "contexts":
-        _cmd_contexts()
-    else:
-        _cmd_chat()
+    from scout.team import scout
+
+    scout.cli_app(stream=True)
 
 
 if __name__ == "__main__":
