@@ -151,7 +151,7 @@ Beyond these three, Engineer creates new `scout_*` tables on demand — always i
 | Engineer | `SQLTools` (scout engine, **schema-guarded** to `scout`) |
 | Leader | (none — pure router) |
 
-**Per-provider tools are built by the registry.** `scout.contexts.publish_contexts(contexts)` installs the singleton list. Explorer's `tools=explorer_tools` is a callable (`cache_callables=False`), so agno resolves the tool list from the current registry on every run. The app lifespan calls `publish_contexts` once at startup; eval fixtures call it per case.
+**Per-provider tools are built by the registry.** `scout.contexts.build_contexts()` builds the provider list and caches it on the module; `get_contexts()` reads it (lazy-builds on first access). Explorer's `tools=explorer_tools` is a callable (`cache_callables=False`), so agno resolves the tool list from the current registry on every run. The app lifespan calls `build_contexts()` once at startup to warm the cache and log which backend was selected; eval fixtures swap contexts via `update_contexts`.
 
 ## API Endpoints
 
@@ -196,7 +196,7 @@ Every external source subclasses `ContextProvider` (in `scout/context/provider.p
 from db import db_url, get_postgres_db, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
 from scout.team import scout
 from scout.settings import agent_db
-from scout.contexts import build_contexts, get_contexts, list_contexts, publish_contexts, status_row, astatus_row
+from scout.contexts import build_contexts, get_contexts, list_contexts, status_row, astatus_row
 from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
 from scout.context.web import WebContextProvider
 from scout.context.web.parallel import ParallelBackend

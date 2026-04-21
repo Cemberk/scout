@@ -1,6 +1,6 @@
 """
-Tables
-======
+Database Tables
+===============
 
 Idempotent SQL bootstrap for Scout's own tables. Called from app startup.
 

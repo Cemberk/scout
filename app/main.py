@@ -1,6 +1,6 @@
 """
-Scout AgentOS
-================
+AgentOS Entrypoint
+==================
 """
 
 from contextlib import asynccontextmanager
@@ -13,7 +13,7 @@ from app.router import create_router
 from db import get_postgres_db
 from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
-from scout.contexts import build_contexts, publish_contexts
+from scout.contexts import build_contexts
 from scout.team import scout
 
 # ---------------------------------------------------------------------------
@@ -67,10 +67,9 @@ def _create_tables() -> None:
 
 
 def _create_contexts() -> None:
-    """Build the contexts from env and publish them for the process."""
+    """Build the contexts from env and cache them for the process."""
     try:
         contexts = build_contexts()
-        publish_contexts(contexts)
         print(f"[scout] Contexts: {[c.id for c in contexts]}")
     except Exception as e:
         print(f"[scout] Contexts wiring failed: {e}")

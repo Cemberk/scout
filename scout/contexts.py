@@ -28,11 +28,14 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+contexts: list[ContextProvider] = []
+
+
 def build_contexts() -> list[ContextProvider]:
-    """Build the registered contexts from env."""
-    contexts: list[ContextProvider] = [_build_web()]
+    """Build the registered contexts from env and cache them for the process."""
+    contexts[:] = [_build_web()]
     log.info("context: web")
-    return contexts
+    return list(contexts)
 
 
 def _build_web() -> WebContextProvider:
@@ -44,22 +47,16 @@ def _build_web() -> WebContextProvider:
     return WebContextProvider(backend=ExaMCPBackend(), model=model)
 
 
-# ---------------------------------------------------------------------------
-# Runtime registry
-# ---------------------------------------------------------------------------
-
-
-_contexts: list[ContextProvider] = []
-
-
-def publish_contexts(contexts: list[ContextProvider]) -> None:
-    """Publish the context list for process-wide read via ``get_contexts()``."""
-    global _contexts
-    _contexts = list(contexts)
-
-
 def get_contexts() -> list[ContextProvider]:
-    return list(_contexts)
+    """Return the cached context list, building on first access."""
+    if not contexts:
+        build_contexts()
+    return list(contexts)
+
+
+def update_contexts(new_contexts: list[ContextProvider]) -> None:
+    """Swap the cached context list in place. Used by eval fixtures."""
+    contexts[:] = new_contexts
 
 
 def status_row(ctx: ContextProvider) -> dict:
@@ -87,5 +84,5 @@ async def list_contexts() -> str:
     Returns:
         JSON list of ``{id, name, ok, detail}``.
     """
-    rows = [await astatus_row(ctx) for ctx in _contexts]
+    rows = [await astatus_row(ctx) for ctx in contexts]
     return json.dumps(rows)

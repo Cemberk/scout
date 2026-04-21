@@ -1,6 +1,6 @@
 """
-Scout's Database Module
-========================
+Database Module
+===============
 """
 
 from db.session import (

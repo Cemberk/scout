@@ -53,17 +53,17 @@ def build_fixture(name: str) -> list[Any]:
 
 def install_fixture(contexts: list[Any]) -> list[Any]:
     """Install contexts; return the prior list so the caller can restore."""
-    from scout.contexts import get_contexts, publish_contexts
+    from scout.contexts import get_contexts, update_contexts
 
     prev = get_contexts()
-    publish_contexts(contexts)
+    update_contexts(contexts)
     return prev
 
 
 def restore_contexts(prev: list[Any]) -> None:
-    from scout.contexts import publish_contexts
+    from scout.contexts import update_contexts
 
-    publish_contexts(prev)
+    update_contexts(prev)
 
 
 def _stub_context(ctx_id: str, display_name: str, answer_text: str):
