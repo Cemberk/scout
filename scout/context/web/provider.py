@@ -6,8 +6,7 @@ Backends ship today:
 - `ParallelBackend` — premium, requires `PARALLEL_API_KEY`.
 
 Default mode (`ContextMode.default`) exposes the backend's tools
-directly — calling agent orchestrates `web_search` / `web_extract` (or
-the Exa-named equivalents) itself. Switch to `ContextMode.agent` to
+directly. Switch to `ContextMode.agent` to
 wrap the backend in a sub-agent that does search-then-fetch internally.
 """
 

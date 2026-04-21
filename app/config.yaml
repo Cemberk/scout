@@ -2,6 +2,5 @@ chat:
   quick_prompts:
     scout:
       - "What can you do?"
-      - "Summarize https://docs.agno.com in three bullets."
-      - "Save a note titled 'scout test' with body 'hello from quick prompts'."
+      - "What do we know about https://docs.agno.com?"
       - "Health check — which contexts are connected?"
