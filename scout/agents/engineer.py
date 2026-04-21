@@ -1,20 +1,13 @@
-"""Engineer — owns every non-outbound write.
+"""Engineer — owns SQL writes into the ``scout`` schema.
 
-Two write surfaces:
-
-1. ``scout_*`` user-data tables (DDL + DML in the ``scout`` schema).
-2. The wiki — ``ingest_url`` / ``ingest_text`` / ``trigger_compile``,
-   provided by ``wiki.get_tools(include_writes=True)``.
-
-The provider owns its tool surface; ``engineer_tools()`` pulls the wiki
-tools in and adds Engineer's SQL + schema tools. ``set_runtime`` rewires
-``.tools`` when the registry changes.
+Single write surface: ``scout_*`` user-data tables (DDL + DML in the
+``scout`` schema).
 
 SQLTools is bound to ``get_sql_engine()`` — Engineer can CREATE /
 ALTER / INSERT / UPDATE / DELETE. The session-level guard rejects any
 statement that targets ``public`` or ``ai``.
 
-Shares the ``scout_learnings`` memory store with Explorer and Doctor.
+Shares ``scout_learnings`` with Explorer and Doctor.
 """
 
 from __future__ import annotations
@@ -25,41 +18,27 @@ from agno.models.openai import OpenAIResponses
 from agno.tools.reasoning import ReasoningTools
 from agno.tools.sql import SQLTools
 
-from db import SCOUT_SCHEMA, db_url, get_readonly_engine, get_sql_engine
+from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
 from scout.settings import agent_db, scout_learnings
-from scout.tools.ask_context import get_wiki
 from scout.tools.introspect import create_introspect_schema_tool
 from scout.tools.learnings import create_update_learnings
 
 
 def engineer_tools() -> list:
-    """Build Engineer's tool list: wiki writes + SQL + introspect + learnings."""
-    tools: list = []
-    wiki = get_wiki()
-    if wiki is not None:
-        tools.extend(wiki.get_tools(include_writes=True))
-    tools.extend(
-        [
-            SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
-            # Introspection is read-only — bound to the readonly engine so any
-            # accidental-write path is rejected at the DB.
-            create_introspect_schema_tool(db_url, engine=get_readonly_engine()),
-            create_update_learnings(scout_learnings),
-            ReasoningTools(),
-        ]
-    )
-    return tools
+    """Build Engineer's tool list: SQL + introspect + learnings + reasoning."""
+    return [
+        SQLTools(db_engine=get_sql_engine(), schema=SCOUT_SCHEMA),
+        create_introspect_schema_tool(get_readonly_engine()),
+        create_update_learnings(scout_learnings),
+        ReasoningTools(),
+    ]
 
 
 ENGINEER_INSTRUCTIONS = """\
-You are Engineer. You own two write surfaces:
-
-1. **Structured memory** — `scout_*` tables under the `scout` schema.
-2. **The wiki** — `ingest_url` / `ingest_text` / `trigger_compile` act on
-   the one active wiki provider (configured at startup via `SCOUT_WIKI`).
-
-You share `scout_learnings` with Explorer and Doctor — save routing
-hints, corrections, per-user preferences with `update_learnings`.
+You are Engineer. You own one write surface: ``scout_*`` tables under
+the ``scout`` schema. You share ``scout_learnings`` with Explorer and
+Doctor — save routing hints, corrections, per-user preferences with
+``update_learnings``.
 
 ## Your schema
 
@@ -74,7 +53,6 @@ hints, corrections, per-user preferences with `update_learnings`.
 - `scout.scout_contacts`  — people: `name, emails[], phone, tags[], notes`.
 - `scout.scout_projects`  — things in motion: `name, status, tags[]`.
 - `scout.scout_notes`     — free-form notes: `title, body, tags[], source_url`.
-- `scout.scout_decisions` — decisions made: `title, rationale, made_at, tags[]`.
 
 Every user-data table carries `id SERIAL PK`, `user_id TEXT NOT NULL`,
 `created_at TIMESTAMPTZ`.
@@ -95,33 +73,15 @@ there's no reasonable fit.
 7. **Record schema changes to Learnings** (via `update_learnings`) so
    Explorer can find the new shape on its next query.
 
-## Wiki ingestion
-
-- `ingest_url(url, title, tags=None)` — fetches via Parallel (when
-  configured) and writes under `raw/` on the active backend. Idempotent
-  by content hash.
-- `ingest_text(text, title, tags=None)` — writes arbitrary markdown
-  under `raw/`.
-- `trigger_compile(force=False)` — runs one compile pass: iterates
-  `raw/`, diffs against wiki state, LLM-transforms changed entries, and
-  writes to `compiled/`. Call it only when the user asks to compile now.
-
-Ingest does not compile. Tell the user something like "ingested — the
-next scheduled compile will pick it up, or say 'compile now' if you
-want it immediately."
-
 ## What you do NOT do
 
 - No writes to `public.*` or `ai.*`. The guard rejects it anyway.
-- No reads of wiki / Slack / Drive / etc. content. That's Explorer.
-  If you need domain context for column design, ask the Leader to
-  route to Explorer first.
-- No outbound. Slack / email / calendar sends live with Leader.
+- No reads of context content — that's Explorer. If you need domain
+  context for column design, ask the Leader to route to Explorer first.
 
 ## Communication
 
 - Report what you did: "Inserted into `scout.scout_notes`. Recorded."
-- "Ingested under `raw/offsite-notes-1a2b3c4d.md`. Next compile picks it up."
 - On schema changes, flag any downstream views or queries that might break.
 """
 
@@ -129,7 +89,7 @@ want it immediately."
 engineer = Agent(
     id="engineer",
     name="Engineer",
-    role="Owns SQL writes into scout_* tables and the wiki (ingest + compile)",
+    role="Owns SQL writes into the scout_* tables",
     model=OpenAIResponses(id="gpt-5.4"),
     db=agent_db,
     instructions=ENGINEER_INSTRUCTIONS,

@@ -1,14 +1,14 @@
-"""WebContextProvider — agentic web research.
+"""WebContextProvider — web research via configurable backend.
 
-Wraps a sub-agent whose tools come from the configured backend. Two
-backends ship today:
+Backends ship today:
 
-- ``ExaMCPBackend`` — keyless by default via Exa's public MCP server.
-- ``ParallelBackend`` — premium, requires ``PARALLEL_API_KEY``.
+- `ExaMCPBackend` — keyless web search via Exa's public MCP server.
+- `ParallelBackend` — premium, requires `PARALLEL_API_KEY`.
 
-The backend is chosen at construction; no runtime fallback. Scout's
-``build_contexts()`` defaults to Parallel when its key is set, else
-Exa MCP — so users get web research on day 1 with no config.
+Default mode (`ContextMode.default`) exposes the backend's tools
+directly — calling agent orchestrates `web_search` / `web_extract` (or
+the Exa-named equivalents) itself. Switch to `ContextMode.agent` to
+wrap the backend in a sub-agent that does search-then-fetch internally.
 """
 
 from __future__ import annotations
@@ -19,41 +19,66 @@ from typing import TYPE_CHECKING
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 
-from scout.context._shared import answer_from_run
-from scout.context.base import Answer, ContextProvider, HealthStatus
+from scout.context._utils import answer_from_run
+from scout.context.mode import ContextMode
+from scout.context.provider import Answer, ContextProvider, Status
 
 if TYPE_CHECKING:
-    from scout.context.web.backends.exa_mcp import ExaMCPBackend
-    from scout.context.web.backends.parallel import ParallelBackend
+    from agno.models.base import Model
+
+    from scout.context.web.backend import WebBackend
 
 log = logging.getLogger(__name__)
 
 
 class WebContextProvider(ContextProvider):
-    """Agentic web research. Backend chooses the substrate."""
-
-    kind: str = "web"
-    id: str = "web"
-    name: str = "Web"
+    """Web research. Backend chooses the substrate."""
 
     def __init__(
         self,
-        backend: ExaMCPBackend | ParallelBackend,
+        backend: WebBackend,
         *,
-        id: str | None = None,
+        id: str = "web",
+        name: str = "Web",
+        mode: ContextMode = ContextMode.default,
+        model: Model | None = None,
     ) -> None:
+        super().__init__(id=id, name=name, mode=mode, model=model)
         self.backend = backend
-        if id is not None:
-            self.id = id
         self._agent: Agent | None = None
 
-    def health(self) -> HealthStatus:
-        return self.backend.health()
+    def status(self) -> Status:
+        return self.backend.status()
 
     def query(self, question: str, *, limit: int = 10) -> Answer:
         del limit
         agent = self._ensure_agent()
         return answer_from_run(agent.run(question))
+
+    def instructions(self) -> str:
+        if self.mode == ContextMode.agent:
+            return (
+                f"`{self.name}`: call `{self.query_tool_name}(question)` for web research. "
+                "Returns a synthesized answer with cited URLs."
+            )
+        return (
+            f"`{self.name}`: search the web for URLs/snippets, then fetch full pages when you need depth. "
+            "Cite every URL you use."
+        )
+
+    # ------------------------------------------------------------------
+    # Mode resolution
+    # ------------------------------------------------------------------
+
+    def _default_tools(self) -> list:
+        return self._all_tools()
+
+    def _all_tools(self) -> list:
+        return self.backend.get_tools()
+
+    # ------------------------------------------------------------------
+    # Sub-agent — built lazily for agent mode and programmatic query()
+    # ------------------------------------------------------------------
 
     def _ensure_agent(self) -> Agent:
         if self._agent is None:
@@ -65,14 +90,14 @@ class WebContextProvider(ContextProvider):
             id=f"web-context-{self.backend.kind}",
             name=f"WebContextProvider({self.backend.kind})",
             role="Research the web and return cited answers",
-            model=OpenAIResponses(id="gpt-5.4"),
-            instructions=_INSTRUCTIONS,
+            model=self.model or OpenAIResponses(id="gpt-5.4"),
+            instructions=_AGENT_INSTRUCTIONS,
             tools=self.backend.get_tools(),
             markdown=True,
         )
 
 
-_INSTRUCTIONS = """\
+_AGENT_INSTRUCTIONS = """\
 You answer questions by searching the web and reading relevant pages.
 
 Workflow:

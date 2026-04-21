@@ -1,6 +1,7 @@
 chat:
   quick_prompts:
     scout:
-      - "Tell me about Agno. Docs: https://docs.agno.com"
-      - "How does Scout work. Code: https://github.com/agno-agi/scout"
-      - "Summarize last week's engineering offsite."
+      - "What can you do?"
+      - "Summarize https://docs.agno.com in three bullets."
+      - "Save a note titled 'scout test' with body 'hello from quick prompts'."
+      - "Health check — which contexts are connected?"

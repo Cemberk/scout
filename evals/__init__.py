@@ -4,7 +4,7 @@ Structure:
 - ``cases.py``     — behavioral cases (Case dataclass + CASES tuple)
 - ``runner.py``    — in-process + SSE transport, fixtures, diagnostics
 - ``wiring.py``    — code-level invariants (no LLM, no team.run())
-- ``judges.py``    — LLM-scored quality tier (voice + grounded-answer)
+- ``judges.py``    — LLM-scored quality tier (grounded-answer)
 - ``__main__.py``  — CLI dispatch
 
 Entry points:

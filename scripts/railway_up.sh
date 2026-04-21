@@ -35,8 +35,13 @@ cat << 'BANNER'
 BANNER
 echo -e "${NC}"
 
-# Load .env if it exists
-if [[ -f .env ]]; then
+# Load env file — .env.production preferred for Railway, .env as fallback
+if [[ -f .env.production ]]; then
+    set -a
+    source .env.production
+    set +a
+    echo -e "${DIM}Loaded .env.production${NC}"
+elif [[ -f .env ]]; then
     set -a
     source .env
     set +a
@@ -89,33 +94,10 @@ railway add -s scout \
     -v "DB_DATABASE=${DB_DATABASE:-ai}" \
     -v "DB_DRIVER=postgresql+psycopg" \
     -v "WAIT_FOR_DB=True" \
-    -v "REPOS_DIR=/repos" \
     -v "PORT=8000" \
     -v "OPENAI_API_KEY=${OPENAI_API_KEY}" \
-    -v "SCOUT_WIKI=${SCOUT_WIKI:-}" \
-    -v "SCOUT_CONTEXTS=${SCOUT_CONTEXTS:-}" \
-    -v "SCOUT_DISABLE_WEB=${SCOUT_DISABLE_WEB:-}" \
-    -v "SCOUT_ALLOW_SENDS=${SCOUT_ALLOW_SENDS:-}" \
     -v "PARALLEL_API_KEY=${PARALLEL_API_KEY:-}" \
-    -v "EXA_API_KEY=${EXA_API_KEY:-}" \
-    -v "GITHUB_ACCESS_TOKEN=${GITHUB_ACCESS_TOKEN:-}" \
-    -v "SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}" \
-    -v "SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}" \
-    -v "GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}" \
-    -v "GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}" \
-    -v "GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID:-}" \
-    -v "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}" \
-    -v "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}" \
-    -v "AWS_REGION=${AWS_REGION:-}"
-
-# Warn on multi-container shapes that won't work with the default local wiki.
-# Railway defaults numReplicas=1 (see railway.json) so single-container is fine,
-# but if the user ever flips to 2+ they MUST also set SCOUT_WIKI to github:... or s3:...
-if [[ -z "${SCOUT_WIKI:-}" ]]; then
-    echo ""
-    echo -e "${DIM}Note: SCOUT_WIKI unset → defaults to local:./context.${NC}"
-    echo -e "${DIM}      Fine for numReplicas=1. For multi-replica, set to github:... or s3:...${NC}"
-fi
+    -v "EXA_API_KEY=${EXA_API_KEY:-}"
 
 echo ""
 echo -e "${BOLD}Deploying application...${NC}"
@@ -129,6 +111,6 @@ railway domain --service scout
 
 echo ""
 echo -e "${BOLD}Done.${NC} Domain may take ~5 minutes."
-echo -e "${DIM}Logs:       railway logs --service scout${NC}"
-echo -e "${DIM}Sync .env:  ./scripts/railway_env.sh  (re-syncs any env that changes)${NC}"
+echo -e "${DIM}Logs:             railway logs --service scout${NC}"
+echo -e "${DIM}Sync env vars:    ./scripts/railway_env.sh  (defaults to .env.production)${NC}"
 echo ""

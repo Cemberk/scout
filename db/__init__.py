@@ -1,8 +1,6 @@
 """
-Database Module
-===============
-
-Database connection utilities.
+Scout's Database Module
+========================
 """
 
 from db.session import (

@@ -18,10 +18,11 @@ DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-ENV_FILE="${1:-.env}"
+ENV_FILE="${1:-.env.production}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
     echo "File not found: $ENV_FILE"
+    echo "Usage: $0 [path/to/env] (default: .env.production)"
     exit 1
 fi
 

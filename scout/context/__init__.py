@@ -1,21 +1,15 @@
-"""Context + wiki layer."""
-
-from scout.context.base import (
+from scout.context.mode import ContextMode
+from scout.context.provider import (
     Answer,
     ContextProvider,
-    Entry,
-    HealthState,
-    HealthStatus,
-    Hit,
-    WikiBackend,
+    Document,
+    Status,
 )
 
 __all__ = [
     "Answer",
+    "ContextMode",
     "ContextProvider",
-    "Entry",
-    "HealthState",
-    "HealthStatus",
-    "Hit",
-    "WikiBackend",
+    "Document",
+    "Status",
 ]

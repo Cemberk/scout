@@ -1,19 +1,15 @@
 """
-Redactor — strips secret-shaped strings from tool output strings.
+Redactor — strips secret-shaped strings from tool output.
 
-Wraps any agno @tool function so its return value is run through a
-small set of regex patterns before reaching the model. Secrets must
-never be echoed back to the model.
-
-Patterns are deliberately conservative — false positives (e.g. masking
-something that looks like a token but isn't) are preferred to leaks.
+``redact(text)`` runs text through a small set of regex patterns before
+it reaches the model. Patterns are deliberately conservative — false
+positives (masking something that looks like a token but isn't) are
+preferred to leaks.
 """
 
 from __future__ import annotations
 
-import functools
 import re
-from typing import Any, Callable
 
 _PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # OpenAI-style sk-... keys
@@ -46,16 +42,3 @@ def redact(text: str) -> str:
     for pattern, repl in _PATTERNS:
         out = pattern.sub(repl, out)
     return out
-
-
-def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
-    """Wrap a callable so its string return value is redacted."""
-
-    @functools.wraps(fn)
-    def inner(*args: Any, **kwargs: Any) -> Any:
-        result = fn(*args, **kwargs)
-        if isinstance(result, str):
-            return redact(result)
-        return result
-
-    return inner

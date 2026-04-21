@@ -37,7 +37,6 @@ env/
 ENV/
 .env
 .envrc
-token.json
 
 # =========================
 # Jupyter / notebooks
@@ -63,13 +62,8 @@ tmp
 .claude
 .conductor
 
-# Scout local state (repo clone cache, local wiki) — Docker uses named volumes
+# Scout local state — Docker uses named volumes
 .scout/
-
-# Local wiki output — compiled articles + state are per-dev, not committed.
-# (context/voice/ and context/raw/ stay tracked.)
-context/compiled/
-context/.scout/
 
 # Live-eval run artifacts (regenerated every run)
 evals/results/

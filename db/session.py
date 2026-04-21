@@ -7,7 +7,7 @@ PostgreSQL database connection for Scout.
 Two engines, both cached on first use:
 
 - ``get_sql_engine()`` — scoped to the ``scout`` schema. Writes to ``public``
-  or ``ai`` (agno framework schema) are rejected at the SQLAlchemy layer by
+  or ``ai`` (agno sdk schema) are rejected at the SQLAlchemy layer by
   the ``_guard_non_scout_writes`` hook. This is belt-and-suspenders on top
   of ``search_path=scout,public``: a confused write against ``public.foo``
   raises a loud error instead of silently landing somewhere unexpected.
@@ -31,7 +31,7 @@ from db.url import db_url
 DB_ID = "scout-db"
 
 # PostgreSQL schema for user data tables (scout_contacts, scout_notes, etc.).
-# Agno framework tables (sessions, knowledge vectors) live in the default "ai"
+# Agno sdk tables (sessions, knowledge vectors) live in the default "ai"
 # schema; we never write there from agent code.
 SCOUT_SCHEMA = "scout"
 

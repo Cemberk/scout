@@ -4,14 +4,11 @@ Scout's Engineer writes only to the ``scout`` schema. The ``public``
 schema is included for *read-only* introspection so the Engineer can
 see any company-loaded tables that already exist and reference them
 (never mutate them — the session-level write guard blocks that anyway).
-
-Ported from ``dash/tools/introspect.py`` — same shape, narrower schema
-list.
 """
 
 from agno.tools import tool
 from agno.utils.log import logger
-from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy import Engine, inspect, text
 from sqlalchemy.exc import DatabaseError, OperationalError
 
 from db.session import SCOUT_SCHEMA
@@ -20,9 +17,9 @@ SCHEMAS = ["public", SCOUT_SCHEMA]
 MAX_SAMPLE_ROWS = 20
 
 
-def create_introspect_schema_tool(db_url: str, engine: Engine | None = None):
+def create_introspect_schema_tool(engine: Engine):
     """Create an introspect_schema tool bound to a SQLAlchemy engine."""
-    _engine = engine or create_engine(db_url)
+    _engine = engine
 
     @tool
     def introspect_schema(

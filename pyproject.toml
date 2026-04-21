@@ -9,21 +9,12 @@ authors = [{ name = "Agno", email = "hello@agno.com" }]
 
 dependencies = [
   "agno[os]",
-  "beautifulsoup4",
-  "boto3",
-  "google-api-python-client",
-  "google-auth",
-  "google-auth-oauthlib",
   "mcp",
   "openai",
   "parallel-web",
   "pgvector",
   "psycopg[binary]",
-  "pypdf",
-  "python-docx",
-  "pytz",
   "pyyaml",
-  "slack_sdk",
 ]
 
 [project.optional-dependencies]
@@ -56,15 +47,7 @@ module = [
   "agno.*",
   "httpx.*",
   "parallel.*",
-  "google.*",
-  "googleapiclient.*",
-  "slack_sdk.*",
   "yaml.*",
-  "pypdf.*",
-  "docx.*",
-  "bs4.*",
-  "boto3.*",
-  "botocore.*",
   "sqlalchemy.*",
   "fastapi.*",
 ]

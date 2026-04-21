@@ -1,14 +1,12 @@
-"""ParallelBackend — web research via Parallel (``parallel-web`` SDK).
+"""ParallelBackend — web research via Parallel (`parallel-web` SDK).
 
-Exposes two tools to the ``WebContextProvider``'s sub-agent:
+Exposes two tools:
 
-- ``web_search(objective)`` — natural-language search via
-  ``parallel.beta.search``, returning URL + excerpt pairs.
-- ``web_extract(url)`` — full-content extraction via
-  ``parallel.beta.extract``.
+- `web_search(objective)` — natural-language search; returns URL +
+  excerpt pairs.
+- `web_extract(url)` — full-content extraction.
 
-Requires ``PARALLEL_API_KEY``. The backend never checks the env itself —
-the constructor takes an explicit key so it's testable and reusable.
+Requires `PARALLEL_API_KEY`.
 """
 
 from __future__ import annotations
@@ -17,23 +15,23 @@ import json
 import logging
 from os import getenv
 
-from scout.context.base import HealthState, HealthStatus
+from scout.context.provider import Status
 
 log = logging.getLogger(__name__)
 
 
 class ParallelBackend:
-    """Backend for ``WebContextProvider`` backed by Parallel's beta API."""
+    """Backend for `WebContextProvider` backed by Parallel's beta API."""
 
     kind: str = "parallel"
 
     def __init__(self, *, api_key: str | None = None) -> None:
         self.api_key = api_key if api_key is not None else (getenv("PARALLEL_API_KEY", "") or None)
 
-    def health(self) -> HealthStatus:
+    def status(self) -> Status:
         if not self.api_key:
-            return HealthStatus(HealthState.DISCONNECTED, "PARALLEL_API_KEY not set")
-        return HealthStatus(HealthState.CONNECTED, "parallel.ai")
+            return Status(ok=False, detail="PARALLEL_API_KEY not set")
+        return Status(ok=True, detail="parallel.ai")
 
     def get_tools(self) -> list:
         from agno.tools import tool
@@ -49,7 +47,7 @@ class ParallelBackend:
                 max_results: Upper bound on results (default 8).
 
             Returns:
-                JSON string with ``results: [{url, title, excerpts: [...]}, ...]``.
+                JSON with `results: [{url, title, excerpts: [...]}, ...]`.
             """
             if not api_key:
                 return json.dumps({"error": "PARALLEL_API_KEY not configured"})
@@ -80,7 +78,7 @@ class ParallelBackend:
                 url: The URL to fetch.
 
             Returns:
-                JSON string with ``{url, content}`` or ``{error}``.
+                JSON with `{url, content}` or `{error}`.
             """
             if not api_key:
                 return json.dumps({"error": "PARALLEL_API_KEY not configured"})

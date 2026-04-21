@@ -5,15 +5,12 @@ One case, two transports: in-process ``team.run()`` by default, or
 assertion model is identical; only the execution path differs.
 
 Fixtures are installed per case via
-``scout.tools.ask_context.set_runtime(wiki, contexts)``. This works
-in-process. In ``--live`` mode the caller is expected to have set
-``SCOUT_WIKI`` / ``SCOUT_CONTEXTS`` to match the fixture shape before
-starting the container; cases that need a specific fixture other than
-the live env SKIP with a note.
+``scout.contexts.set_runtime(contexts)``. In ``--live`` mode the caller
+is expected to have set ``PARALLEL_API_KEY`` to match the fixture;
+cases that need a specific in-process fixture SKIP with a note.
 
 On FAIL, a self-contained diagnostic is written to
-``evals/results/<case_id>.md``. ``scripts/eval_loop.sh`` feeds that
-file to ``claude -p`` without re-running the case.
+``evals/results/<case_id>.md``.
 """
 
 from __future__ import annotations
@@ -22,7 +19,6 @@ import json
 import os
 import re
 import subprocess
-import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,11 +32,6 @@ RESULTS_DIR = REPO_ROOT / "evals" / "results"
 DOCKER_SERVICE = "scout-api"
 
 
-# ---------------------------------------------------------------------------
-# CaseResult
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class CaseResult:
     case_id: str
@@ -49,7 +40,6 @@ class CaseResult:
     transport: str = "in-process"
     failures: list[str] = field(default_factory=list)
     skipped_reason: str | None = None
-    # Populated on non-SKIPPED runs for the diagnostic writer.
     response: str = ""
     tool_names: list[str] = field(default_factory=list)
     delegated: list[str] = field(default_factory=list)
@@ -63,85 +53,26 @@ class CaseResult:
 
 @dataclass
 class Fixture:
-    """A wiki + contexts pair plus an optional teardown hook."""
+    """A list of contexts plus an optional teardown hook."""
 
-    wiki: Any
     contexts: list[Any]
-    teardown: Any = None  # optional callable
+    teardown: Any = None
 
 
-class _StubWiki:
-    """Wiki stub that subclasses ``WikiContextProvider`` at call time.
-
-    Done lazily (built inside ``_stub_wiki()``) so the module-level
-    ``evals.runner`` import doesn't drag in the full wiki module — fast
-    unit tests can still import the runner without triggering heavy
-    providers.
-    """
-
-    pass  # filled in by _stub_wiki()
-
-
-class _StubContext:
-    """Stub that subclasses ``ContextProvider`` at call time.
-
-    Same reason as ``_StubWiki``: deferred so imports stay light.
-    """
-
-    pass  # filled in by _stub_context()
-
-
-def _stub_wiki(answer: str = "(stub wiki)", hits: list[Any] | None = None):
-    """A WikiContextProvider subclass with canned query output + stub ingest/compile."""
-    from scout.context.base import Answer, Entry, HealthState, HealthStatus
-    from scout.context.wiki.provider import WikiContextProvider
-
-    class StubWiki(WikiContextProvider):
-        id = "wiki"
-        name = "Wiki (stub)"
-        kind = "wiki"
-
-        def __init__(self, answer_text: str, hits_list: list) -> None:
-            self._answer = answer_text
-            self._hits = hits_list
-            # Skip super().__init__ — we don't need a real backend, and
-            # our overrides never touch it.
-
-        def health(self):
-            return HealthStatus(HealthState.CONNECTED, "stub wiki")
-
-        def query(self, question, *, limit=10):
-            return Answer(text=self._answer, hits=list(self._hits))
-
-        def ingest_url(self, url, *, title, tags=None):
-            return Entry(id=f"raw/stub-{hash(url) & 0xFFFF:x}.md", name=title, kind="raw", path="raw/stub.md")
-
-        def ingest_text(self, text, *, title, tags=None):
-            if not title:
-                raise ValueError("title is required for ingest_text")
-            return Entry(id=f"raw/stub-{hash(text) & 0xFFFF:x}.md", name=title, kind="raw", path="raw/stub.md")
-
-        def compile(self, *, force=False):
-            return {"compiled": 0, "skipped-unchanged": 0, "skipped-empty": 0, "pruned": 0, "error": 0}
-
-    return StubWiki(answer, hits or [])
-
-
-def _stub_context(ctx_id: str, kind_: str, display_name: str, answer_text: str):
+def _stub_context(ctx_id: str, display_name: str, answer_text: str):
     """A ContextProvider subclass with a canned ``query()`` answer."""
-    from scout.context.base import Answer, ContextProvider, HealthState, HealthStatus
+    from scout.context.provider import Answer, ContextProvider, Status as ProviderStatus
 
     class StubContext(ContextProvider):
         def __init__(self) -> None:
-            self.id = ctx_id
-            self.kind = kind_
-            self.name = display_name
+            super().__init__(id=ctx_id, name=display_name)
 
-        def health(self):
-            return HealthStatus(HealthState.CONNECTED, f"stub {kind_}")
+        def status(self):
+            return ProviderStatus(ok=True, detail=f"stub {ctx_id}")
 
         def query(self, question, *, limit=10):
-            return Answer(text=answer_text, hits=[])
+            del question, limit
+            return Answer(text=answer_text)
 
     return StubContext()
 
@@ -150,76 +81,35 @@ def _build_fixture(case: Case) -> Fixture:
     """Build the fixture named on the case. Defaults to 'default'."""
     name = case.fixture
     if name == "none":
-        return Fixture(wiki=_stub_wiki(), contexts=[])
+        return Fixture(contexts=[])
 
     if name == "default":
-        from scout.context.base import Hit
-
-        wiki_hits = [
-            Hit(
-                entry_id="compiled/onboarding-3f7a.md",
-                name="Onboarding",
-                snippet="First-week checklist: access, intros, paired code review.",
-                source_url="wiki:compiled/onboarding-3f7a.md",
-            ),
-        ]
-        wiki = _stub_wiki(
-            ("The onboarding article describes the first-week checklist. Source: compiled/onboarding-3f7a.md"),
-            hits=wiki_hits,
+        return Fixture(
+            contexts=[
+                _stub_context(
+                    "web",
+                    "Web (stub)",
+                    "Stub web answer for eval purposes. Cited: https://example.com/stub",
+                ),
+            ]
         )
-        contexts = [
-            _stub_context(
-                "sample-local",
-                "local",
-                "Sample Local",
-                "Found 3 files: README.md, onboarding.md, policies.md.",
-            ),
-            _stub_context("slack", "slack", "Slack", "(stub slack — no messages indexed)"),
-        ]
-        return Fixture(wiki=wiki, contexts=contexts)
-
-    if name == "writable_wiki":
-        from scout.context.wiki.backends.local import LocalWikiBackend
-        from scout.context.wiki.provider import WikiContextProvider
-
-        tmp = tempfile.mkdtemp(prefix="eval-wiki-")
-        backend = LocalWikiBackend(tmp)
-        real_wiki = WikiContextProvider(backend)
-
-        def _cleanup() -> None:
-            import shutil
-
-            shutil.rmtree(tmp, ignore_errors=True)
-
-        stub_contexts: list[Any] = [
-            _stub_context(
-                "sample-local",
-                "local",
-                "Sample Local",
-                "(stub local context — wiki is real)",
-            ),
-        ]
-        return Fixture(wiki=real_wiki, contexts=stub_contexts, teardown=_cleanup)
 
     raise ValueError(f"unknown fixture {name!r}")
 
 
-def _install_fixture(fixture: Fixture) -> tuple[Any, list[Any]]:
-    """Install the fixture via ``set_runtime`` (which also rewires
-    Explorer + Engineer's tool lists). Returns the prior (wiki, contexts)
-    so the caller can restore."""
-    from scout.tools.ask_context import get_contexts, get_wiki, set_runtime
+def _install_fixture(fixture: Fixture) -> list[Any]:
+    """Install the fixture via ``set_runtime``. Returns the prior contexts."""
+    from scout.contexts import get_contexts, set_runtime
 
-    prev_wiki = get_wiki()
     prev_contexts = get_contexts()
-    set_runtime(fixture.wiki, fixture.contexts)
-    return prev_wiki, prev_contexts
+    set_runtime(fixture.contexts)
+    return prev_contexts
 
 
-def _restore(prev_wiki: Any, prev_contexts: list[Any]) -> None:
-    from scout.tools.ask_context import set_runtime
+def _restore(prev_contexts: list[Any]) -> None:
+    from scout.contexts import set_runtime
 
-    set_runtime(prev_wiki, prev_contexts)
+    set_runtime(prev_contexts)
 
 
 # ---------------------------------------------------------------------------
@@ -279,9 +169,6 @@ def _extract_in_process(run_result: Any) -> tuple[str, list[str], list[str], lis
 
     tools.extend(_names_from(run_result))
 
-    # agno's TeamRunOutput exposes delegated specialist runs as
-    # ``member_responses: list[RunOutput]`` where each RunOutput carries
-    # agent_id + its own tools list.
     members = getattr(run_result, "member_responses", None)
     if isinstance(members, (list, tuple)):
         for m in members:
@@ -294,7 +181,6 @@ def _extract_in_process(run_result: Any) -> tuple[str, list[str], list[str], lis
 
 
 def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], float]:
-    """Run the case via team.run(). Returns (content, tools, delegated, errors, duration_s)."""
     from scout.team import scout as team
 
     start = time.monotonic()
@@ -310,7 +196,6 @@ def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], f
 
 
 def _run_sse(case: Case, base_url: str) -> tuple[str, list[str], list[str], list[str], float]:
-    """POST to /teams/scout/runs, parse SSE. Returns same shape as _run_in_process."""
     import httpx
 
     url = f"{base_url.rstrip('/')}/teams/scout/runs"
@@ -393,14 +278,12 @@ def _assert_case(
     fails: list[str] = []
     lower = content.lower()
 
-    # Routing
     if case.expected_agent is None:
         if delegated:
             fails.append(f"leader should answer directly but delegated to: {delegated}")
     elif case.expected_agent not in delegated:
         fails.append(f"expected_agent={case.expected_agent!r} not in {delegated or 'no delegations'}")
 
-    # Response substrings
     for needle in case.response_contains:
         if needle.lower() not in lower:
             fails.append(f"response missing substring: {needle!r}")
@@ -411,7 +294,6 @@ def _assert_case(
         if not re.search(pattern, content, re.IGNORECASE):
             fails.append(f"response doesn't match regex: {pattern!r}")
 
-    # Tool-call expectations (substring match against any tool name seen)
     for want in case.expected_tools:
         if not any(want in t for t in tools):
             fails.append(f"expected tool {want!r} not called; saw {tools}")
@@ -420,12 +302,10 @@ def _assert_case(
         if matches:
             fails.append(f"forbidden tool {bad!r} was called: {matches}")
 
-    # Errors from the run
     if errors:
         for e in errors:
             fails.append(f"run error: {e}")
 
-    # Budget
     if duration_s > case.max_duration_s:
         fails.append(f"duration {duration_s:.1f}s > max {case.max_duration_s}s")
 
@@ -445,9 +325,8 @@ def run_case(case: Case, *, live: bool = False, base_url: str = "http://localhos
     if skip:
         return CaseResult(case_id=case.id, status="SKIPPED", duration_s=0.0, transport=transport, skipped_reason=skip)
 
-    # Build + install the fixture (in-process only; live mode uses env).
     fixture: Fixture | None = None
-    prev: tuple[Any, list[Any]] | None = None
+    prev: list[Any] | None = None
     if not live:
         try:
             fixture = _build_fixture(case)
@@ -490,7 +369,7 @@ def run_case(case: Case, *, live: bool = False, base_url: str = "http://localhos
         )
     finally:
         if prev is not None:
-            _restore(*prev)
+            _restore(prev)
         if fixture is not None and fixture.teardown is not None:
             try:
                 fixture.teardown()
@@ -504,7 +383,6 @@ def run_case(case: Case, *, live: bool = False, base_url: str = "http://localhos
 
 
 def write_diagnostic(case: Case, result: CaseResult) -> Path:
-    """Write the per-case diagnostic consumed by scripts/eval_loop.sh."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     path = RESULTS_DIR / f"{case.id}.md"
     path.write_text(_build_diagnostic(case, result))

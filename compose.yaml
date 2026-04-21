@@ -32,7 +32,6 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
-      - repos:/repos
     env_file:
       - path: .env
         required: false
@@ -47,7 +46,6 @@ services:
       DB_USER: ${DB_USER:-ai}
       DB_PASS: ${DB_PASS:-ai}
       DB_DATABASE: ${DB_DATABASE:-ai}
-      REPOS_DIR: /repos
     depends_on:
       - scout-db
     networks:
@@ -60,4 +58,3 @@ networks:
 
 volumes:
   pgdata:
-  repos:

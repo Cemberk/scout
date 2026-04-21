@@ -1,17 +1,13 @@
 """Custom API routes for Scout
 
-GET  /wiki/health              — wiki health
-POST /wiki/compile             — trigger compile
-POST /wiki/ingest              — ingest url/text
-POST /wiki/query               — debug: ask the wiki
-GET  /contexts                 — list all contexts + wiki + health
-GET  /contexts/{id}/health     — single context or wiki health
-POST /contexts/{id}/query      — debug: ask one context/wiki directly
+GET  /contexts                 — list all contexts + status
+GET  /contexts/{id}/status     — single context status
+POST /contexts/{id}/query      — debug: query context directly
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from dataclasses import asdict
 
 from agno.os.auth import get_authentication_dependency
 from agno.os.settings import AgnoAPISettings
@@ -19,19 +15,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from scout.tools.ask_context import get_contexts, get_wiki
-
-
-class WikiCompileRequest(BaseModel):
-    force: bool = False
-
-
-class WikiIngestRequest(BaseModel):
-    kind: Literal["url", "text"]
-    url: str | None = None
-    text: str | None = None
-    title: str
-    tags: list[str] | None = None
+from scout.contexts import get_contexts
 
 
 class QueryRequest(BaseModel):
@@ -40,23 +24,21 @@ class QueryRequest(BaseModel):
 
 
 def _target(target_id: str):
-    if target_id == "wiki":
-        return get_wiki()
     for ctx in get_contexts():
         if ctx.id == target_id:
             return ctx
     return None
 
 
-def _health_row(target) -> dict:
+def _status_row(target) -> dict:
     try:
-        h = target.health()
-        return {"id": target.id, "kind": target.kind, "state": h.state.value, "detail": h.detail}
+        s = target.status()
+        return {"id": target.id, "name": target.name, "ok": s.ok, "detail": s.detail}
     except Exception as exc:
         return {
             "id": target.id,
-            "kind": target.kind,
-            "state": "disconnected",
+            "name": target.name,
+            "ok": False,
             "detail": f"{type(exc).__name__}: {exc}",
         }
 
@@ -66,70 +48,16 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         dependencies=[Depends(get_authentication_dependency(settings))],
     )
 
-    # ------------------------------------------------------------------
-    # Wiki
-    # ------------------------------------------------------------------
-
-    @router.get("/wiki/health")
-    def wiki_health():
-        wiki = get_wiki()
-        if wiki is None:
-            return JSONResponse({"error": "wiki not configured"}, status_code=503)
-        return _health_row(wiki)
-
-    @router.post("/wiki/compile")
-    def wiki_compile(body: WikiCompileRequest = WikiCompileRequest()):
-        wiki = get_wiki()
-        if wiki is None:
-            return JSONResponse({"error": "wiki not configured"}, status_code=503)
-        counts = wiki.compile(force=body.force)
-        return {"status": "ok", "counts": counts}
-
-    @router.post("/wiki/ingest")
-    def wiki_ingest(body: WikiIngestRequest):
-        wiki = get_wiki()
-        if wiki is None:
-            return JSONResponse({"error": "wiki not configured"}, status_code=503)
-        if body.kind == "url":
-            if not body.url:
-                return JSONResponse({"error": "kind=url requires url"}, status_code=400)
-            entry = wiki.ingest_url(body.url, title=body.title, tags=body.tags)
-        else:
-            if body.text is None:
-                return JSONResponse({"error": "kind=text requires text"}, status_code=400)
-            entry = wiki.ingest_text(body.text, title=body.title, tags=body.tags)
-        return {"status": "ingested", "entry_id": entry.id, "name": entry.name, "path": entry.path}
-
-    @router.post("/wiki/query")
-    def wiki_query(body: QueryRequest):
-        wiki = get_wiki()
-        if wiki is None:
-            return JSONResponse({"error": "wiki not configured"}, status_code=503)
-        answer = wiki.query(body.question, limit=body.limit)
-        return {"text": answer.text, "hits": [h.__dict__ for h in answer.hits]}
-
-    # ------------------------------------------------------------------
-    # Contexts
-    # ------------------------------------------------------------------
-
     @router.get("/contexts")
-    def list_contexts():
-        rows = []
-        wiki = get_wiki()
-        if wiki is not None:
-            rows.append(_health_row(wiki))
-        for ctx in get_contexts():
-            rows.append(_health_row(ctx))
-        return rows
+    def list_contexts_route():
+        return [_status_row(ctx) for ctx in get_contexts()]
 
-    # :path lets target_id contain slashes — contexts like
-    # "github:agno-agi/agno" and "s3:bucket/prefix" otherwise 404.
-    @router.get("/contexts/{target_id:path}/health")
-    def context_health(target_id: str):
+    @router.get("/contexts/{target_id:path}/status")
+    def context_status(target_id: str):
         target = _target(target_id)
         if target is None:
             return JSONResponse({"error": f"unknown target {target_id}"}, status_code=404)
-        return _health_row(target)
+        return _status_row(target)
 
     @router.post("/contexts/{target_id:path}/query")
     def context_query(target_id: str, body: QueryRequest):
@@ -137,6 +65,9 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         if target is None:
             return JSONResponse({"error": f"unknown target {target_id}"}, status_code=404)
         answer = target.query(body.question, limit=body.limit)
-        return {"text": answer.text, "hits": [h.__dict__ for h in answer.hits]}
+        return {
+            "text": answer.text,
+            "results": [asdict(r) for r in answer.results],
+        }
 
     return router

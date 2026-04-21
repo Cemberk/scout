@@ -26,7 +26,7 @@ def create_update_learnings(knowledge: Knowledge):
         """Save an operational-memory note to scout_learnings.
 
         Use this for things Scout should remember across sessions:
-        - Routing hints ("handbook stuff lives in wiki", "infra stuff in slack")
+        - Routing hints ("web context is best for X", "check scout_notes first")
         - Corrections ("user prefers short answers")
         - Per-user preferences, recurring patterns, known gotchas
 

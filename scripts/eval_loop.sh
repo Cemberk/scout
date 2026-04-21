@@ -70,7 +70,7 @@ for i in $(seq 1 "${MAX_ATTEMPTS}"); do
 
     echo -e "${BOLD}restarting ${SERVICE}...${NC}"
     docker compose restart "${SERVICE}" >/dev/null
-    # API needs a moment to re-wire the wiki + contexts on lifespan.
+    # API needs a moment to re-wire contexts on lifespan.
     sleep 6
 done
 

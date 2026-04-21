@@ -19,9 +19,6 @@ docs
 .env
 .envrc
 
-# OAuth token — generated on host, mounted at runtime; never bake into image
-token.json
-
 # ignore virtualenvs
 .venv
 venv*
