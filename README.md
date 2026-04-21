@@ -4,7 +4,7 @@ Scout is a **context agent** — an agent that explores information sources and 
 
 Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
 
-Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, **GitHub**, **Google Drive**, plus a generic **MCP** wrapper that turns any Model Context Protocol server into a provider. Gmail and Calendar are next.
+Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, and **Google Drive**. GitHub, Gmail, Calendar, and a generic MCP wrapper land in the next release.
 
 ## Quick start
 
@@ -58,10 +58,8 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 |---|---|---|
 | **`WebContextProvider`** | always on — picks a backend based on keys below | `web_search` / `web_extract` |
 | **`FilesystemContextProvider`** | `SCOUT_FS_ROOT` | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` under the root |
-| **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. |
-| **`GitHubContextProvider`** | `GITHUB_ACCESS_TOKEN` | read-only `search_repositories` / `search_code` / `search_issues_and_prs` / `get_file_content` / `get_pull_request_with_details`. Writes filtered out. |
-| **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Service-account auth; share folders with the SA email or set `GOOGLE_DELEGATED_USER`. |
-| **`MCPContextProvider`** | `SCOUT_MCP_CONFIG` (YAML) | one provider per entry — wraps any MCP server as tools. Setup: [`docs/MCP.md`](docs/MCP.md). |
+| **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md). |
+| **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Service-account auth; share folders with the SA email or set `GOOGLE_DELEGATED_USER`. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md). |
 
 **Web backends**, first-match selection:
 
@@ -123,11 +121,9 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK path). Ignored if `PARALLEL_API_KEY` is set. |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` for the Slack interface; alone, activates the Slack context provider. |
 | `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
-| `GITHUB_ACCESS_TOKEN` | No | GitHub fine-grained PAT. Activates the GitHub context provider (read-only). |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to a Google service-account JSON key. Activates the Drive context provider. |
 | `GOOGLE_DELEGATED_USER` | No | Optional — user email to impersonate via domain-wide delegation. |
 | `SCOUT_FS_ROOT` | No | Path to expose as a read-only filesystem context. |
-| `SCOUT_MCP_CONFIG` | No | YAML file registering one or more MCP servers. See [`docs/MCP.md`](docs/MCP.md). |
 | `DB_*` | No | Postgres (compose defaults work) |
 
 Full list in [`example.env`](example.env).

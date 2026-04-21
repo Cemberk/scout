@@ -10,15 +10,11 @@ from __future__ import annotations
 import json
 import logging
 from os import getenv
-from pathlib import Path
 
-import yaml
 from agno.tools import tool
 
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
-from scout.context.github import GitHubContextProvider
-from scout.context.mcp import MCPContextProvider
 from scout.context.provider import ContextProvider
 from scout.context.slack import SlackContextProvider
 from scout.context.web.exa import ExaBackend
@@ -47,7 +43,7 @@ def build_contexts() -> list[ContextProvider]:
     sharing a name.
     """
     new_contexts: list[ContextProvider] = [_build_web()]
-    for builder in (_build_filesystem, _build_slack, _build_github, _build_gdrive):
+    for builder in (_build_filesystem, _build_slack, _build_gdrive):
         try:
             ctx = builder()
         except Exception as exc:
@@ -55,7 +51,6 @@ def build_contexts() -> list[ContextProvider]:
             continue
         if ctx is not None:
             new_contexts.append(ctx)
-    new_contexts.extend(_build_mcp_servers())
 
     seen: set[str] = set()
     deduped: list[ContextProvider] = []
@@ -109,46 +104,10 @@ def _build_slack() -> SlackContextProvider | None:
     return SlackContextProvider(model=default_model())
 
 
-def _build_github() -> GitHubContextProvider | None:
-    if not getenv("GITHUB_ACCESS_TOKEN"):
-        return None
-    return GitHubContextProvider(model=default_model())
-
-
 def _build_gdrive() -> GDriveContextProvider | None:
     if not getenv("GOOGLE_SERVICE_ACCOUNT_FILE"):
         return None
     return GDriveContextProvider(model=default_model())
-
-
-_MCP_ENTRY_FIELDS = {"id", "name", "command", "url", "transport", "env"}
-
-
-def _build_mcp_servers() -> list[MCPContextProvider]:
-    path = getenv("SCOUT_MCP_CONFIG")
-    if not path:
-        return []
-    try:
-        entries = yaml.safe_load(Path(path).read_text()) or []
-    except Exception as exc:
-        log.warning("MCP config at %s unreadable: %s", path, exc)
-        return []
-    if not isinstance(entries, list):
-        log.warning("MCP config at %s: expected a YAML list at top level", path)
-        return []
-
-    providers: list[MCPContextProvider] = []
-    model = default_model()
-    for entry in entries:
-        if not isinstance(entry, dict) or "id" not in entry:
-            log.warning("MCP entry missing `id` (or not a mapping): %s", entry)
-            continue
-        kwargs = {k: v for k, v in entry.items() if k in _MCP_ENTRY_FIELDS}
-        try:
-            providers.append(MCPContextProvider(model=model, **kwargs))
-        except Exception as exc:
-            log.warning("MCP entry %s failed to build: %s", entry.get("id"), exc)
-    return providers
 
 
 def status_row(ctx: ContextProvider) -> dict:

@@ -8,7 +8,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "Agno", email = "hello@agno.com" }]
 
 dependencies = [
-  "agno[os,slack,github]",
+  "agno[os,slack]",
   "exa-py",
   "google-api-python-client",
   "google-auth-httplib2",
@@ -18,11 +18,10 @@ dependencies = [
   "parallel-web",
   "pgvector",
   "psycopg[binary]",
-  "pyyaml",
 ]
 
 [project.optional-dependencies]
-dev = ["mypy", "ruff", "types-PyYAML"]
+dev = ["mypy", "ruff"]
 
 [build-system]
 requires = ["setuptools"]
@@ -52,7 +51,6 @@ module = [
   "httpx.*",
   "parallel.*",
   "exa_py.*",
-  "yaml.*",
   "sqlalchemy.*",
   "fastapi.*",
 ]

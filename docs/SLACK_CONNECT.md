@@ -39,7 +39,7 @@ Use your deployed URL (e.g. `https://scout.yourdomain.com`).
 {
     "display_information": {
         "name": "Scout",
-        "description": "An enterprise context agent that lives in Slack.",
+        "description": "A context agent that lives in Slack.",
         "background_color": "#000000"
     },
     "features": {

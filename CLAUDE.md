@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a three-role team coordinated by a Leader, built on the `ContextProvider` base class. Ships with `WebContextProvider`, `FilesystemContextProvider`, `SlackContextProvider`, `GitHubContextProvider`, `GDriveContextProvider`, and `MCPContextProvider`. Gmail and Calendar land in upcoming PRs.
+Scout is an **enterprise context agent** — a three-role team coordinated by a Leader, built on the `ContextProvider` base class. Ships with `WebContextProvider`, `FilesystemContextProvider`, `SlackContextProvider`, and `GDriveContextProvider`. GitHub, Gmail, Calendar, and a generic MCP wrapper land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
 
 ## Architecture
 
@@ -75,15 +75,9 @@ scout/
     ├── fs/
     │   ├── __init__.py
     │   └── provider.py             # FilesystemContextProvider (read-only FileTools)
-    ├── mcp/
-    │   ├── __init__.py
-    │   └── provider.py             # MCPContextProvider (one per MCP server)
     ├── slack/
     │   ├── __init__.py
     │   └── provider.py             # SlackContextProvider (read-only SlackTools)
-    ├── github/
-    │   ├── __init__.py
-    │   └── provider.py             # GitHubContextProvider (read-only GithubTools)
     ├── gdrive/
     │   ├── __init__.py
     │   └── provider.py             # GDriveContextProvider (read-only GoogleDriveTools)
@@ -170,10 +164,10 @@ Registered provider set (in order):
 |---|---|---|
 | `WebContextProvider` | always | Backend picked below |
 | `FilesystemContextProvider` | `SCOUT_FS_ROOT` | Read-only; `FileTools` scoped to the root |
-| `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting) |
-| `GitHubContextProvider` | `GITHUB_ACCESS_TOKEN` | Read-only; `GithubTools` filtered to search + read (issues, PRs, code, files) |
-| `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; service-account auth (optional delegation via `GOOGLE_DELEGATED_USER`) |
-| `MCPContextProvider` | `SCOUT_MCP_CONFIG` (YAML) | One provider per YAML entry. Schema: [`docs/MCP.md`](docs/MCP.md) |
+| `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting). Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md) |
+| `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; service-account auth (optional delegation via `GOOGLE_DELEGATED_USER`). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) |
+
+`build_contexts()` dedupes by `id` globally (first wins, warns on collision) so Explorer never ends up with two `query_<id>` tools sharing a name.
 
 Web backend selection (first match wins):
 
@@ -228,11 +222,9 @@ Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.mode
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK). Ignored if `PARALLEL_API_KEY` is set. |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` to enable Slack interface. |
 | `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
-| `GITHUB_ACCESS_TOKEN` | No | GitHub fine-grained PAT. Activates the GitHub context provider (read-only). |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to a Google service-account JSON key. Activates the Drive context provider. |
 | `GOOGLE_DELEGATED_USER` | No | Optional — user email to impersonate via domain-wide delegation. |
 | `SCOUT_FS_ROOT` | No | Root directory exposed as a read-only filesystem context. |
-| `SCOUT_MCP_CONFIG` | No | YAML file registering MCP servers as providers (schema: [`docs/MCP.md`](docs/MCP.md)). |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
 
@@ -259,8 +251,6 @@ from scout.contexts import build_contexts, get_contexts, update_contexts, list_c
 from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
-from scout.context.github import GitHubContextProvider
-from scout.context.mcp import MCPContextProvider
 from scout.context.slack import SlackContextProvider
 from scout.context.web import WebContextProvider
 from scout.context.web.parallel import ParallelBackend
