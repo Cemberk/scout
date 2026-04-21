@@ -2,26 +2,24 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a four-role team coordinated by a Leader, built on top of the `ContextProvider` base class. This release is a **web-only thin slice**: the only shipping context is `WebContextProvider`. Filesystem / GitHub / Slack / Gmail / Drive / wiki land in subsequent milestones.
+Scout is an **enterprise context agent** — a three-role team coordinated by a Leader, built on the `ContextProvider` base class. This release is a **web-only thin slice**: the only shipping context is `WebContextProvider`. Filesystem / GitHub / Slack / Gmail / Drive / wiki land in subsequent milestones.
 
 ## Architecture
 
 ```
 Scout (Team Leader — coordinate mode, pure router, no tools)
-├── Explorer  — answers questions by asking the registered contexts.
-│               SQL read-only (scout_* tables). Shares scout_learnings.
-├── Engineer  — owns SQL writes into scout_* tables (DDL + DML in the
-│               scout schema). Shares scout_learnings.
-└── Doctor    — diagnoses health: contexts, DB, env. Read-only
-                everywhere. Shares scout_learnings.
+├── Explorer — answers questions by asking the registered contexts.
+│              SQL read-only (scout_* tables).
+└── Engineer — owns SQL writes into scout_* tables (DDL + DML in the
+                scout schema).
 ```
 
 ## ContextProvider
 
 `scout/context/provider.py` defines the base. Every external source subclasses `ContextProvider` and implements:
 
-- `query(question, *, limit) -> Answer` — natural-language access
-- `status() -> Status` — is the source reachable?
+- `query(question) -> Answer` / `aquery(question) -> Answer` — natural-language access
+- `status() -> Status` / `astatus() -> Status` — is the source reachable?
 
 `mode` controls how the provider surfaces itself to the calling agent:
 
@@ -42,9 +40,9 @@ The full type set:
 
 | Write surface | Owner | Call |
 |---|---|---|
-| `scout_*` user-data tables | Engineer | SQL DDL + DML, scoped to the `scout` schema (write guard + `get_sql_engine()`) |
+| `scout_*` user-data tables | Engineer | SQL DDL + DML, scoped to the `scout` schema (`get_sql_engine()`) |
 
-Everything else reads. Explorer and Doctor use `get_readonly_engine()` (PostgreSQL's `default_transaction_read_only`). The scout engine has a `before_cursor_execute` hook that rejects any DDL/DML targeting `public` or `ai`.
+Everything else reads. Explorer uses `get_readonly_engine()` (PostgreSQL's `default_transaction_read_only`). The scout engine has a `before_cursor_execute` hook that rejects any DDL/DML targeting `public` or `ai`.
 
 ## Structure
 
@@ -52,30 +50,24 @@ Everything else reads. Explorer and Doctor use `get_readonly_engine()` (PostgreS
 scout/
 ├── __init__.py
 ├── __main__.py                     # CLI: chat | contexts
-├── team.py                         # Leader + three specialists, coordinate mode
-├── settings.py                     # DB-dependent runtime objects
-├── contexts.py                     # build_contexts() + registry (publish_contexts / get_contexts / list_contexts)
+├── team.py                         # Leader + two specialists, coordinate mode
+├── settings.py                     # Runtime objects (agent_db)
+├── contexts.py                     # build_contexts() + registry + list_contexts tool + status_row helpers
 ├── agents/
 │   ├── explorer.py                 # per-provider query_* + list_contexts + read-only SQL
-│   ├── engineer.py                 # SQL writes + introspect + reasoning + learnings
-│   └── doctor.py                   # status / status_all / db_status / env_report
-├── context/                        # The library — ships to agno.context
-│   ├── __init__.py
-│   ├── _utils.py                   # answer_from_run
-│   ├── mode.py                     # ContextMode enum
-│   ├── provider.py                 # ContextProvider ABC + Status/Document/Answer
-│   └── web/
-│       ├── __init__.py
-│       ├── backend.py              # WebBackend Protocol
-│       ├── provider.py             # WebContextProvider
-│       └── backends/
-│           ├── __init__.py
-│           ├── exa_mcp.py          # ExaMCPBackend (keyless Exa MCP)
-│           └── parallel.py         # ParallelBackend (parallel-web SDK)
-└── tools/
-    ├── diagnostics.py              # status / status_all / db_status / env_report (Doctor)
-    ├── introspect.py               # introspect_schema (Engineer)
-    └── learnings.py                # create_update_learnings (all three specialists)
+│   └── engineer.py                 # SQL writes on the scout schema
+└── context/                        # The library — ships to agno.context
+    ├── __init__.py
+    ├── _utils.py                   # answer_from_run
+    ├── backend.py                  # ContextBackend ABC
+    ├── mode.py                     # ContextMode enum
+    ├── provider.py                 # ContextProvider ABC + Status/Document/Answer
+    └── web/
+        ├── __init__.py
+        ├── provider.py             # WebContextProvider
+        ├── parallel.py             # ParallelBackend (parallel-web SDK)
+        ├── exa.py                  # ExaBackend (exa-py SDK)
+        └── exa_mcp.py              # ExaMCPBackend (keyless Exa MCP)
 
 app/
 ├── main.py                         # AgentOS entry (lifespan wires contexts)
@@ -83,15 +75,15 @@ app/
 └── config.yaml
 
 db/
-├── session.py                      # get_sql_engine (guarded) / get_readonly_engine
+├── session.py                      # get_sql_engine (guarded) / get_readonly_engine / get_postgres_db / create_knowledge
 ├── url.py                          # DB URL builder
-└── tables.py                       # Canonical DDL: scout_contacts / projects / notes.
+└── tables.py                       # Canonical DDL: scout_contacts / projects / notes
 
 evals/
-├── cases.py                        # Behavioral Case dataclass + CASES tuple
-├── runner.py                       # In-process + SSE transports + fixtures
-├── wiring.py                       # Code-level invariants (no LLM)
-├── judges.py                       # LLM-scored quality tier
+├── cases.py                        # Behavioral Case dataclass + CASES tuple (7 cases)
+├── runner.py                       # In-process transport + fixtures
+├── wiring.py                       # Code-level invariants, no LLM (W1-W4)
+├── judges.py                       # LLM-scored quality tier (1 case)
 └── __main__.py                     # CLI dispatch
 ```
 
@@ -100,7 +92,7 @@ evals/
 ```bash
 ./scripts/venv_setup.sh && source .venv/bin/activate
 ./scripts/format.sh                   # Format code
-./scripts/validate.sh                 # ruff + mypy + wiring invariants
+./scripts/validate.sh                 # ruff + mypy
 
 # CLI
 python -m scout                       # Chat
@@ -113,9 +105,8 @@ python -m db.tables
 python -m evals wiring                # Code-level invariants (no LLM)
 python -m evals                       # Behavioral cases, in-process
 python -m evals --case <id>           # Single case
-python -m evals --live                # Same cases over SSE
+python -m evals --verbose             # Response + tool previews
 python -m evals judges                # LLM-scored quality tier
-./scripts/eval_loop.sh <case_id>      # Autonomous fix loop (claude -p)
 ```
 
 ### Environment loading for CLI work
@@ -132,10 +123,13 @@ Docker picks up `.env` automatically via `docker compose`, so code inside `scout
 
 `scout/contexts.py::build_contexts()` is the env-driven factory called once at startup. The web provider is on by default.
 
-| Backend selection | Trigger |
+Backend selection (first match wins):
+
+| Trigger | Backend |
 |---|---|
-| `ParallelBackend` | `PARALLEL_API_KEY` set |
-| `ExaMCPBackend` | otherwise (keyless) |
+| `PARALLEL_API_KEY` set | `ParallelBackend` (premium research + extract) |
+| `EXA_API_KEY` set | `ExaBackend` (Exa SDK) |
+| neither | `ExaMCPBackend` (keyless, via Exa's public MCP) |
 
 ## User Data Tables
 
@@ -147,19 +141,14 @@ Shipped tables under the `scout` schema (created on first startup via `db/tables
 | `scout_projects` | Things in motion | `name`, `status`, `tags TEXT[]` |
 | `scout_notes` | Free-form notes | `title`, `body`, `tags TEXT[]`, `source_url` |
 
-Beyond these three, Engineer creates new `scout_*` tables on demand — always in the `scout` schema, always with the standard columns, always recording the new shape into `scout_learnings` afterward.
-
-## Learnings
-
-One operational-memory store: `scout_learnings`. Explorer, Engineer, Doctor all attach it as their `LearningMachine`'s knowledge base in agentic mode. Routing hints, corrections, per-user preferences — Scout's memory *about itself*. `update_learnings(note, title=?)` writes; the LearningMachine searches before saving so duplicates don't pile up.
+Beyond these three, Engineer creates new `scout_*` tables on demand — always in the `scout` schema, always with the standard columns.
 
 ## Tools by Agent
 
 | Agent | Tools |
 |-------|-------|
-| Explorer | `SQLTools` (**read-only engine**, `scout` schema), `query_<id>` (one per registered provider via `provider.get_tools()`), `list_contexts`, `update_learnings` |
-| Engineer | `SQLTools` (scout engine, **schema-guarded** to `scout`), `introspect_schema`, `update_learnings`, `ReasoningTools` |
-| Doctor | `SQLTools` (**read-only**), `status`, `status_all`, `db_status`, `env_report`, `update_learnings` |
+| Explorer | `SQLTools` (**read-only engine**, `scout` schema), `query_<id>` (one per registered provider via `provider.get_tools()`), `list_contexts` |
+| Engineer | `SQLTools` (scout engine, **schema-guarded** to `scout`) |
 | Leader | (none — pure router) |
 
 **Per-provider tools are built by the registry.** `scout.contexts.publish_contexts(contexts)` installs the singleton list. Explorer's `tools=explorer_tools` is a callable (`cache_callables=False`), so agno resolves the tool list from the current registry on every run. The app lifespan calls `publish_contexts` once at startup; eval fixtures call it per case.
@@ -176,15 +165,15 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`, …):
 
 ## Model
 
-Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`. The literal sits at each call site. OpenAI is also what `text-embedding-3-small` uses for the Learnings PgVector path, so one key covers everything.
+Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`. The literal sits at each call site. `WebContextProvider`'s sub-agent takes a `model=` kwarg so the library stays portable to `agno.context` — no hard OpenAI dep inside `scout/context/`.
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent + embeddings for Learnings |
-| `PARALLEL_API_KEY` | No | Premium web research for `WebContextProvider`. When set, Scout swaps to `ParallelBackend`; otherwise the default is keyless `ExaMCPBackend`. |
-| `EXA_API_KEY` | No | Optional. Raises rate limits on `ExaMCPBackend`; not required. |
+| `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent |
+| `PARALLEL_API_KEY` | No | Selects `ParallelBackend` for web research. |
+| `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK). Ignored if `PARALLEL_API_KEY` is set. |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
 
@@ -192,25 +181,25 @@ Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.mode
 
 ### ContextProvider
 
-Every external source subclasses `ContextProvider` (in `scout/context/provider.py`). Each provider lives in its own folder under `scout/context/<kind>/` — the class is in `provider.py`, pluggable backends in `backends/`. Implementation is agentic by default — `_build_agent()` wraps a sub-agent with backend tools when needed (lazy). Each provider exposes its tools via `.get_tools()`; Explorer wires them directly.
+Every external source subclasses `ContextProvider` (in `scout/context/provider.py`). Each provider lives in its own folder under `scout/context/<kind>/` — the class is in `provider.py`, pluggable backends are flat modules in the same folder (e.g. `scout/context/web/parallel.py`). Implementation is agentic by default — `_build_agent()` wraps a sub-agent with backend tools when needed (lazy). Each provider exposes its tools via `.get_tools()`; Explorer wires them directly.
 
 ### Database
 
 - Use `get_postgres_db()` from the `db` module for agent session storage.
-- Use `create_knowledge()` for PgVector hybrid-search knowledge bases.
 - Use `get_sql_engine()` for tools that need to write to the `scout` schema (Engineer, migrations). This engine has a guard that rejects writes to `public` / `ai`.
-- Use `get_readonly_engine()` for tools that should never write (Explorer, Doctor). PostgreSQL's `default_transaction_read_only` enforces this at the DB level.
-- Knowledge bases use `text-embedding-3-small`.
+- Use `get_readonly_engine()` for tools that should never write (Explorer). PostgreSQL's `default_transaction_read_only` enforces this at the DB level.
 - `db/tables.py` runs at startup; safe to rerun.
 
 ### Imports
 
 ```python
-from db import db_url, get_postgres_db, create_knowledge, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
+from db import db_url, get_postgres_db, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
 from scout.team import scout
-from scout.settings import scout_learnings
-from scout.contexts import build_contexts, get_contexts, list_contexts, publish_contexts
-from scout.context import ContextProvider, ContextMode, Answer, Document, Status
-from scout.context.web import WebContextProvider, WebBackend
-from scout.context.web.backends import ExaMCPBackend, ParallelBackend
+from scout.settings import agent_db
+from scout.contexts import build_contexts, get_contexts, list_contexts, publish_contexts, status_row, astatus_row
+from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
+from scout.context.web import WebContextProvider
+from scout.context.web.parallel import ParallelBackend
+from scout.context.web.exa import ExaBackend
+from scout.context.web.exa_mcp import ExaMCPBackend
 ```
