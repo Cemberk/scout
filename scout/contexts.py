@@ -16,6 +16,7 @@ import yaml
 from agno.tools import tool
 
 from scout.context.fs import FilesystemContextProvider
+from scout.context.gdrive import GDriveContextProvider
 from scout.context.github import GitHubContextProvider
 from scout.context.mcp import MCPContextProvider
 from scout.context.provider import ContextProvider
@@ -49,6 +50,9 @@ def build_contexts() -> list[ContextProvider]:
     github = _build_github()
     if github is not None:
         new_contexts.append(github)
+    gdrive = _build_gdrive()
+    if gdrive is not None:
+        new_contexts.append(gdrive)
     new_contexts.extend(_build_mcp_servers())
     contexts[:] = new_contexts
     log.info("contexts: %s", [c.id for c in new_contexts])
@@ -93,6 +97,12 @@ def _build_github() -> GitHubContextProvider | None:
     if not getenv("GITHUB_ACCESS_TOKEN"):
         return None
     return GitHubContextProvider(model=default_model())
+
+
+def _build_gdrive() -> GDriveContextProvider | None:
+    if not getenv("GOOGLE_SERVICE_ACCOUNT_FILE"):
+        return None
+    return GDriveContextProvider(model=default_model())
 
 
 _MCP_ENTRY_FIELDS = {"id", "name", "command", "url", "transport", "env"}

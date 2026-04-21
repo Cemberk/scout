@@ -10,6 +10,9 @@ authors = [{ name = "Agno", email = "hello@agno.com" }]
 dependencies = [
   "agno[os,slack,github]",
   "exa-py",
+  "google-api-python-client",
+  "google-auth-httplib2",
+  "google-auth-oauthlib",
   "mcp",
   "openai",
   "parallel-web",

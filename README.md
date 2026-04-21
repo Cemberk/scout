@@ -60,6 +60,7 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | **`FilesystemContextProvider`** | `SCOUT_FS_ROOT` | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` under the root |
 | **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. |
 | **`GitHubContextProvider`** | `GITHUB_ACCESS_TOKEN` | read-only `search_repositories` / `search_code` / `search_issues_and_prs` / `get_file_content` / `get_pull_request_with_details`. Writes filtered out. |
+| **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Service-account auth; share folders with the SA email or set `GOOGLE_DELEGATED_USER`. |
 | **`MCPContextProvider`** | `SCOUT_MCP_CONFIG` (YAML) | one provider per entry — wraps any MCP server as tools. Setup: [`docs/MCP.md`](docs/MCP.md). |
 
 **Web backends**, first-match selection:
@@ -123,6 +124,8 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` for the Slack interface; alone, activates the Slack context provider. |
 | `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
 | `GITHUB_ACCESS_TOKEN` | No | GitHub fine-grained PAT. Activates the GitHub context provider (read-only). |
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to a Google service-account JSON key. Activates the Drive context provider. |
+| `GOOGLE_DELEGATED_USER` | No | Optional — user email to impersonate via domain-wide delegation. |
 | `SCOUT_FS_ROOT` | No | Path to expose as a read-only filesystem context. |
 | `SCOUT_MCP_CONFIG` | No | YAML file registering one or more MCP servers. See [`docs/MCP.md`](docs/MCP.md). |
 | `DB_*` | No | Postgres (compose defaults work) |
