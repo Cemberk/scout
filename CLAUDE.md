@@ -75,8 +75,7 @@ scout/
 └── tools/
     ├── diagnostics.py              # status / status_all / db_status / env_report (Doctor)
     ├── introspect.py               # introspect_schema (Engineer)
-    ├── learnings.py                # create_update_learnings (all three specialists)
-    └── redactor.py                 # redact() — secret-stripping for provider output
+    └── learnings.py                # create_update_learnings (all three specialists)
 
 app/
 ├── main.py                         # AgentOS entry (lifespan wires contexts)
@@ -164,8 +163,6 @@ One operational-memory store: `scout_learnings`. Explorer, Engineer, Doctor all 
 | Leader | (none — pure router) |
 
 **Per-provider tools are built by the registry.** `scout.contexts.set_runtime(contexts)` installs the singleton list and rewires Explorer's `.tools` list in one call. The app lifespan calls it once at startup; eval fixtures call it per case.
-
-The base `ContextProvider._query_tool` wrapper runs backend output through `scout.tools.redactor` — OpenAI/Anthropic keys, GitHub PATs, Slack tokens, AWS keys, JWTs are redacted defensively. Providers that expose their backend's tools directly (`WebContextProvider` in default/tools mode surfaces `web_search` / `web_extract` unwrapped) do not currently pass through the redactor; treat those outputs as untrusted.
 
 ## API Endpoints
 

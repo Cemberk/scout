@@ -119,8 +119,6 @@ class ContextProvider(ABC):
         return [self._query_tool()]
 
     def _query_tool(self):
-        from scout.context._redactor import redact
-
         provider = self
 
         @tool(name=self.query_tool_name)
@@ -129,15 +127,9 @@ class ContextProvider(ABC):
                 answer = provider.query(question, limit=limit)
             except Exception as exc:
                 return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-            results = []
-            for r in answer.results:
-                d = dict(r.__dict__)
-                if d.get("snippet"):
-                    d["snippet"] = redact(d["snippet"])
-                results.append(d)
-            payload: dict = {"results": results}
+            payload: dict = {"results": [r.__dict__ for r in answer.results]}
             if answer.text is not None:
-                payload["text"] = redact(answer.text)
+                payload["text"] = answer.text
             return json.dumps(payload)
 
         return _query
