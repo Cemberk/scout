@@ -6,8 +6,8 @@ annotated-types==0.7.0
 anyio==4.13.0
 attrs==26.1.0
 beautifulsoup4==4.14.3
-boto3==1.42.91
-botocore==1.42.91
+boto3==1.42.92
+botocore==1.42.92
 certifi==2026.2.25
 cffi==2.0.0
 charset-normalizer==3.4.7
@@ -62,7 +62,7 @@ opentelemetry-instrumentation==0.62b0
 opentelemetry-sdk==1.41.0
 opentelemetry-semantic-conventions==0.62b0
 packaging==26.1
-parallel-web==0.4.2
+parallel-web==0.5.0
 pgvector==0.4.2
 proto-plus==1.27.2
 protobuf==7.34.1
@@ -71,10 +71,10 @@ psycopg-binary==3.3.3
 pyasn1==0.6.3
 pyasn1-modules==0.4.2
 pycparser==3.0
-pydantic==2.13.2
-pydantic-core==2.46.2
+pydantic==2.13.3
+pydantic-core==2.46.3
 pydantic-extra-types==2.11.1
-pydantic-settings==2.13.1
+pydantic-settings==2.14.0
 pygments==2.20.0
 pyjwt==2.12.1
 pyparsing==3.3.2
