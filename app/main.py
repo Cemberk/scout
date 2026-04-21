@@ -3,6 +3,7 @@ AgentOS Entrypoint
 ==================
 """
 
+import logging
 from contextlib import asynccontextmanager
 from os import getenv
 from pathlib import Path
@@ -15,6 +16,8 @@ from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
 from scout.contexts import build_contexts
 from scout.team import scout
+
+log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -57,22 +60,16 @@ app.include_router(create_router(agent_os.settings))
 # Startup helpers
 # ---------------------------------------------------------------------------
 def _create_tables() -> None:
-    try:
-        from db.tables import create_tables
+    from db.tables import create_tables
 
-        create_tables()
-        print("[scout] Tables: created")
-    except Exception as e:
-        print(f"[scout] Tables: failed: {e}")
+    create_tables()
+    log.info("Tables: created")
 
 
 def _create_contexts() -> None:
     """Build the contexts from env and cache them for the process."""
-    try:
-        contexts = build_contexts()
-        print(f"[scout] Contexts: {[c.id for c in contexts]}")
-    except Exception as e:
-        print(f"[scout] Contexts wiring failed: {e}")
+    contexts = build_contexts()
+    log.info("Contexts: %s", [c.id for c in contexts])
 
 
 if __name__ == "__main__":
