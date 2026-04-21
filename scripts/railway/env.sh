@@ -4,7 +4,7 @@
 #
 #    Agno Railway Environment Sync
 #
-#    Usage: ./scripts/railway_env.sh
+#    Usage: ./scripts/railway/env.sh
 #
 #    Reads .env and pushes all variables to the Railway scout service.
 #    Handles multiline values (e.g. PEM keys) correctly.
@@ -32,7 +32,7 @@ if ! command -v railway &> /dev/null; then
 fi
 
 if ! railway status &> /dev/null; then
-    echo "Not linked to a Railway project. Run ./scripts/railway_up.sh first."
+    echo "Not linked to a Railway project. Run ./scripts/railway/up.sh first."
     exit 1
 fi
 

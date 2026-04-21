@@ -4,10 +4,10 @@
 #
 #    Agno Railway Redeploy
 #
-#    Usage: ./scripts/railway_redeploy.sh
+#    Usage: ./scripts/railway/redeploy.sh
 #
 #    Redeploys the scout app service to an existing Railway project.
-#    Run ./scripts/railway_up.sh first for initial provisioning.
+#    Run ./scripts/railway/up.sh first for initial provisioning.
 #
 ############################################################################
 
@@ -25,7 +25,7 @@ if ! command -v railway &> /dev/null; then
 fi
 
 if ! railway status &> /dev/null; then
-    echo "Not linked to a Railway project. Run ./scripts/railway_up.sh first."
+    echo "Not linked to a Railway project. Run ./scripts/railway/up.sh first."
     exit 1
 fi
 

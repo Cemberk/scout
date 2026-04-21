@@ -4,9 +4,9 @@
 #
 #    Agno Railway Setup (first-time provisioning)
 #
-#    Usage: ./scripts/railway_up.sh
-#    Redeploy: ./scripts/railway_redeploy.sh
-#    Sync .env:  ./scripts/railway_env.sh
+#    Usage: ./scripts/railway/up.sh
+#    Redeploy: ./scripts/railway/redeploy.sh
+#    Sync .env:  ./scripts/railway/env.sh
 #
 #    Prerequisites:
 #      - Railway CLI installed
@@ -85,7 +85,7 @@ echo -e "${BOLD}Creating application service...${NC}"
 echo ""
 # Forward every relevant env var the first deploy might need. Keys not
 # set in the local shell become empty strings (harmless). Use
-# ./scripts/railway_env.sh to sync from .env after the fact.
+# ./scripts/railway/env.sh to sync from .env after the fact.
 railway add -s scout \
     -v "DB_USER=${DB_USER:-ai}" \
     -v "DB_PASS=${DB_PASS:-ai}" \
@@ -112,5 +112,5 @@ railway domain --service scout
 echo ""
 echo -e "${BOLD}Done.${NC} Domain may take ~5 minutes."
 echo -e "${DIM}Logs:             railway logs --service scout${NC}"
-echo -e "${DIM}Sync env vars:    ./scripts/railway_env.sh  (defaults to .env.production)${NC}"
+echo -e "${DIM}Sync env vars:    ./scripts/railway/env.sh  (defaults to .env.production)${NC}"
 echo ""

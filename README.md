@@ -99,6 +99,18 @@ python -m evals judges             # LLM-scored quality tier
 
 See [`docs/EVALS.md`](docs/EVALS.md) for the full picture.
 
+## Deploy
+
+Railway scripts are included for one-command deployment:
+
+```sh
+./scripts/railway/up.sh        # first-time provisioning (Postgres + app service)
+./scripts/railway/env.sh       # sync .env to Railway (defaults to .env.production)
+./scripts/railway/redeploy.sh  # push a code update
+```
+
+Prereqs: [Railway CLI](https://docs.railway.app/guides/cli) + `railway login`. Any Docker-capable host with a Postgres addon works equivalently.
+
 ## Troubleshooting
 
 - **Port 5432 or 8000 in use.** Edit the host-side port in `compose.yaml`.
