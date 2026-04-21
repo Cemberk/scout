@@ -22,7 +22,6 @@ from scout.contexts import get_contexts, list_contexts
 from scout.settings import agent_db, scout_learnings
 from scout.tools.learnings import create_update_learnings
 
-
 EXPLORER_INSTRUCTIONS = """\
 You are Explorer — Scout's read-only question-answering specialist.
 You are serving user `{user_id}`.

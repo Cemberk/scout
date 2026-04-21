@@ -61,7 +61,8 @@ class Fixture:
 
 def _stub_context(ctx_id: str, display_name: str, answer_text: str):
     """A ContextProvider subclass with a canned ``query()`` answer."""
-    from scout.context.provider import Answer, ContextProvider, Status as ProviderStatus
+    from scout.context.provider import Answer, ContextProvider
+    from scout.context.provider import Status as ProviderStatus
 
     class StubContext(ContextProvider):
         def __init__(self) -> None:

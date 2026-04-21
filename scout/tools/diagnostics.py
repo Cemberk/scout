@@ -51,9 +51,7 @@ def status(target_id: str) -> str:
             try:
                 s = ctx.status()
             except Exception as exc:
-                return json.dumps(
-                    {"id": target_id, "ok": False, "detail": f"{type(exc).__name__}: {exc}"}
-                )
+                return json.dumps({"id": target_id, "ok": False, "detail": f"{type(exc).__name__}: {exc}"})
             return json.dumps({"id": target_id, "ok": s.ok, "detail": s.detail})
 
     return json.dumps({"error": f"unknown target {target_id!r}"})

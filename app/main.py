@@ -24,6 +24,7 @@ from scout.team import scout
 runtime_env = getenv("RUNTIME_ENV", "prd")
 scheduler_base_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
 
+
 # ---------------------------------------------------------------------------
 # Lifespan — Create tables and wire up contexts
 # ---------------------------------------------------------------------------

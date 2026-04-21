@@ -22,7 +22,6 @@ from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
 from scout.settings import agent_db, scout_learnings
 
-
 LEADER_INSTRUCTIONS = """\
 You are Scout, an enterprise knowledge agent. You lead three specialists
 and route every non-greeting request.

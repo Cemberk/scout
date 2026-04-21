@@ -33,6 +33,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from agno.tools import tool
+
 from scout.context.mode import ContextMode
 
 if TYPE_CHECKING:
@@ -81,17 +83,13 @@ class ContextProvider(ABC):
         self.name = name or id
         self.mode = mode
         self.model = model
+        self.query_tool_name = f"query_{_sanitize_id(id)}"
 
     @abstractmethod
     def query(self, question: str, *, limit: int = 10) -> Answer: ...
 
     @abstractmethod
     def status(self) -> Status: ...
-
-    @property
-    def query_tool_name(self) -> str:
-        """Name of the `query_<id>` tool exposed in agent mode."""
-        return f"query_{_sanitize_id(self.id)}"
 
     def instructions(self) -> str:
         """How a calling agent should use this provider.
@@ -121,14 +119,11 @@ class ContextProvider(ABC):
         return [self._query_tool()]
 
     def _query_tool(self):
-        from agno.tools import tool
-
         from scout.tools.redactor import redact
 
         provider = self
-        tool_name = self.query_tool_name
 
-        @tool(name=tool_name)
+        @tool(name=self.query_tool_name)
         def _query(question: str, limit: int = 10) -> str:
             try:
                 answer = provider.query(question, limit=limit)
@@ -154,11 +149,3 @@ class ContextProvider(ABC):
 def _sanitize_id(raw: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "_", raw.lower())
     return s.strip("_") or "context"
-
-
-__all__ = [
-    "Answer",
-    "ContextProvider",
-    "Document",
-    "Status",
-]
