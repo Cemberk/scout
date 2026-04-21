@@ -31,9 +31,5 @@ echo -e "${DIM}> mypy ${REPO_ROOT} --config-file pyproject.toml${NC}"
 mypy ${REPO_ROOT} --config-file ${REPO_ROOT}/pyproject.toml
 
 echo ""
-echo -e "${DIM}> python -m evals wiring${NC}"
-cd ${REPO_ROOT} && python -m evals wiring
-
-echo ""
 echo -e "${BOLD}Done.${NC}"
 echo ""
