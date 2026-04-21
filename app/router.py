@@ -39,11 +39,11 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         return status_row(target)
 
     @router.post("/contexts/{target_id:path}/query")
-    def context_query(target_id: str, body: QueryRequest):
+    async def context_query(target_id: str, body: QueryRequest):
         target = _target(target_id)
         if target is None:
             return JSONResponse({"error": f"unknown target {target_id}"}, status_code=404)
-        answer = target.query(body.question)
+        answer = await target.aquery(body.question)
         return {
             "text": answer.text,
             "results": [asdict(r) for r in answer.results],
