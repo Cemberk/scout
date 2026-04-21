@@ -19,7 +19,7 @@ from typing import Literal
 from agno.eval.agent_as_judge import AgentAsJudgeEval
 from agno.models.openai import OpenAIResponses
 
-from evals.runner import _build_fixture, _install_fixture, _restore
+from evals.runner import build_fixture, install_fixture, restore_contexts
 
 JUDGE_MODEL = OpenAIResponses(id="gpt-5.4")
 
@@ -103,12 +103,7 @@ def run_judged(case: Judged) -> JudgedResult:
     """Run one judged case."""
     from scout.team import scout as team
 
-    class _FakeCase:
-        def __init__(self, fixture: str) -> None:
-            self.fixture = fixture
-
-    fixture = _build_fixture(_FakeCase(case.fixture))  # type: ignore[arg-type]
-    prev = _install_fixture(fixture)
+    prev = install_fixture(build_fixture(case.fixture))
 
     start = time.monotonic()
     try:
@@ -160,12 +155,7 @@ def run_judged(case: Judged) -> JudgedResult:
             failures=[f"{type(exc).__name__}: {exc}"],
         )
     finally:
-        _restore(prev)
-        if fixture.teardown:
-            try:
-                fixture.teardown()
-            except Exception:
-                pass
+        restore_contexts(prev)
 
 
 def run_all_judged(case_id: str | None = None) -> list[JudgedResult]:

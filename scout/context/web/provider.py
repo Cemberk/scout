@@ -1,12 +1,12 @@
-"""WebContextProvider — web research via configurable backend.
+"""WebContextProvider — web research via configurable backends.
 
 Backends available:
-
 - `ExaMCPBackend` — keyless web search via Exa's public MCP server.
 - `ParallelBackend` — premium, requires `PARALLEL_API_KEY`.
 
-Default mode (`ContextMode.default`) exposes the backend's tools directly.
-Switch to `ContextMode.agent` to wrap the backend in a sub-agent that does search-then-fetch internally.
+Modes available:
+- Default mode (`ContextMode.default`) exposes the backend's tools directly.
+- Switch to `ContextMode.agent` to wrap the backend in a sub-agent that does search-then-fetch internally.
 """
 
 from __future__ import annotations

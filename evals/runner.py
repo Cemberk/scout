@@ -16,7 +16,6 @@ On FAIL, a self-contained diagnostic is written to
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import time
@@ -53,10 +52,9 @@ class CaseResult:
 
 @dataclass
 class Fixture:
-    """A list of contexts plus an optional teardown hook."""
+    """A list of contexts to install into the runtime registry."""
 
     contexts: list[Any]
-    teardown: Any = None
 
 
 def _stub_context(ctx_id: str, display_name: str, answer_text: str):
@@ -78,9 +76,8 @@ def _stub_context(ctx_id: str, display_name: str, answer_text: str):
     return StubContext()
 
 
-def _build_fixture(case: Case) -> Fixture:
-    """Build the fixture named on the case. Defaults to 'default'."""
-    name = case.fixture
+def build_fixture(name: str) -> Fixture:
+    """Build a fixture by name. Used by both behavioral and judged runners."""
     if name == "none":
         return Fixture(contexts=[])
 
@@ -96,9 +93,8 @@ def _build_fixture(case: Case) -> Fixture:
         )
 
     if name == "real":
-        # Real env-built contexts. For quality evals (judges) that need
-        # actual web traffic; requires OPENAI_API_KEY + optionally
-        # PARALLEL_API_KEY / EXA_API_KEY to be set.
+        # Real env-built contexts — hits actual providers. Needs
+        # OPENAI_API_KEY plus a backend key (PARALLEL_API_KEY / EXA_API_KEY).
         from scout.contexts import build_contexts
 
         return Fixture(contexts=build_contexts())
@@ -106,7 +102,7 @@ def _build_fixture(case: Case) -> Fixture:
     raise ValueError(f"unknown fixture {name!r}")
 
 
-def _install_fixture(fixture: Fixture) -> list[Any]:
+def install_fixture(fixture: Fixture) -> list[Any]:
     """Install the fixture via ``set_runtime``. Returns the prior contexts."""
     from scout.contexts import get_contexts, set_runtime
 
@@ -115,27 +111,10 @@ def _install_fixture(fixture: Fixture) -> list[Any]:
     return prev_contexts
 
 
-def _restore(prev_contexts: list[Any]) -> None:
+def restore_contexts(prev_contexts: list[Any]) -> None:
     from scout.contexts import set_runtime
 
     set_runtime(prev_contexts)
-
-
-# ---------------------------------------------------------------------------
-# Env gating
-# ---------------------------------------------------------------------------
-
-
-def _skip_reason(case: Case, *, live: bool = False) -> str | None:
-    missing = [v for v in case.requires if not os.environ.get(v)]
-    if missing:
-        return f"missing env: {', '.join(missing)}"
-    leaked = [v for v in case.requires_not if os.environ.get(v)]
-    if leaked:
-        return f"must-be-unset env is set: {', '.join(leaked)}"
-    if live and case.live_skip:
-        return case.live_skip
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -330,16 +309,10 @@ def run_case(case: Case, *, live: bool = False, base_url: str = "http://localhos
     """Execute one case. Install/restore the fixture around it."""
     transport = "live" if live else "in-process"
 
-    skip = _skip_reason(case, live=live)
-    if skip:
-        return CaseResult(case_id=case.id, status="SKIPPED", duration_s=0.0, transport=transport, skipped_reason=skip)
-
-    fixture: Fixture | None = None
     prev: list[Any] | None = None
     if not live:
         try:
-            fixture = _build_fixture(case)
-            prev = _install_fixture(fixture)
+            prev = install_fixture(build_fixture(case.fixture))
         except Exception as exc:
             return CaseResult(
                 case_id=case.id,
@@ -378,12 +351,7 @@ def run_case(case: Case, *, live: bool = False, base_url: str = "http://localhos
         )
     finally:
         if prev is not None:
-            _restore(prev)
-        if fixture is not None and fixture.teardown is not None:
-            try:
-                fixture.teardown()
-            except Exception:
-                pass
+            restore_contexts(prev)
 
 
 # ---------------------------------------------------------------------------

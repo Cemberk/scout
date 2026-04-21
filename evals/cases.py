@@ -31,11 +31,7 @@ class Case:
     expected_tools: tuple[str, ...] = ()
     forbidden_tools: tuple[str, ...] = ()
 
-    requires: tuple[str, ...] = ()
-    requires_not: tuple[str, ...] = ()
-    live_skip: str = ""
-
-    # "default" = one stub web context; "none" = empty
+    # "default" = one stub web context; "none" = empty; "real" = env-built
     fixture: str = "default"
 
     max_duration_s: int = 120

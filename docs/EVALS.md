@@ -8,7 +8,7 @@ Three tiers, one registry:
 | **Behavioral** (cases) | `python -m evals` | Leader routes wrong / agents over-tool / responses miss expected substrings / forbidden tools fire | Yes | No (default); `--live` for SSE |
 | **Judges** (LLM-scored quality) | `python -m evals judges` | Grounded-answer quality, citation discipline, capabilities clarity | Yes | Only for `fixture="real"` cases that need live web |
 
-`scripts/validate.sh` runs the wiring tier on every invocation. Judges and behavioral stay out of validate because they hit the model.
+`scripts/validate.sh` runs `ruff` + `mypy` only. Wiring / behavioral / judges are all direct `python -m evals ...` invocations; the LLM-hitting tiers aren't wired into pre-commit.
 
 ## 1. Wiring — no LLM, no network
 
@@ -24,7 +24,6 @@ Each invariant is a function that returns `None` on PASS and raises `AssertionEr
 
 ```bash
 python -m evals wiring          # exits 0 on PASS, non-zero on FAIL
-./scripts/validate.sh           # runs wiring as its final step
 ```
 
 ## 2. Behavioral — cases, two transports
@@ -37,7 +36,6 @@ One flat `CASES` tuple. Fields:
 - `expected_agent` — `None` means Leader answers directly; else the id must appear in the delegated member list
 - `response_contains` / `response_forbids` / `response_matches` (regex) — deterministic assertions
 - `expected_tools` / `forbidden_tools` — substring match against tool names across leader + every delegated specialist
-- `requires` / `requires_not` — env gating (SKIP, not FAIL)
 - `fixture` — `"default"` (one stub web context), `"none"` (empty), or `"real"` (env-built contexts; hits actual providers)
 - `max_duration_s`, `target_file`
 
