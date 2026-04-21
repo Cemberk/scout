@@ -65,8 +65,5 @@ tmp
 # Scout local state — Docker uses named volumes
 .scout/
 
-# Live-eval run artifacts (regenerated every run)
-evals/results/
-
 # Optional: local PyPI creds (uncomment if you ever create it)
 # .pypirc

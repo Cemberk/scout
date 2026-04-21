@@ -4,28 +4,19 @@ One case, two transports: in-process ``team.run()`` by default, or
 ``POST /teams/scout/runs`` SSE when ``live=True``. Assertion model is
 identical — transport only changes how content + tools + delegations
 are captured.
-
-On FAIL, a self-contained Markdown diagnostic lands at
-``evals/results/<case_id>.md`` in the shape ``scripts/eval_loop.sh``
-hands to ``claude -p``.
 """
 
 from __future__ import annotations
 
 import json
 import re
-import subprocess
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Iterator, Literal
 
-from evals.cases import REPO_ROOT, Case
+from evals.cases import Case
 
 Status = Literal["PASS", "FAIL", "SKIPPED", "ERROR"]
-
-RESULTS_DIR = REPO_ROOT / "evals" / "results"
-DOCKER_SERVICE = "scout-api"
 
 
 @dataclass
@@ -354,84 +345,3 @@ def _error(case_id: str, transport: str, msg: str) -> CaseResult:
         transport=transport,
         failures=[msg],
     )
-
-
-# ---------------------------------------------------------------------------
-# Diagnostic
-# ---------------------------------------------------------------------------
-
-
-def write_diagnostic(case: Case, result: CaseResult) -> Path:
-    """Write a Markdown diagnostic for a FAIL and return the path."""
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = RESULTS_DIR / f"{case.id}.md"
-    path.write_text(_build_diagnostic(case, result))
-    return path
-
-
-def _build_diagnostic(case: Case, result: CaseResult) -> str:
-    try:
-        target = case.target_file.read_text()
-    except OSError as exc:
-        target = f"(could not read {case.target_file}: {exc})"
-
-    rel_target = case.target_file.relative_to(REPO_ROOT)
-    prompt_preview = case.prompt[:400] + ("…" if len(case.prompt) > 400 else "")
-    failures_block = "\n".join(f"- {f}" for f in (result.failures or ["(none)"]))
-
-    docker_block = ""
-    if result.transport == "live":
-        docker_block = f"\n## Docker logs (last 200 lines)\n\n```\n{_capture_logs()}\n```\n"
-
-    return f"""# Eval failure: {case.id}
-
-**Status** {result.status} — duration {result.duration_s:.1f}s (budget {case.max_duration_s}s) — transport: {result.transport}
-
-## Case
-- prompt: `{prompt_preview}`
-- expected_agent: `{case.expected_agent}`
-- response_contains: `{list(case.response_contains)}`
-- response_forbids: `{list(case.response_forbids)}`
-- response_matches: `{list(case.response_matches)}`
-- expected_tools: `{list(case.expected_tools)}`
-- forbidden_tools: `{list(case.forbidden_tools)}`
-- fixture: `{case.fixture}`
-- target_file: `{rel_target}`
-
-## Failures
-{failures_block}
-
-## What happened
-- delegated: `{result.delegated}`
-- tools: `{result.tool_names}`
-- errors: `{result.errors}`
-
-### Final content
-```
-{result.response or "(empty)"}
-```
-{docker_block}
-## Current target file: `{rel_target}`
-```python
-{target}
-```
-
-## Instruction
-Diagnose why this failed. Edit only `{rel_target}`. Do not run commands — the harness re-runs the case.
-"""
-
-
-def _capture_logs() -> str:
-    try:
-        r = subprocess.run(
-            ["docker", "compose", "logs", "--no-color", "--tail", "200", DOCKER_SERVICE],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except FileNotFoundError:
-        return "(docker compose not installed)"
-    except subprocess.TimeoutExpired:
-        return "(docker compose logs timed out)"
-    return ((r.stdout or "") + (r.stderr or "")).strip() or "(no logs captured)"

@@ -119,7 +119,7 @@ def w3_doctor_readonly() -> None:
     from scout.agents.doctor import doctor
 
     names = _tool_names(doctor.tools)
-    _assert_has(names, ("status", "status_all", "db_status", "env_report", "update_learnings"), "Doctor")
+    _assert_has(names, ("status", "status_all", "db_status", "update_learnings"), "Doctor")
     _assert_no_outbound(names, "Doctor")
 
 

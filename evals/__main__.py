@@ -14,8 +14,6 @@ Exit 0 if all PASS or SKIP, non-zero if any FAIL or ERROR.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import typer
 from rich.console import Console
 
@@ -47,16 +45,15 @@ def behavioral(
     if ctx.invoked_subcommand is not None:
         return
 
-    from evals.cases import CASES, REPO_ROOT, get
-    from evals.runner import CaseResult, run_case, write_diagnostic
+    from evals.cases import CASES, get
+    from evals.runner import CaseResult, run_case
 
     cases = [get(case)] if case else list(CASES)
     results: list[CaseResult] = []
     for i, c in enumerate(cases, 1):
         console.print(f"\n[bold][{i}/{len(cases)}][/bold] {c.id}  [dim]{c.prompt[:60]!r}[/dim]")
         r = run_case(c, live=live, base_url=base_url)
-        diag = write_diagnostic(c, r) if r.status == "FAIL" else None
-        _print_case(r, diag, verbose, REPO_ROOT)
+        _print_case(r, verbose)
         results.append(r)
 
     _print_summary(results)
@@ -121,18 +118,12 @@ def judges(
 # ---------------------------------------------------------------------------
 
 
-def _print_case(r, diag: Path | None, verbose: bool, repo_root: Path) -> None:
+def _print_case(r, verbose: bool) -> None:
     console.print(f"[{_tag(r.status)}] {r.case_id:<40} ({r.duration_s:.1f}s) [dim]{r.transport}[/dim]")
     if r.skipped_reason:
         console.print(f"            [yellow]{r.skipped_reason}[/yellow]")
     for f in r.failures:
         console.print(f"            [red]- {f}[/red]")
-    if diag is not None:
-        try:
-            rel = diag.relative_to(repo_root)
-        except ValueError:
-            rel = diag
-        console.print(f"            [dim]→ {rel}[/dim]")
     if verbose and r.response:
         preview = r.response.replace("\n", " ")[:200]
         console.print(f"            [dim]response:[/dim] {preview}")

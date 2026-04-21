@@ -50,7 +50,7 @@ python -m evals --verbose             # response + tool previews
 
 Live mode uses whatever `PARALLEL_API_KEY` the container has set. The in-process path installs the fixture via `scout.contexts.set_runtime(contexts)` and refreshes Explorer's tools around each case.
 
-On FAIL, a per-case diagnostic is written to [`evals/results/<case_id>.md`](../evals/results/). `scripts/eval_loop.sh` feeds that file to `claude -p` without re-running the case.
+On FAIL, the failure reasons are printed inline. Pipe through `less` or re-run with `--case <id> --verbose` to drill in.
 
 ## 3. Judges — LLM-scored quality
 
@@ -79,7 +79,7 @@ python -m evals judges --case <id>    # one case
 python -m evals judges --verbose      # responses + judge reason on FAIL
 ```
 
-Judges that use `fixture="real"` hit live providers — they require the same env (`OPENAI_API_KEY`, optionally `PARALLEL_API_KEY` / `EXA_API_KEY`) as running the app. They are not invoked by `scripts/validate.sh`.
+Judges that use `fixture="real"` hit live providers — they require the same env (`OPENAI_API_KEY`, optionally `PARALLEL_API_KEY` / `EXA_API_KEY`) as running the app.
 
 ## Shell env — load `.env` or nothing works
 
@@ -91,11 +91,6 @@ Anything that hits OpenAI directly from the host needs `.env` loaded:
 
 Docker picks up `.env` automatically via `docker compose`.
 
-## Autonomous fix loop
+## Fixing a failing case
 
-```bash
-./scripts/eval_loop.sh <case_id>
-# env: MAX_ATTEMPTS=5  BASE_URL=http://localhost:8000
-```
-
-Each attempt runs the case, and on FAIL hands the diagnostic to `claude -p` with a restricted toolset. After the edit it commits an `eval_loop: <case> attempt <n>` checkpoint, restarts `scout-api`, and loops until PASS or `MAX_ATTEMPTS`.
+Paste [`tmp/eval_and_improve.md`](../tmp/eval_and_improve.md) into a fresh Claude Code session. It runs the suite, reads failures, fixes what's in scope (assertions, prompts, params), and flags what isn't.
