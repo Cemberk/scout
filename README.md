@@ -52,15 +52,19 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | `agent` | Wraps the provider behind a sub-agent; one `query_<id>` tool. |
 | `tools` | Exposes the underlying tools directly. |
 
-### Ships today — `WebContextProvider`
+### Ships today
 
-Three backends, first-match selection:
+| Provider | Env trigger | What it exposes |
+|---|---|---|
+| **`WebContextProvider`** | always on — picks a backend based on keys below | `web_search` / `web_extract` |
+| **`FilesystemContextProvider`** | `SCOUT_FS_ROOT` | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` under the root |
+| **`MCPContextProvider`** | `SCOUT_MCP_CONFIG` (YAML) | one provider per entry — wraps any MCP server as tools. Setup: [`docs/MCP.md`](docs/MCP.md). |
+
+**Web backends**, first-match selection:
 
 - **`ParallelBackend`** — premium research + extraction. Activates when `PARALLEL_API_KEY` is set.
 - **`ExaBackend`** — Exa SDK path (search + contents). Activates when `EXA_API_KEY` is set.
 - **`ExaMCPBackend`** — keyless web research via Exa's public MCP server. Default when neither key is set.
-
-Web's default mode is `tools` — the calling agent gets `web_search` / `web_extract` (or the Exa-named equivalents) directly.
 
 ### Add your own
 
@@ -116,6 +120,8 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK path). Ignored if `PARALLEL_API_KEY` is set. |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Required (with `SLACK_SIGNING_SECRET`) to run in Slack. |
 | `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
+| `SCOUT_FS_ROOT` | No | Path to expose as a read-only filesystem context. |
+| `SCOUT_MCP_CONFIG` | No | YAML file registering one or more MCP servers. See [`docs/MCP.md`](docs/MCP.md). |
 | `DB_*` | No | Postgres (compose defaults work) |
 
 Full list in [`example.env`](example.env).

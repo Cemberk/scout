@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a three-role team coordinated by a Leader, built on the `ContextProvider` base class. This release is a **web-only thin slice**: the only shipping context is `WebContextProvider`. Filesystem / GitHub / Slack / Gmail / Drive / wiki land in subsequent milestones.
+Scout is an **enterprise context agent** — a three-role team coordinated by a Leader, built on the `ContextProvider` base class. Ships with `WebContextProvider`, `FilesystemContextProvider`, and `MCPContextProvider`. Slack / GitHub / Gmail / Drive land in upcoming PRs.
 
 ## Architecture
 
@@ -72,6 +72,12 @@ scout/
     ├── backend.py                  # ContextBackend ABC
     ├── mode.py                     # ContextMode enum
     ├── provider.py                 # ContextProvider ABC + Status/Document/Answer
+    ├── fs/
+    │   ├── __init__.py
+    │   └── provider.py             # FilesystemContextProvider (read-only FileTools)
+    ├── mcp/
+    │   ├── __init__.py
+    │   └── provider.py             # MCPContextProvider (one per MCP server)
     └── web/
         ├── __init__.py
         ├── provider.py             # WebContextProvider
@@ -147,9 +153,17 @@ Flags: `--case <id>` narrows to one case; `--verbose` prints response + tool pre
 
 ## Contexts
 
-`scout/contexts.py::build_contexts()` is the env-driven factory. The app lifespan calls it at startup to warm a module-level cache; `get_contexts()` lazy-builds on first access. `update_contexts()` swaps the cached list in place (used by eval fixtures). The web provider is on by default.
+`scout/contexts.py::build_contexts()` is the env-driven factory. The app lifespan calls it at startup to warm a module-level cache; `get_contexts()` lazy-builds on first access. `update_contexts()` swaps the cached list in place (used by eval fixtures). The web provider is always on; others opt-in via env.
 
-Backend selection (first match wins):
+Registered provider set (in order):
+
+| Provider | Trigger | Notes |
+|---|---|---|
+| `WebContextProvider` | always | Backend picked below |
+| `FilesystemContextProvider` | `SCOUT_FS_ROOT` | Read-only; `FileTools` scoped to the root |
+| `MCPContextProvider` | `SCOUT_MCP_CONFIG` (YAML) | One provider per YAML entry. Schema: [`docs/MCP.md`](docs/MCP.md) |
+
+Web backend selection (first match wins):
 
 | Trigger | Backend |
 |---|---|
@@ -202,6 +216,8 @@ Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.mode
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK). Ignored if `PARALLEL_API_KEY` is set. |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` to enable Slack interface. |
 | `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
+| `SCOUT_FS_ROOT` | No | Root directory exposed as a read-only filesystem context. |
+| `SCOUT_MCP_CONFIG` | No | YAML file registering MCP servers as providers (schema: [`docs/MCP.md`](docs/MCP.md)). |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
 
@@ -226,6 +242,8 @@ from scout.team import scout
 from scout.settings import agent_db
 from scout.contexts import build_contexts, get_contexts, update_contexts, list_contexts, status_row, astatus_row
 from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
+from scout.context.fs import FilesystemContextProvider
+from scout.context.mcp import MCPContextProvider
 from scout.context.web import WebContextProvider
 from scout.context.web.parallel import ParallelBackend
 from scout.context.web.exa import ExaBackend

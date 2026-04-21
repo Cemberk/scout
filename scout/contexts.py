@@ -10,9 +10,13 @@ from __future__ import annotations
 import json
 import logging
 from os import getenv
+from pathlib import Path
 
+import yaml
 from agno.tools import tool
 
+from scout.context.fs import FilesystemContextProvider
+from scout.context.mcp import MCPContextProvider
 from scout.context.provider import ContextProvider
 from scout.context.web.exa import ExaBackend
 from scout.context.web.exa_mcp import ExaMCPBackend
@@ -33,8 +37,13 @@ contexts: list[ContextProvider] = []
 
 def build_contexts() -> list[ContextProvider]:
     """Build the registered contexts from env and cache them for the process."""
-    contexts[:] = [_build_web()]
-    log.info("context: web")
+    new_contexts: list[ContextProvider] = [_build_web()]
+    fs = _build_filesystem()
+    if fs is not None:
+        new_contexts.append(fs)
+    new_contexts.extend(_build_mcp_servers())
+    contexts[:] = new_contexts
+    log.info("contexts: %s", [c.id for c in new_contexts])
     return list(contexts)
 
 
@@ -57,6 +66,43 @@ def _build_web() -> WebContextProvider:
     if getenv("EXA_API_KEY"):
         return WebContextProvider(backend=ExaBackend(), model=model)
     return WebContextProvider(backend=ExaMCPBackend(), model=model)
+
+
+def _build_filesystem() -> FilesystemContextProvider | None:
+    root = getenv("SCOUT_FS_ROOT")
+    if not root:
+        return None
+    return FilesystemContextProvider(root=root, model=default_model())
+
+
+_MCP_ENTRY_FIELDS = {"id", "name", "command", "url", "transport", "env"}
+
+
+def _build_mcp_servers() -> list[MCPContextProvider]:
+    path = getenv("SCOUT_MCP_CONFIG")
+    if not path:
+        return []
+    try:
+        entries = yaml.safe_load(Path(path).read_text()) or []
+    except Exception as exc:
+        log.warning("MCP config at %s unreadable: %s", path, exc)
+        return []
+    if not isinstance(entries, list):
+        log.warning("MCP config at %s: expected a YAML list at top level", path)
+        return []
+
+    providers: list[MCPContextProvider] = []
+    model = default_model()
+    for entry in entries:
+        if not isinstance(entry, dict) or "id" not in entry:
+            log.warning("MCP entry missing `id` (or not a mapping): %s", entry)
+            continue
+        kwargs = {k: v for k, v in entry.items() if k in _MCP_ENTRY_FIELDS}
+        try:
+            providers.append(MCPContextProvider(model=model, **kwargs))
+        except Exception as exc:
+            log.warning("MCP entry %s failed to build: %s", entry.get("id"), exc)
+    return providers
 
 
 def status_row(ctx: ContextProvider) -> dict:
