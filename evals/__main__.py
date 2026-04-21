@@ -1,8 +1,7 @@
 """Scout evals CLI.
 
-    python -m evals                        # behavioral, in-process, all cases
+    python -m evals                        # behavioral cases
     python -m evals --case <id>            # single case
-    python -m evals --live                 # same cases via SSE
     python -m evals --verbose              # show responses + tool previews
 
     python -m evals wiring                 # structural invariants (no LLM)
@@ -37,8 +36,6 @@ def _tag(status: str) -> str:
 def behavioral(
     ctx: typer.Context,
     case: str | None = typer.Option(None, "--case", help="Run only this case id"),
-    live: bool = typer.Option(False, "--live", help="Run via SSE against a running scout-api"),
-    base_url: str = typer.Option("http://localhost:8000", "--base-url"),
     verbose: bool = typer.Option(False, "--verbose", help="Show response + tool previews"),
 ) -> None:
     """Behavioral cases (default when no subcommand given)."""
@@ -52,7 +49,7 @@ def behavioral(
     results: list[CaseResult] = []
     for i, c in enumerate(cases, 1):
         console.print(f"\n[bold][{i}/{len(cases)}][/bold] {c.id}  [dim]{c.prompt[:60]!r}[/dim]")
-        r = run_case(c, live=live, base_url=base_url)
+        r = run_case(c)
         _print_case(r, verbose)
         results.append(r)
 
@@ -119,9 +116,7 @@ def judges(
 
 
 def _print_case(r, verbose: bool) -> None:
-    console.print(f"[{_tag(r.status)}] {r.case_id:<40} ({r.duration_s:.1f}s) [dim]{r.transport}[/dim]")
-    if r.skipped_reason:
-        console.print(f"            [yellow]{r.skipped_reason}[/yellow]")
+    console.print(f"[{_tag(r.status)}] {r.case_id:<40} ({r.duration_s:.1f}s)")
     for f in r.failures:
         console.print(f"            [red]- {f}[/red]")
     if verbose and r.response:
