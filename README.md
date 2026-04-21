@@ -1,10 +1,10 @@
 # Scout
 
-Scout is a context agent — an agent that explores information sources and assembles context on demand.
-
-Unlike retrieval pipelines that fetch chunks from a pre-built index, a Context Agent explores live sources the same way a human would.
+Scout is a **context agent** — an agent that explores information sources and assembles context on demand. It follows the "navigation over search" pattern that makes coding agents so effective: instead of fetching chunks from a pre-built index, Scout queries live sources the way a human would.
 
 Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
+
+Scout is built around a small `ContextProvider` abstraction — any source (the web, a filesystem, Slack, Drive, a database, an inbox) is just a subclass. **This release ships `WebContextProvider`.** Filesystem, GitHub, Slack, Gmail, and Drive providers are next.
 
 ## Quick start
 
@@ -26,11 +26,15 @@ Scout is now running at `http://localhost:8000`.
 
 ## How it works
 
-Scout is a three-role team:
+Scout is a three-role team coordinated by a Leader:
 
 - **Leader** — pure router. Routes intent to the right specialist; never holds tools itself.
 - **Explorer** — read-only question answering via the registered contexts + read-only SQL on `scout_*` tables.
 - **Engineer** — owns SQL writes into the `scout` schema (DDL + DML).
+
+> *"Find the latest benchmark numbers for model X."* → Leader routes to **Explorer** → Explorer calls `web_search`, cites sources.
+>
+> *"Save that as a note."* → Leader routes to **Engineer** → Engineer `INSERT`s into `scout.scout_notes`.
 
 ## Contexts
 
@@ -42,7 +46,9 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | `agent` | Wraps the provider behind a sub-agent; one `query_<id>` tool. |
 | `tools` | Exposes the underlying tools directly. |
 
-This release ships **`WebContextProvider`** with three backends (first-match selection):
+### Ships today — `WebContextProvider`
+
+Three backends, first-match selection:
 
 - **`ParallelBackend`** — premium research + extraction. Activates when `PARALLEL_API_KEY` is set.
 - **`ExaBackend`** — Exa SDK path (search + contents). Activates when `EXA_API_KEY` is set.
@@ -50,15 +56,31 @@ This release ships **`WebContextProvider`** with three backends (first-match sel
 
 Web's default mode is `tools` — the calling agent gets `web_search` / `web_extract` (or the Exa-named equivalents) directly.
 
-## Engineer's tables
+### Add your own
 
-Shipped in the `scout` schema, created on first startup:
+Subclass `ContextProvider`, implement four methods, register it in [`scout/contexts.py`](scout/contexts.py):
 
-- `scout_contacts` — `name, emails[], phone, tags[], notes`
-- `scout_projects` — `name, status, tags[]`
-- `scout_notes` — `title, body, tags[], source_url`
+```python
+from scout.context import Answer, ContextProvider, Status
 
-Every table carries `id SERIAL PK`, `user_id TEXT NOT NULL`, `created_at TIMESTAMPTZ`.
+class MyProvider(ContextProvider):
+    def status(self) -> Status: ...
+    async def astatus(self) -> Status: ...
+    def query(self, question: str) -> Answer: ...
+    async def aquery(self, question: str) -> Answer: ...
+```
+
+See [`scout/context/web/provider.py`](scout/context/web/provider.py) for a worked example.
+
+## Storage
+
+Scout writes user data to `scout_*` tables, created on first startup:
+
+- `scout_contacts` — people (`name, emails[], phone, tags[], notes`)
+- `scout_projects` — things in motion (`name, status, tags[]`)
+- `scout_notes` — free-form notes (`title, body, tags[], source_url`)
+
+All tables carry `id SERIAL PK`, `user_id TEXT NOT NULL`, `created_at TIMESTAMPTZ`. Engineer creates new `scout_*` tables on demand when intent doesn't fit an existing one.
 
 ## CLI
 
@@ -66,6 +88,8 @@ Every table carries `id SERIAL PK`, `user_id TEXT NOT NULL`, `created_at TIMESTA
 python -m scout                    # interactive chat
 python -m scout contexts           # list registered contexts + status
 ```
+
+Host-shell invocations need `.env` loaded — `direnv allow .` once, or `set -a; source .env; set +a` per shell.
 
 ## API
 
@@ -101,7 +125,7 @@ See [`docs/EVALS.md`](docs/EVALS.md) for the full picture.
 
 ## Deploy
 
-Railway scripts are included for one-command deployment:
+Any Docker-capable host with a Postgres addon works. Railway scripts are included for one-command deployment:
 
 ```sh
 ./scripts/railway/up.sh        # first-time provisioning (Postgres + app service)
@@ -109,14 +133,8 @@ Railway scripts are included for one-command deployment:
 ./scripts/railway/redeploy.sh  # push a code update
 ```
 
-Prereqs: [Railway CLI](https://docs.railway.app/guides/cli) + `railway login`. Any Docker-capable host with a Postgres addon works equivalently.
-
-## Troubleshooting
-
-- **Port 5432 or 8000 in use.** Edit the host-side port in `compose.yaml`.
-- **A context shows down.** `GET /contexts` or `python -m scout contexts` — the `detail` column names the missing env var.
-- **"Incorrect API key".** `OPENAI_API_KEY` rotated; fix and `docker compose restart scout-api`.
+Prereqs: [Railway CLI](https://docs.railway.app/guides/cli) + `railway login`.
 
 ## Architecture
 
-Implementation notes: [CLAUDE.md](CLAUDE.md). Built on Agno and AgentOS: [docs.agno.com](https://docs.agno.com).
+Built on [Agno](https://github.com/agno-agi/agno) and AgentOS ([docs.agno.com](https://docs.agno.com)). Implementation notes: [CLAUDE.md](CLAUDE.md).
