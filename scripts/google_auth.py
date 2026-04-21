@@ -34,8 +34,9 @@ client_config = {
     }
 }
 
-if not client_config["installed"]["client_id"]:
-    raise SystemExit("GOOGLE_CLIENT_ID not set. Export Google env vars first.")
+missing = [k for k in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_PROJECT_ID") if not getenv(k)]
+if missing:
+    raise SystemExit(f"Missing: {', '.join(missing)}. See docs/GOOGLE_AUTH.md.")
 
 print(f"Requesting scopes: {SCOPES}")
 print("Opening browser for Google consent...")
