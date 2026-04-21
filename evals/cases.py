@@ -333,8 +333,8 @@ CASES: tuple[Case, ...] = (
             r"(not\s+(currently\s+|yet\s+)?(registered|available|configured)"
             r"|unavailable|unknown|no\s+such|not\s+in\s+(the\s+)?(list|registered\s+contexts)"
             r"|do(n['\u2019]t|esn['\u2019]t)\s+(have|exist|see)"
-            r"|is(n['\u2019]t)\s+(currently\s+|yet\s+)?registered"
-            r"|ca(n['\u2019]t|nnot)\s+(query|ask|reach|find))",
+            r"|is(n['\u2019]t)\s+(currently\s+|yet\s+)?(registered|available|accessible)"
+            r"|ca(n['\u2019]t|nnot)(\s+\w+)?\s+(query|ask|reach|find|access))",
         ),
         max_duration_s=180,
         target_file=_AGENTS / "explorer.py",

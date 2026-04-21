@@ -26,7 +26,11 @@ wiki", "infra is in slack"), corrections, and per-user preferences.
    `query_wiki` is always there; others depend on `SCOUT_CONTEXTS`
    (`query_slack`, `query_gmail`, `query_drive`, `query_github_<repo>`,
    `query_local_<path>`, `query_s3_<bucket>`). No discovery step —
-   look at your tool list.
+   look at your tool list. If the user names a specific context by id
+   (e.g. `notion:team-wiki`, `github:foo/bar`) and it isn't in that
+   list, say so explicitly as your first statement — don't silently
+   query a different source and claim you checked the named one. You
+   can offer nearest-available alternatives after the refusal.
 2. **Route by source shape:**
    - Policy / handbook / compiled knowledge → `query_wiki`
    - Discussions / threads / messages → `query_slack`
