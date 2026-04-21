@@ -23,26 +23,6 @@ class QueryRequest(BaseModel):
     limit: int = 10
 
 
-def _target(target_id: str):
-    for ctx in get_contexts():
-        if ctx.id == target_id:
-            return ctx
-    return None
-
-
-def _status_row(target) -> dict:
-    try:
-        s = target.status()
-        return {"id": target.id, "name": target.name, "ok": s.ok, "detail": s.detail}
-    except Exception as exc:
-        return {
-            "id": target.id,
-            "name": target.name,
-            "ok": False,
-            "detail": f"{type(exc).__name__}: {exc}",
-        }
-
-
 def create_router(settings: AgnoAPISettings) -> APIRouter:
     router = APIRouter(
         dependencies=[Depends(get_authentication_dependency(settings))],
@@ -71,3 +51,23 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         }
 
     return router
+
+
+def _target(target_id: str):
+    for ctx in get_contexts():
+        if ctx.id == target_id:
+            return ctx
+    return None
+
+
+def _status_row(target) -> dict:
+    try:
+        s = target.status()
+        return {"id": target.id, "name": target.name, "ok": s.ok, "detail": s.detail}
+    except Exception as exc:
+        return {
+            "id": target.id,
+            "name": target.name,
+            "ok": False,
+            "detail": f"{type(exc).__name__}: {exc}",
+        }

@@ -19,6 +19,7 @@ Two engines, both cached on first use:
 """
 
 import re
+from functools import lru_cache
 
 from agno.db.postgres import PostgresDb
 from agno.knowledge import Knowledge
@@ -35,16 +36,13 @@ DB_ID = "scout-db"
 # schema; we never write there from agent code.
 SCOUT_SCHEMA = "scout"
 
-# Cached engines — one per access pattern, created on first use.
-_scout_engine: Engine | None = None
-_readonly_engine: Engine | None = None
-
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 
+@lru_cache(maxsize=1)
 def get_sql_engine() -> Engine:
     """SQLAlchemy engine scoped to the ``scout`` schema (cached).
 
@@ -52,23 +50,21 @@ def get_sql_engine() -> Engine:
     ``search_path=scout,public`` and a write-guard hook that blocks writes
     against ``public`` or ``ai``.
     """
-    global _scout_engine
-    if _scout_engine is not None:
-        return _scout_engine
     bootstrap = create_engine(db_url)
     with bootstrap.begin() as conn:
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCOUT_SCHEMA}"))
     bootstrap.dispose()
-    _scout_engine = create_engine(
+    engine = create_engine(
         db_url,
         connect_args={"options": f"-c search_path={SCOUT_SCHEMA},public"},
         pool_size=10,
         max_overflow=20,
     )
-    event.listen(_scout_engine, "before_cursor_execute", _guard_non_scout_writes)
-    return _scout_engine
+    event.listen(engine, "before_cursor_execute", _guard_non_scout_writes)
+    return engine
 
 
+@lru_cache(maxsize=1)
 def get_readonly_engine() -> Engine:
     """SQLAlchemy engine with read-only transactions (cached).
 
@@ -82,10 +78,7 @@ def get_readonly_engine() -> Engine:
     behaviour. Without this, Explorer's SQL would fail on anything but
     ``scout.scout_notes``.
     """
-    global _readonly_engine
-    if _readonly_engine is not None:
-        return _readonly_engine
-    _readonly_engine = create_engine(
+    return create_engine(
         db_url,
         connect_args={
             "options": f"-c default_transaction_read_only=on -c search_path={SCOUT_SCHEMA},public",
@@ -93,7 +86,6 @@ def get_readonly_engine() -> Engine:
         pool_size=10,
         max_overflow=20,
     )
-    return _readonly_engine
 
 
 def get_postgres_db(contents_table: str | None = None) -> PostgresDb:
@@ -135,15 +127,11 @@ def create_knowledge(name: str, table_name: str) -> Knowledge:
 # ---------------------------------------------------------------------------
 # Write guard for the scout engine
 # ---------------------------------------------------------------------------
-# Belt-and-suspenders on top of ``search_path=scout,public``. The regex below
-# fires SQLAlchemy's ``before_cursor_execute`` hook if a statement explicitly
-# names ``public.*`` or ``ai.*`` as a write target. Reads against those
-# schemas are allowed — Engineer's ``introspect_schema`` needs them.
-#
-# Scope: catches the shapes agents actually produce. Does NOT catch
-# ``CREATE SCHEMA``, ``COPY … FROM``, ``GRANT/REVOKE``, function side-effects,
-# or anonymous ``DO`` blocks — the DB-level grants + search_path are the
-# primary defense; this is the loud failure mode for the common case.
+# Catches explicit writes to public.* / ai.* (the shapes agents actually
+# produce). Reads are allowed — Engineer's introspect_schema needs them.
+# Not comprehensive: misses CREATE SCHEMA, COPY … FROM, GRANT/REVOKE, DO
+# blocks, function side-effects. DB-level grants + search_path are the
+# primary defense.
 
 
 _NON_SCOUT_WRITE_RE = re.compile(

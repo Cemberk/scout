@@ -2,7 +2,7 @@
 Scout Settings
 ==============
 
-DB-dependent runtime objects shared across agents.
+Environment and runtime objects shared across agents.
 """
 
 from db import create_knowledge, get_postgres_db
