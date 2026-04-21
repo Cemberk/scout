@@ -75,10 +75,10 @@ def build_contexts() -> list[ContextProvider]:
 def _log_contexts(ctxs: list[ContextProvider]) -> None:
     """Log the resolved context set with each provider's status detail."""
     if not ctxs:
-        log_info("contexts: (none)")
+        log_info("Context Providers: (none)")
         return
     width = max(len(c.id) for c in ctxs)
-    lines = ["contexts:"]
+    lines = ["Context Providers:"]
     for c in ctxs:
         try:
             detail = c.status().detail
