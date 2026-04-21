@@ -242,9 +242,7 @@ class WikiContextProvider(ContextProvider):
             except Exception as exc:
                 log.exception("ingest_url failed for %s", url)
                 return json.dumps({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
-            return json.dumps(
-                {"status": "ingested", "entry_id": entry.id, "name": entry.name, "path": entry.path}
-            )
+            return json.dumps({"status": "ingested", "entry_id": entry.id, "name": entry.name, "path": entry.path})
 
         return _ingest_url
 
@@ -270,9 +268,7 @@ class WikiContextProvider(ContextProvider):
             except Exception as exc:
                 log.exception("ingest_text failed")
                 return json.dumps({"status": "error", "detail": f"{type(exc).__name__}: {exc}"})
-            return json.dumps(
-                {"status": "ingested", "entry_id": entry.id, "name": entry.name, "path": entry.path}
-            )
+            return json.dumps({"status": "ingested", "entry_id": entry.id, "name": entry.name, "path": entry.path})
 
         return _ingest_text
 
