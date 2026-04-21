@@ -33,39 +33,30 @@ class CaseResult:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class Fixture:
-    """A list of contexts to install into the runtime registry."""
-
-    contexts: list[Any]
-
-
-def build_fixture(name: str) -> Fixture:
-    """Build a fixture by name: ``default`` | ``real``."""
+def build_fixture(name: str) -> list[Any]:
+    """Build contexts for a fixture by name: ``default`` | ``real``."""
     if name == "default":
-        return Fixture(
-            contexts=[
-                _stub_context(
-                    "web",
-                    "Web (stub)",
-                    "Stub web answer for eval purposes. Cited: https://example.com/stub",
-                ),
-            ]
-        )
+        return [
+            _stub_context(
+                "web",
+                "Web (stub)",
+                "Stub web answer for eval purposes. Cited: https://example.com/stub",
+            ),
+        ]
     if name == "real":
         from scout.contexts import build_contexts
 
-        return Fixture(contexts=build_contexts())
+        return build_contexts()
 
     raise ValueError(f"unknown fixture {name!r}")
 
 
-def install_fixture(fixture: Fixture) -> list[Any]:
-    """Install the fixture; return the prior contexts so the caller can restore."""
+def install_fixture(contexts: list[Any]) -> list[Any]:
+    """Install contexts; return the prior list so the caller can restore."""
     from scout.contexts import get_contexts, publish_contexts
 
     prev = get_contexts()
-    publish_contexts(fixture.contexts)
+    publish_contexts(contexts)
     return prev
 
 
