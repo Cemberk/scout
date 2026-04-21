@@ -38,15 +38,6 @@ def build_contexts() -> list[ContextProvider]:
     return list(contexts)
 
 
-def _build_web() -> WebContextProvider:
-    model = default_model()
-    if getenv("PARALLEL_API_KEY"):
-        return WebContextProvider(backend=ParallelBackend(), model=model)
-    if getenv("EXA_API_KEY"):
-        return WebContextProvider(backend=ExaBackend(), model=model)
-    return WebContextProvider(backend=ExaMCPBackend(), model=model)
-
-
 def get_contexts() -> list[ContextProvider]:
     """Return the cached context list, building on first access."""
     if not contexts:
@@ -57,6 +48,15 @@ def get_contexts() -> list[ContextProvider]:
 def update_contexts(new_contexts: list[ContextProvider]) -> None:
     """Swap the cached context list in place. Used by eval fixtures."""
     contexts[:] = new_contexts
+
+
+def _build_web() -> WebContextProvider:
+    model = default_model()
+    if getenv("PARALLEL_API_KEY"):
+        return WebContextProvider(backend=ParallelBackend(), model=model)
+    if getenv("EXA_API_KEY"):
+        return WebContextProvider(backend=ExaBackend(), model=model)
+    return WebContextProvider(backend=ExaMCPBackend(), model=model)
 
 
 def status_row(ctx: ContextProvider) -> dict:
