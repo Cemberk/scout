@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from evals.cases import Case
 
-Status = Literal["PASS", "FAIL", "SKIPPED", "ERROR"]
+Status = Literal["PASS", "FAIL", "ERROR"]
 
 
 @dataclass

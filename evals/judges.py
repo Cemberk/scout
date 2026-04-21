@@ -29,7 +29,6 @@ class Judged:
     scoring: Literal["binary", "numeric"] = "numeric"
     passing_score: float = 7.0
     fixture: str = "default"
-    max_duration_s: int = 240
 
 
 JUDGED: tuple[Judged, ...] = (
@@ -54,7 +53,7 @@ JUDGED_BY_ID: dict[str, Judged] = {j.id: j for j in JUDGED}
 @dataclass
 class JudgedResult:
     id: str
-    status: Literal["PASS", "FAIL", "ERROR", "SKIPPED"]
+    status: Literal["PASS", "FAIL", "ERROR"]
     duration_s: float
     score: float | None = None
     reason: str = ""

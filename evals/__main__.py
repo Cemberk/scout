@@ -8,7 +8,7 @@
     python -m evals judges                 # LLM-scored quality tier
     python -m evals judges --case <id>
 
-Exit 0 if all PASS or SKIP, non-zero if any FAIL or ERROR.
+Exit 0 if all PASS, non-zero if any FAIL or ERROR.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from rich.console import Console
 app = typer.Typer(add_completion=False, no_args_is_help=False, pretty_exceptions_show_locals=False)
 console = Console()
 
-_STATUS_STYLE = {"PASS": "green", "FAIL": "red", "ERROR": "red", "SKIPPED": "yellow"}
+_STATUS_STYLE = {"PASS": "green", "FAIL": "red", "ERROR": "red"}
 
 
 def _tag(status: str) -> str:
@@ -127,13 +127,12 @@ def _print_case(r, verbose: bool) -> None:
 
 
 def _print_summary(results: list) -> None:
-    counts = {s: sum(1 for r in results if r.status == s) for s in ("PASS", "FAIL", "ERROR", "SKIPPED")}
+    counts = {s: sum(1 for r in results if r.status == s) for s in ("PASS", "FAIL", "ERROR")}
     total_s = round(sum(r.duration_s for r in results), 1)
     _print_bar(
         f"[green]{counts['PASS']} passed[/green], "
         f"[red]{counts['FAIL']} failed[/red], "
-        f"[red]{counts['ERROR']} errored[/red], "
-        f"[yellow]{counts['SKIPPED']} skipped[/yellow]  [dim]({total_s}s)[/dim]"
+        f"[red]{counts['ERROR']} errored[/red]  [dim]({total_s}s)[/dim]"
     )
 
 
