@@ -1,6 +1,6 @@
 # Scout Evals
 
-Three tiers, one registry:
+Scout comes with three tiers of evaluations:
 
 | Tier | Entry point | What it catches | Needs LLM? |
 |---|---|---|---|
@@ -9,6 +9,8 @@ Three tiers, one registry:
 | **Judges** (LLM-scored quality) | `python -m evals judges` | Answer quality, routing clarity, anything a regex can't express | Yes |
 
 `scripts/validate.sh` runs `ruff` + `mypy` only. Wiring / behavioral / judges are direct `python -m evals ...` invocations; the LLM-hitting tiers aren't wired into pre-commit.
+
+> **PostgreSQL must be running for every tier, including wiring.** The Engineer agent builds `SQLTools(db_engine=get_sql_engine(), …)` at module import, and `get_sql_engine()` opens a connection + bootstraps the `scout` schema on first call. Start the DB container (`docker compose up -d scout-db`) before running any eval tier.
 
 ## 1. Wiring — no LLM, no network
 
@@ -38,6 +40,19 @@ One flat `CASES` tuple. Fields:
 - `fixture` — `"default"` (one stub web context) or `"real"` (env-built contexts; hits actual providers)
 - `max_duration_s`
 
+Example (from [`evals/cases.py`](../evals/cases.py)):
+
+```python
+Case(
+    id="leader_greeting",
+    prompt="hey",
+    expected_agent=None,
+    response_contains=("scout",),
+    forbidden_tools=("query_",),
+    max_duration_s=45,
+)
+```
+
 ```bash
 python -m evals                       # in-process team.run()
 python -m evals --case <id>           # single case
@@ -65,16 +80,12 @@ python -m evals judges --case <id>    # one case
 python -m evals judges --verbose      # responses + judge reason on FAIL
 ```
 
-## Shell env — load `.env` or nothing works
+## Shell env
 
-Anything that hits OpenAI directly from the host needs `.env` loaded:
-
-1. `direnv allow .` — best
-2. `set -a; source .env; set +a; python -m evals` — one-shot
-3. `set -a && source .env && set +a && python -m evals ...` — per-invocation
-
-Docker picks up `.env` automatically via `docker compose`.
+The LLM tiers hit OpenAI/Parallel/Exa from the host, so `.env` must be loaded. See [CLAUDE.md — Environment loading](../CLAUDE.md#environment-loading-for-cli-work). Docker picks up `.env` automatically via `docker compose`.
 
 ## Fixing a failing case
 
-Paste [`docs/EVAL_AND_IMPROVE.md`](EVAL_AND_IMPROVE.md) into a fresh Claude Code session. It runs the suite, reads failures, fixes what's in scope (assertions, prompts, params), and flags what isn't.
+Paste [`docs/EVAL_AND_IMPROVE.md`](EVAL_AND_IMPROVE.md) into a fresh Claude Code session. It runs the suite, diagnoses each failure, fixes what's in scope (assertions, prompts, params), and flags what isn't.
+
+Blockers that need human judgment get appended to `tmp/flagged.md` (gitignored) as `## <case_id>` + symptom + why it's out-of-scope. That's the handoff surface — read it when you come back.

@@ -51,8 +51,8 @@ scout/
 ├── __init__.py
 ├── __main__.py                     # CLI: chat | contexts
 ├── team.py                         # Leader + two specialists, coordinate mode
-├── settings.py                     # Runtime objects (agent_db)
-├── contexts.py                     # build_contexts() + registry + list_contexts tool + status_row helpers
+├── settings.py                     # Runtime objects: agent_db + default_model() factory
+├── contexts.py                     # build/get/update_contexts + list_contexts tool + status row helpers
 ├── agents/
 │   ├── explorer.py                 # per-provider query_* + list_contexts + read-only SQL
 │   └── engineer.py                 # SQL writes on the scout schema
@@ -119,9 +119,25 @@ Secrets live in `.env`. Anything that hits OpenAI / Parallel / Exa from the host
 
 Docker picks up `.env` automatically via `docker compose`, so code inside `scout-api` has everything. Only direct host-shell invocations need the explicit source.
 
+## Testing & Evals
+
+**Static checks** — `./scripts/validate.sh` runs ruff + mypy. Both run even if one fails; the script exits non-zero if either reports problems, warns if no virtualenv is active.
+
+**Three eval tiers** under `python -m evals`:
+
+| Tier | Command | Speed | LLM? | What it catches |
+|---|---|---|---|---|
+| Wiring | `python -m evals wiring` | <1s | No | Agent tool shape drifts (reader wires a writer, Leader gains tools) |
+| Behavioral | `python -m evals` | ~3min | Yes (gpt-5.4) | Leader routes wrong, agents over-tool, responses miss expected substrings |
+| Judges | `python -m evals judges` | ~1min/case | Yes | Answer quality a regex can't express |
+
+Flags: `--case <id>` narrows to one case; `--verbose` prints response + tool previews. Details: [`docs/EVALS.md`](docs/EVALS.md).
+
+**Fixing a failing case** — paste [`docs/EVAL_AND_IMPROVE.md`](docs/EVAL_AND_IMPROVE.md) into a fresh Claude Code session. It runs the suite, diagnoses each failure (agent bug vs. stale assertion vs. runner bug), fixes what's in scope, and flags what isn't.
+
 ## Contexts
 
-`scout/contexts.py::build_contexts()` is the env-driven factory called once at startup. The web provider is on by default.
+`scout/contexts.py::build_contexts()` is the env-driven factory. The app lifespan calls it at startup to warm a module-level cache; `get_contexts()` lazy-builds on first access. `update_contexts()` swaps the cached list in place (used by eval fixtures). The web provider is on by default.
 
 Backend selection (first match wins):
 
@@ -196,7 +212,7 @@ Every external source subclasses `ContextProvider` (in `scout/context/provider.p
 from db import db_url, get_postgres_db, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
 from scout.team import scout
 from scout.settings import agent_db
-from scout.contexts import build_contexts, get_contexts, list_contexts, status_row, astatus_row
+from scout.contexts import build_contexts, get_contexts, update_contexts, list_contexts, status_row, astatus_row
 from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
 from scout.context.web import WebContextProvider
 from scout.context.web.parallel import ParallelBackend
