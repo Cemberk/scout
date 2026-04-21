@@ -165,7 +165,7 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`, …):
 
 ## Model
 
-Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`. The literal sits at each call site. `WebContextProvider`'s sub-agent takes a `model=` kwarg so the library stays portable to `agno.context` — no hard OpenAI dep inside `scout/context/`.
+Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`, built through the `default_model()` factory in `scout/settings.py` (fresh instance per agent — avoids shared-state footguns). `WebContextProvider`'s sub-agent takes a `model=` kwarg so the library stays portable to `agno.context` — no hard OpenAI dep inside `scout/context/`.
 
 ## Environment Variables
 
