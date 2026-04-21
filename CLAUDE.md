@@ -163,7 +163,7 @@ Registered provider set (in order):
 | Provider | Trigger | Notes |
 |---|---|---|
 | `WebContextProvider` | always | Backend picked below |
-| `FilesystemContextProvider` | `SCOUT_FS_ROOT` | Read-only; `FileTools` scoped to the root |
+| `FilesystemContextProvider` | always | Read-only; `FileTools` scoped to `FS_ROOT` in `scout/contexts.py` (defaults to the scout repo) |
 | `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting). Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md) |
 | `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; service-account auth (optional delegation via `GOOGLE_DELEGATED_USER`). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) |
 
@@ -224,7 +224,6 @@ Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.mode
 | `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to a Google service-account JSON key. Activates the Drive context provider. |
 | `GOOGLE_DELEGATED_USER` | No | Optional — user email to impersonate via domain-wide delegation. |
-| `SCOUT_FS_ROOT` | No | Root directory exposed as a read-only filesystem context. |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
 

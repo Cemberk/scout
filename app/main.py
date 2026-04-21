@@ -51,8 +51,10 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
-    _create_tables()
-    _create_contexts()
+    from db.tables import create_tables
+
+    create_tables()
+    build_contexts()
     yield
 
 
@@ -75,22 +77,6 @@ agent_os = AgentOS(
 
 app = agent_os.get_app()
 app.include_router(create_router(agent_os.settings))
-
-
-# ---------------------------------------------------------------------------
-# Startup helpers
-# ---------------------------------------------------------------------------
-def _create_tables() -> None:
-    from db.tables import create_tables
-
-    create_tables()
-    log.info("Tables: created")
-
-
-def _create_contexts() -> None:
-    """Build the contexts from env and cache them for the process."""
-    contexts = build_contexts()
-    log.info("Contexts: %s", [c.id for c in contexts])
 
 
 if __name__ == "__main__":

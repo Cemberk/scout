@@ -9,6 +9,7 @@ authors = [{ name = "Agno", email = "hello@agno.com" }]
 
 dependencies = [
   "agno[os,slack]",
+  "aiohttp",
   "exa-py",
   "google-api-python-client",
   "google-auth-httplib2",

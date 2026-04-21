@@ -2,7 +2,8 @@
 Scout's Context Registry
 ========================
 
-Env-driven wiring for the contexts available to Scout.
+Wiring for the contexts available to Scout. Web and filesystem are always on;
+Slack and Google Drive light up when their env vars are set.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from os import getenv
+from pathlib import Path
 
 from agno.tools import tool
 
@@ -24,6 +26,10 @@ from scout.context.web.provider import WebContextProvider
 from scout.settings import default_model
 
 log = logging.getLogger(__name__)
+
+# Filesystem context root — the scout repo. Edit this one line to scope
+# Scout to a different directory.
+FS_ROOT = Path(__file__).resolve().parents[1]
 
 
 # ---------------------------------------------------------------------------
@@ -42,12 +48,12 @@ def build_contexts() -> list[ContextProvider]:
     (first one wins) so Explorer never ends up with two `query_<id>` tools
     sharing a name.
     """
-    new_contexts: list[ContextProvider] = [_build_web()]
-    for builder in (_build_filesystem, _build_slack, _build_gdrive):
+    new_contexts: list[ContextProvider] = [_build_web(), _build_filesystem()]
+    for builder in (_build_slack, _build_gdrive):
         try:
             ctx = builder()
         except Exception as exc:
-            log.warning("%s failed: %s", builder.__name__, exc)
+            log.warning(f"{builder.__name__} failed: {exc}")
             continue
         if ctx is not None:
             new_contexts.append(ctx)
@@ -57,17 +63,31 @@ def build_contexts() -> list[ContextProvider]:
     for registered in new_contexts:
         if registered.id in seen:
             log.warning(
-                "context id %r already registered; skipping duplicate (%s)",
-                registered.id,
-                type(registered).__name__,
+                f"context id {registered.id!r} already registered; skipping duplicate ({type(registered).__name__})"
             )
             continue
         seen.add(registered.id)
         deduped.append(registered)
 
     contexts[:] = deduped
-    log.info("contexts: %s", [c.id for c in deduped])
+    _log_contexts(deduped)
     return list(contexts)
+
+
+def _log_contexts(ctxs: list[ContextProvider]) -> None:
+    """Log the resolved context set with each provider's status detail."""
+    if not ctxs:
+        log.info("contexts: (none)")
+        return
+    width = max(len(c.id) for c in ctxs)
+    lines = ["contexts:"]
+    for c in ctxs:
+        try:
+            detail = c.status().detail
+        except Exception as exc:
+            detail = f"<status failed: {type(exc).__name__}>"
+        lines.append(f"  {c.id:<{width}}  {detail}")
+    log.info("\n".join(lines))
 
 
 def get_contexts() -> list[ContextProvider]:
@@ -91,11 +111,8 @@ def _build_web() -> WebContextProvider:
     return WebContextProvider(backend=ExaMCPBackend(), model=model)
 
 
-def _build_filesystem() -> FilesystemContextProvider | None:
-    root = getenv("SCOUT_FS_ROOT")
-    if not root:
-        return None
-    return FilesystemContextProvider(root=root, model=default_model())
+def _build_filesystem() -> FilesystemContextProvider:
+    return FilesystemContextProvider(root=FS_ROOT, model=default_model())
 
 
 def _build_slack() -> SlackContextProvider | None:

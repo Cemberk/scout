@@ -57,7 +57,7 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | Provider | Env trigger | What it exposes |
 |---|---|---|
 | **`WebContextProvider`** | always on — picks a backend based on keys below | `web_search` / `web_extract` |
-| **`FilesystemContextProvider`** | `SCOUT_FS_ROOT` | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` under the root |
+| **`FilesystemContextProvider`** | always on — rooted at the scout repo (see `FS_ROOT` in [`scout/contexts.py`](scout/contexts.py)) | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` |
 | **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md). |
 | **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Service-account auth; share folders with the SA email or set `GOOGLE_DELEGATED_USER`. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md). |
 
@@ -123,7 +123,6 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
 | `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to a Google service-account JSON key. Activates the Drive context provider. |
 | `GOOGLE_DELEGATED_USER` | No | Optional — user email to impersonate via domain-wide delegation. |
-| `SCOUT_FS_ROOT` | No | Path to expose as a read-only filesystem context. |
 | `DB_*` | No | Postgres (compose defaults work) |
 
 Full list in [`example.env`](example.env).
