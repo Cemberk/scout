@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
 from agno.tools import tool
@@ -133,7 +133,7 @@ class ContextProvider(ABC):
                 answer = await provider.aquery(question, limit=limit)
             except Exception as exc:
                 return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
-            payload: dict = {"results": [r.__dict__ for r in answer.results]}
+            payload: dict = {"results": [asdict(r) for r in answer.results]}
             if answer.text is not None:
                 payload["text"] = answer.text
             return json.dumps(payload)
