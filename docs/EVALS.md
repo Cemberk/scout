@@ -77,4 +77,4 @@ Docker picks up `.env` automatically via `docker compose`.
 
 ## Fixing a failing case
 
-Paste [`tmp/eval_and_improve.md`](../tmp/eval_and_improve.md) into a fresh Claude Code session. It runs the suite, reads failures, fixes what's in scope (assertions, prompts, params), and flags what isn't.
+Paste [`docs/EVAL_AND_IMPROVE.md`](EVAL_AND_IMPROVE.md) into a fresh Claude Code session. It runs the suite, reads failures, fixes what's in scope (assertions, prompts, params), and flags what isn't.
