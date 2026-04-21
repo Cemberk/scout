@@ -14,7 +14,7 @@ from db import get_postgres_db
 from scout.agents.doctor import doctor
 from scout.agents.engineer import engineer
 from scout.agents.explorer import explorer
-from scout.contexts import build_contexts, set_runtime
+from scout.contexts import build_contexts, publish_contexts
 from scout.settings import scout_learnings
 from scout.team import scout
 
@@ -31,7 +31,7 @@ scheduler_base_url = getenv("AGENTOS_URL", "http://127.0.0.1:8000")
 @asynccontextmanager
 async def lifespan(app):  # type: ignore[no-untyped-def]
     _create_tables()
-    _wire_contexts()
+    _create_contexts()
     yield
 
 
@@ -69,11 +69,11 @@ def _create_tables() -> None:
         print(f"[scout] Tables: failed: {e}")
 
 
-def _wire_contexts() -> None:
-    """Build the contexts from env and publish via ``set_runtime``."""
+def _create_contexts() -> None:
+    """Build the contexts from env and publish them for the process."""
     try:
         contexts = build_contexts()
-        set_runtime(contexts)
+        publish_contexts(contexts)
         print(f"[scout] Contexts: {[c.id for c in contexts]}")
     except Exception as e:
         print(f"[scout] Contexts wiring failed: {e}")

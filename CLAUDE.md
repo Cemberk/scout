@@ -54,7 +54,7 @@ scout/
 ├── __main__.py                     # CLI: chat | contexts
 ├── team.py                         # Leader + three specialists, coordinate mode
 ├── settings.py                     # DB-dependent runtime objects
-├── contexts.py                     # build_contexts() + registry (set_runtime / get_contexts / list_contexts)
+├── contexts.py                     # build_contexts() + registry (publish_contexts / get_contexts / list_contexts)
 ├── agents/
 │   ├── explorer.py                 # per-provider query_* + list_contexts + read-only SQL
 │   ├── engineer.py                 # SQL writes + introspect + reasoning + learnings
@@ -162,7 +162,7 @@ One operational-memory store: `scout_learnings`. Explorer, Engineer, Doctor all 
 | Doctor | `SQLTools` (**read-only**), `status`, `status_all`, `db_status`, `env_report`, `update_learnings` |
 | Leader | (none — pure router) |
 
-**Per-provider tools are built by the registry.** `scout.contexts.set_runtime(contexts)` installs the singleton list and rewires Explorer's `.tools` list in one call. The app lifespan calls it once at startup; eval fixtures call it per case.
+**Per-provider tools are built by the registry.** `scout.contexts.publish_contexts(contexts)` installs the singleton list. Explorer's `tools=explorer_tools` is a callable (`cache_callables=False`), so agno resolves the tool list from the current registry on every run. The app lifespan calls `publish_contexts` once at startup; eval fixtures call it per case.
 
 ## API Endpoints
 
@@ -209,7 +209,7 @@ Every external source subclasses `ContextProvider` (in `scout/context/provider.p
 from db import db_url, get_postgres_db, create_knowledge, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
 from scout.team import scout
 from scout.settings import scout_learnings
-from scout.contexts import build_contexts, get_contexts, list_contexts, set_runtime
+from scout.contexts import build_contexts, get_contexts, list_contexts, publish_contexts
 from scout.context import ContextProvider, ContextMode, Answer, Document, Status
 from scout.context.web import WebContextProvider, WebBackend
 from scout.context.web.backends import ExaMCPBackend, ParallelBackend

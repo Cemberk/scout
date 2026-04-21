@@ -94,14 +94,14 @@ def _assert_no_outbound(names: list[str], agent: str) -> None:
 
 def w1_explorer_readonly() -> None:
     from scout.agents.explorer import explorer
-    from scout.contexts import build_contexts, get_contexts, set_runtime
+    from scout.contexts import build_contexts, get_contexts, publish_contexts
 
     prev = get_contexts()
     try:
-        set_runtime(build_contexts())
+        publish_contexts(build_contexts())
         names = _tool_names(explorer.tools)
     finally:
-        set_runtime(prev)
+        publish_contexts(prev)
 
     _assert_no_outbound(names, "Explorer")
     _assert_has(names, ("list_contexts", "update_learnings"), "Explorer")

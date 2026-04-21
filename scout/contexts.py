@@ -1,11 +1,8 @@
 """
-Context Registry
+Scout's Context Registry
 ================
 
-Env-driven wiring + runtime registry for the contexts Scout's agents use.
-``build_contexts()`` assembles the context list from env once at startup.
-``set_runtime(contexts)`` publishes that list globally and rewires
-Explorer's per-provider tools in one call.
+Env-driven wiring for the contexts available to Scout.
 """
 
 from __future__ import annotations
@@ -26,7 +23,7 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Env-driven factory
+# Build Contexts
 # ---------------------------------------------------------------------------
 
 
@@ -60,15 +57,15 @@ def _build_web() -> WebContextProvider | None:
 _contexts: list[ContextProvider] = []
 
 
-def set_runtime(contexts: list[ContextProvider]) -> None:
-    """Install the registry singleton and rewire Explorer's tool list."""
+def publish_contexts(contexts: list[ContextProvider]) -> None:
+    """Publish the context list so the rest of the process can see it.
+
+    Explorer reads it via the ``explorer_tools`` callable on every run
+    (``cache_callables=False`` on Explorer), so no agent mutation is
+    needed here.
+    """
     global _contexts
     _contexts = list(contexts)
-
-    # Deferred: Explorer imports from this module, so avoid circularity.
-    from scout.agents.explorer import explorer, explorer_tools
-
-    explorer.tools = explorer_tools()  # type: ignore[assignment]
 
 
 def get_contexts() -> list[ContextProvider]:

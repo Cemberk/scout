@@ -48,7 +48,7 @@ python -m evals --live                # POST /teams/scout/runs + parse SSE
 python -m evals --verbose             # response + tool previews
 ```
 
-Live mode uses whatever `PARALLEL_API_KEY` the container has set. The in-process path installs the fixture via `scout.contexts.set_runtime(contexts)` and refreshes Explorer's tools around each case.
+Live mode uses whatever `PARALLEL_API_KEY` the container has set. The in-process path installs the fixture via `scout.contexts.publish_contexts(contexts)`; Explorer reads the fresh registry on its next run via its callable `tools=` factory.
 
 On FAIL, the failure reasons are printed inline. Pipe through `less` or re-run with `--case <id> --verbose` to drill in.
 
