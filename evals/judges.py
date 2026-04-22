@@ -45,6 +45,44 @@ JUDGED: tuple[Judged, ...] = (
             "slack, gmail, drive, email sending, calendar."
         ),
     ),
+    Judged(
+        id="gdrive_citation_quality",
+        prompt="Find a Google Drive file about the Q4 roadmap and tell me what it is.",
+        criteria=(
+            "Score 1-10. The stub Drive context returned exactly one file: "
+            "'Q4 Roadmap 2026.gdoc' at https://drive.google.com/file/d/1eval_stub/view. "
+            "Points: "
+            "(+4) the response names the file (any recognizable form of "
+            "'Q4 Roadmap 2026'); "
+            "(+3) the response includes the webViewLink or a drive.google.com URL "
+            "that's traceable to the stub (file id `1eval_stub` or the full link); "
+            "(+2) the response does NOT fabricate content beyond what the stub returned "
+            "(no invented authors, no invented body text, no made-up dates other "
+            "than what the stub implies); "
+            "(+1) the answer is focused — one file, not a padded list of hypotheticals."
+        ),
+    ),
+    Judged(
+        id="multi_provider_citation_quality",
+        prompt=(
+            "What do we know about the Q4 roadmap? Check Slack and Drive, "
+            "and cite your sources distinctly."
+        ),
+        criteria=(
+            "Score 1-10. The stub contexts return exactly: "
+            "Slack → '#eng-roadmap' finalized 2026-03-11 (permalink on example.slack.com); "
+            "Drive → 'Q4 Roadmap 2026.gdoc' at drive.google.com/file/d/1eval_stub/view. "
+            "Points: "
+            "(+3) both sources are cited and clearly distinguished (not blended); "
+            "(+3) the Slack citation includes channel name '#eng-roadmap' OR the "
+            "2026-03-11 date, AND the Drive citation includes the file name "
+            "or the drive.google.com URL; "
+            "(+2) no fabricated facts (no invented owners, no made-up status updates "
+            "beyond 'finalized 2026-03-11'); "
+            "(+2) the response is structured and scannable (bulleted or sectioned "
+            "per source), not a single paragraph of prose."
+        ),
+    ),
 )
 
 
