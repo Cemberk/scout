@@ -18,6 +18,8 @@ from agno.utils.log import log_info, log_warning
 from scout.context.database import DatabaseContextProvider
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
+from scout.context.mcp import MCPContextProvider
+from scout.context.mcp.config import parse_mcp_env
 from scout.context.provider import ContextProvider
 from scout.context.slack import SlackContextProvider
 from scout.context.web.exa import ExaBackend
@@ -56,6 +58,7 @@ def build_contexts() -> list[ContextProvider]:
             continue
         if ctx is not None:
             new_contexts.append(ctx)
+    new_contexts.extend(_build_mcp_providers())
 
     seen: set[str] = set()
     deduped: list[ContextProvider] = []
@@ -128,6 +131,24 @@ def _build_gdrive() -> GDriveContextProvider | None:
     if not getenv("GOOGLE_SERVICE_ACCOUNT_FILE"):
         return None
     return GDriveContextProvider(model=default_model())
+
+
+def _build_mcp_providers() -> list[MCPContextProvider]:
+    """One `MCPContextProvider` per slug in `MCP_SERVERS`.
+
+    Misconfigured slugs log a warning and are skipped — one bad server
+    can't take the rest down.
+    """
+    raw = getenv("MCP_SERVERS", "")
+    slugs = [s.strip() for s in raw.split(",") if s.strip()]
+    providers: list[MCPContextProvider] = []
+    for slug in slugs:
+        try:
+            cfg = parse_mcp_env(slug)
+            providers.append(MCPContextProvider(**cfg, model=default_model()))
+        except Exception as exc:
+            log_warning(f"MCP server {slug!r} misconfigured: {type(exc).__name__}: {exc}")
+    return providers
 
 
 def status_row(ctx: ContextProvider) -> dict:
