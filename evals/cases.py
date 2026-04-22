@@ -134,7 +134,10 @@ CASES: tuple[Case, ...] = (
     # -----------------------------------------------------------------------
     Case(
         id="engineer_save_note",
-        prompt="Save a note titled 'eval-check' with body 'eval suite verified scaffolding'.",
+        prompt=(
+            "For user 'eval-user-42', save a note titled 'eval-check' with "
+            "body 'eval suite verified scaffolding'."
+        ),
         expected_agent="engineer",
         expected_tools=("run_sql_query",),
         response_matches=(r"(saved|stored|inserted|added)",),
