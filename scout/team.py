@@ -2,13 +2,9 @@
 Scout — Enterprise Context Agent
 ================================
 
-A single agent with N context providers. The database is a provider
-like any other, exposed as `query_crm` + `update_crm`. No Team, no
-specialists, no routing layer — one LLM hop per turn.
-
-The `scout` symbol is still exported from this module so downstream
-imports don't break; the file is kept named ``team.py`` for the same
-reason. The object is now an ``agno.Agent``.
+A single ``agno.Agent`` with N ``ContextProvider``s. Exposes
+``query_<id>`` + ``update_<id>`` tools per registered provider, plus
+``list_contexts``. One LLM hop per turn.
 """
 
 from __future__ import annotations
@@ -21,11 +17,11 @@ from scout.settings import agent_db, default_model
 
 
 def scout_tools() -> list:
-    """Build Scout's tool list from the current registry.
+    """Build Scout's tool list from the active context providers.
 
-    Callable (not a resolved list) so agno re-resolves per run — lets
-    eval fixtures swap providers via ``update_context_providers`` and see
-    the new tool set immediately, without Scout holding a stale closure.
+    We use a callable (not a resolved list) so agno re-resolves per run —
+    lets eval fixtures swap providers via ``update_context_providers`` and
+    see the new tool set immediately, without Scout holding a stale closure.
     """
     tools: list = []
     for ctx in get_context_providers():
