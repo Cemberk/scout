@@ -99,12 +99,12 @@ def w1_scout_tool_surface() -> None:
     With single-agent Scout all tools are resolved through the registry.
     The factory is a callable so this check resolves it to a concrete list.
     """
+    from scout.agent import scout
     from scout.contexts import (
         create_context_providers,
         get_context_providers,
         update_context_providers,
     )
-    from scout.agent import scout
 
     prev = get_context_providers()
     try:
