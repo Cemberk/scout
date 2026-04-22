@@ -76,7 +76,7 @@ Then ask Scout in chat:
 
 > *"Search Drive for files with 'roadmap' in the name."*
 
-Explorer routes to the GDrive context and returns matches with webViewLinks.
+Scout calls `query_gdrive` and returns matches with webViewLinks.
 
 ## Manual setup (if you can't run the script)
 

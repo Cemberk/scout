@@ -4,13 +4,13 @@ Scout comes with three tiers of evaluations:
 
 | Tier | Entry point | What it catches | Needs LLM? |
 |---|---|---|---|
-| **Wiring** (code-level invariants) | `python -m evals wiring` | Agent tools drift off-shape (reader wires a writer, Leader gains tools) | No |
-| **Behavioral** (cases) | `python -m evals` | Leader routes wrong / agents over-tool / responses miss expected substrings / forbidden tools fire | Yes |
-| **Judges** (LLM-scored quality) | `python -m evals judges` | Answer quality, routing clarity, anything a regex can't express | Yes |
+| **Wiring** (code-level invariants) | `python -m evals wiring` | Scout's tool shape drifts (bare SQL leaks onto Scout, CRM provider loses `update_crm`, schema guard disappears) | No |
+| **Behavioral** (cases) | `python -m evals` | Scout picks the wrong tool / responses miss expected substrings / forbidden tools fire | Yes |
+| **Judges** (LLM-scored quality) | `python -m evals judges` | Answer quality, anything a regex can't express | Yes |
 
 `scripts/validate.sh` runs `ruff` + `mypy` only. Wiring / behavioral / judges are direct `python -m evals ...` invocations; the LLM-hitting tiers aren't wired into pre-commit.
 
-> **PostgreSQL must be running for every tier, including wiring.** The Engineer agent builds `SQLTools(db_engine=get_sql_engine(), …)` at module import, and `get_sql_engine()` opens a connection + bootstraps the `scout` schema on first call. Start the DB container (`docker compose up -d scout-db`) before running any eval tier.
+> **PostgreSQL must be running for every tier, including wiring.** The CRM provider builds `SQLTools(db_engine=get_sql_engine(), …)` / `get_readonly_engine()` at module import, and both engines open a connection + bootstrap the `scout` schema on first call. Start the DB container (`docker compose up -d scout-db`) before running any eval tier.
 
 ## 1. Wiring — no LLM, no network
 
@@ -18,10 +18,11 @@ File: [`evals/wiring.py`](../evals/wiring.py).
 
 Each invariant is a function that returns `None` on PASS and raises `AssertionError` with a diagnostic on FAIL.
 
-- `W1` Explorer's bound tools are read-only; `list_contexts` present.
-- `W2` Engineer wires SQL writes; no outbound send tools.
-- `W3` Leader has no tools (pure router).
+- `W1` Scout has `query_crm` + `update_crm` + `list_contexts`; no bare `SQLTools` on Scout (SQL belongs inside the CRM provider).
+- `W2` `DatabaseContextProvider` exposes both `query_crm` and `update_crm`; `aupdate` is overridden.
+- `W3` The scout engine's `before_cursor_execute` hook rejects DDL/DML against `public` / `ai`.
 - `W4` Every registered `ContextProvider` has the expected shape (`id`/`name` + `query`/`status`/`get_tools`/`instructions`).
+- `W5` `GDriveContextProvider` uses `ScoutGoogleDriveTools` (the shared-drive-aware subclass).
 
 ```bash
 python -m evals wiring          # exits 0 on PASS, non-zero on FAIL
@@ -33,28 +34,28 @@ Files: [`evals/cases.py`](../evals/cases.py), [`evals/runner.py`](../evals/runne
 
 One flat `CASES` tuple. Fields:
 
-- `prompt` — sent to the team
-- `expected_agent` — `None` means Leader answers directly; else the id must appear in the delegated member list
+- `prompt` — sent to Scout
+- `expected_agent` — kept for back-compat; with single-agent Scout, leave as `None` (runner skips the delegation check)
 - `response_contains` / `response_forbids` / `response_matches` (regex) — deterministic assertions
-- `expected_tools` / `forbidden_tools` — substring match against tool names across leader + every delegated specialist
-- `fixture` — `"default"` (one stub web context) or `"real"` (env-built contexts; hits actual providers)
+- `expected_tools` / `forbidden_tools` — substring match against tool names Scout called this turn
+- `fixture` — `"default"` (stub web/slack/gdrive + real CRM) or `"real"` (env-built contexts; hits actual providers)
 - `max_duration_s`
+- `followups` — additional turns in the same session (for memory / multi-turn flows)
 
 Example (from [`evals/cases.py`](../evals/cases.py)):
 
 ```python
 Case(
-    id="leader_greeting",
+    id="scout_greeting",
     prompt="hey",
-    expected_agent=None,
     response_contains=("scout",),
-    forbidden_tools=("query_",),
+    forbidden_tools=("query_", "update_"),
     max_duration_s=45,
 )
 ```
 
 ```bash
-python -m evals                       # in-process team.run()
+python -m evals                       # in-process agent.arun()
 python -m evals --case <id>           # single case
 python -m evals --verbose             # response + tool previews
 ```
