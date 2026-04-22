@@ -70,6 +70,35 @@ JUDGED: tuple[Judged, ...] = (
         ),
     ),
     Judged(
+        id="slack_thread_expansion",
+        prompt=(
+            "Search Slack for the Q4 roadmap discussion. If the top hit is "
+            "part of a thread, expand the thread and summarize what the replies add."
+        ),
+        criteria=(
+            "Score 1-10. A Slack stub exposes two tools:\n"
+            "- search_workspace_stub(query) returns one hit with "
+            "reply_count=3 in #eng-roadmap\n"
+            "- get_thread_stub(channel_id, ts) returns three replies: "
+            "one about sharing a deck, one naming milestone owners "
+            "(alice, bob, carol), and one with target launch 2026-04-02\n\n"
+            "A well-behaved agent searches first and then expands the thread "
+            "because reply_count > 0 signals there's more context below.\n\n"
+            "Points: "
+            "(+4) the response includes content that only appears in the "
+            "replies (a reference to sharing the deck, the milestone owners "
+            "alice/bob/carol, OR the target launch 2026-04-02) — this proves "
+            "the agent expanded the thread; "
+            "(+3) the response cites the channel '#eng-roadmap' or the root "
+            "message's content ('Q4 roadmap finalized for 2026-03-11'); "
+            "(+2) no fabricated facts — no invented owners, milestones, or "
+            "dates beyond what the stubs return; "
+            "(+1) the response is concise — a summary, not a full transcript "
+            "dump of every reply verbatim."
+        ),
+        fixture="slack_threaded",
+    ),
+    Judged(
         id="multi_provider_citation_quality",
         prompt=(
             "What do we know about the Q4 roadmap? Check Slack and Drive, "

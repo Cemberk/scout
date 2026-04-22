@@ -108,6 +108,12 @@ def build_fixture(name: str) -> list[Any]:
             _stub_context("slack", "Slack (stub)", ""),
             _stub_context("gdrive", "Google Drive (stub)", ""),
         ]
+    if name == "slack_threaded":
+        return [
+            _stub_context("web", "Web (stub)", WEB_STUB_TEXT),
+            _threaded_slack_stub(),
+            _stub_context("gdrive", "Google Drive (stub)", GDRIVE_STUB_TEXT),
+        ]
     if name == "large_gdrive":
         return [
             _stub_context("web", "Web (stub)", WEB_STUB_TEXT),
@@ -136,6 +142,71 @@ def _raise_runtime(message: str) -> Callable[[str], Any]:
         raise RuntimeError(message)
 
     return _raiser
+
+
+def _threaded_slack_stub():
+    """Slack stub exposing `search_workspace_stub` + `get_thread_stub` as
+    separate tools so cases can check whether Scout expands a thread when
+    `reply_count > 0`.
+
+    The ContextProvider wrapper keeps the usual id/name/query surface so
+    Explorer's per-provider wiring works unchanged — we just override
+    `_default_tools` to expose the two explicit tools.
+    """
+    import json
+
+    from agno.tools import tool
+
+    from scout.context.provider import Answer, ContextProvider
+    from scout.context.provider import Status as ProviderStatus
+
+    SEARCH_HIT = {
+        "channel_id": "C07ROAD",
+        "channel_name": "eng-roadmap",
+        "user": "U07EVAL",
+        "ts": "1712345000.000100",
+        "text": "Q4 roadmap finalized for 2026-03-11",
+        "reply_count": 3,
+        "permalink": "https://example.slack.com/archives/C07ROAD/p1712345000",
+    }
+    THREAD_REPLIES = [
+        {"user": "U07LEAD", "ts": "1712345100.000200", "text": "Great — I'll share the deck in #eng-roadmap."},
+        {"user": "U07PM", "ts": "1712345200.000300", "text": "Milestone owners: alice, bob, carol."},
+        {"user": "U07EVAL", "ts": "1712345300.000400", "text": "Target launch: 2026-04-02."},
+    ]
+
+    @tool(name="search_workspace_stub")
+    async def search_workspace_stub(query: str) -> str:
+        """Stubbed Slack search. Returns one message with `reply_count > 0`."""
+        return json.dumps({"query": query, "hits": [SEARCH_HIT]})
+
+    @tool(name="get_thread_stub")
+    async def get_thread_stub(channel_id: str, ts: str) -> str:
+        """Stubbed Slack thread expansion. Returns replies for the message."""
+        return json.dumps(
+            {"channel_id": channel_id, "root_ts": ts, "replies": THREAD_REPLIES}
+        )
+
+    class ThreadedSlackStub(ContextProvider):
+        def __init__(self) -> None:
+            super().__init__(id="slack", name="Slack (threaded stub)")
+
+        def status(self):
+            return ProviderStatus(ok=True, detail="stub slack (threaded)")
+
+        async def astatus(self):
+            return self.status()
+
+        def query(self, question):
+            return Answer(text=f"[threaded stub] search_workspace_stub({question!r}) then get_thread_stub(...)")
+
+        async def aquery(self, question):
+            return self.query(question)
+
+        def _default_tools(self):
+            return [search_workspace_stub, get_thread_stub]
+
+    return ThreadedSlackStub()
 
 
 def install_fixture(contexts: list[Any]) -> list[Any]:
