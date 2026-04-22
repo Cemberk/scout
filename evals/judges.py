@@ -37,12 +37,24 @@ JUDGED: tuple[Judged, ...] = (
         id="capabilities_clarity",
         prompt="What can you do? Explain in 2-3 sentences.",
         criteria=(
-            "Score 1-10. Points: "
-            "(+4) both specialists are named — Explorer, Engineer; "
-            "(+3) each specialist's role is described concretely (not generic handwaving); "
+            "Score 1-10. Scout is a single context agent — no team, no "
+            "specialists. It answers by querying its registered contexts.\n\n"
+            "The default fixture registers these contexts: Web, Slack, "
+            "Google Drive, CRM (the user's contacts/projects/notes). "
+            "A well-formed answer names some of these by category so the "
+            "user understands what Scout can actually reach. "
+            "Generic phrases like 'search the web' or 'remember notes' "
+            "count — the exact provider name isn't required.\n\n"
+            "Points: "
+            "(+3) the answer mentions READING external context (web/slack/drive "
+            "or any concrete external source) by name or clear paraphrase; "
+            "(+3) the answer mentions MEMORY / CRM — contacts, notes, projects, "
+            "or an equivalent 'remember'/'save'/'track' capability; "
             "(+2) the answer is concise (roughly 2-3 sentences, not a long essay); "
-            "(+1) the answer does NOT promise features Scout doesn't have — no wiki, "
-            "slack, gmail, drive, email sending, calendar."
+            "(+1) the answer does NOT name old specialists (no 'Explorer', no "
+            "'Engineer' as roles Scout delegates to); "
+            "(+1) the answer does NOT promise features Scout doesn't have — no "
+            "email sending, calendar, gmail, wiki, etc."
         ),
     ),
     Judged(
@@ -70,16 +82,15 @@ JUDGED: tuple[Judged, ...] = (
         ),
     ),
     Judged(
-        id="leader_concise_write_ack",
+        id="scout_concise_write_ack",
         prompt=(
             "For user 'eval-user-42', save a note titled 'ship status' with "
             "body 'API release slipping to next week'."
         ),
         criteria=(
             "Score 1-10. This is a write — the user wants a short "
-            "acknowledgment, not a debrief. Scout delegates to Engineer, "
-            "Engineer runs SQL, and the final response should be a short "
-            "confirmation.\n\n"
+            "acknowledgment, not a debrief. Scout calls update_crm and "
+            "the final response should be a short confirmation.\n\n"
             "Echoing DB-assigned fields that come out of the INSERT (the "
             "SERIAL id, created_at timestamp, or the schema name like "
             "'scout.scout_notes') is NOT fabrication — those are facts the "
@@ -98,6 +109,35 @@ JUDGED: tuple[Judged, ...] = (
             "the target shape, NOT padding; "
             "(+1) no fabricated facts — no invented project status, owner, "
             "or follow-up commitment beyond what the user provided."
+        ),
+    ),
+    Judged(
+        id="crm_query_quality",
+        prompt=(
+            "For user 'eval-judge-crm', save a note titled 'judge-probe' "
+            "with body 'this is the body the judge is looking for'. Then, "
+            "in the same turn, list the notes the user has saved so far."
+        ),
+        criteria=(
+            "Score 1-10. This combines a write and a read through the CRM "
+            "provider. Scout should call update_crm, then query_crm, and "
+            "report back.\n\n"
+            "The judge-probe note gets inserted into scout.scout_notes with "
+            "user_id='eval-judge-crm', title='judge-probe', body='this is "
+            "the body the judge is looking for'. The list-back should "
+            "surface that row (and only user 'eval-judge-crm's rows).\n\n"
+            "Points: "
+            "(+4) the write is confirmed (Scout says it saved / stored / "
+            "added the note, mentioning 'judge-probe' or the body text); "
+            "(+3) the list-back includes 'judge-probe' — proving the read "
+            "path works and the new row is visible; "
+            "(+2) no fabricated columns or rows — Scout doesn't invent "
+            "additional notes the user didn't create, doesn't invent an "
+            "author or timestamp that isn't in the DB response; "
+            "(+1) the response is focused — no capability menus, no "
+            "'I can also search slack' follow-ups, no multi-provider "
+            "fan-out. A short write confirmation + a short list is the "
+            "target shape."
         ),
     ),
     Judged(
