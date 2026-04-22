@@ -192,10 +192,7 @@ CASES: tuple[Case, ...] = (
         # the UPDATE-path gap. The body values are distinctive strings so
         # turn 3's response_contains catches the updated body specifically,
         # not the old one echoed back from session history.
-        prompt=(
-            "For user 'eval-update-rt-42', save a note titled 'update-probe' "
-            "with body 'status: draft'."
-        ),
+        prompt=("For user 'eval-update-rt-42', save a note titled 'update-probe' with body 'status: draft'."),
         expected_tools=("update_crm",),
         forbidden_tools=("query_web", "query_slack", "query_gdrive"),
         followups=(
@@ -207,10 +204,7 @@ CASES: tuple[Case, ...] = (
                 expected_tools=("update_crm",),
             ),
             FollowUp(
-                prompt=(
-                    "For user 'eval-update-rt-42', show the current body of "
-                    "the 'update-probe' note."
-                ),
+                prompt=("For user 'eval-update-rt-42', show the current body of the 'update-probe' note."),
                 response_contains=("status: shipped",),
                 expected_tools=("query_crm",),
             ),
