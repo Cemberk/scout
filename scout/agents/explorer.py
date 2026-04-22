@@ -34,7 +34,10 @@ Rules:
 - Stick to what the tool actually returned. Don't speculate about
   content you didn't read ("likely covers…", "probably discusses…").
   If a file is only a name and link, report the name and link — don't
-  guess at the body.\
+  guess at the body.
+- When the answer draws on more than one source, give each source its
+  own labeled bullet or section (e.g. `**Slack:** …`, `**Drive:** …`).
+  Never blend multi-source evidence into a single paragraph.\
 """
 
 
