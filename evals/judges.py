@@ -70,6 +70,37 @@ JUDGED: tuple[Judged, ...] = (
         ),
     ),
     Judged(
+        id="leader_concise_write_ack",
+        prompt=(
+            "For user 'eval-user-42', save a note titled 'ship status' with "
+            "body 'API release slipping to next week'."
+        ),
+        criteria=(
+            "Score 1-10. This is a write — the user wants a short "
+            "acknowledgment, not a debrief. Scout delegates to Engineer, "
+            "Engineer runs SQL, and the final response should be a short "
+            "confirmation.\n\n"
+            "Echoing DB-assigned fields that come out of the INSERT (the "
+            "SERIAL id, created_at timestamp, or the schema name like "
+            "'scout.scout_notes') is NOT fabrication — those are facts the "
+            "database returned. Do not deduct for including them.\n\n"
+            "Points: "
+            "(+5) the response confirms the save in plain language "
+            "(e.g. 'saved', 'stored', 'noted', 'added', 'recorded'); "
+            "(+3) the response includes the title ('ship status') OR the "
+            "body text so the user can verify the right note was stored "
+            "(either is sufficient — one is enough); "
+            "(+1) the response is FOCUSED — a short confirmation plus a "
+            "compact bullet list of the saved row (title/body/id/user_id) "
+            "is ideal. Deduct only for actual padding: other-capability "
+            "menus, cross-provider offers, multi-section essays, filler "
+            "disclaimers. A tight bullet list of the inserted columns is "
+            "the target shape, NOT padding; "
+            "(+1) no fabricated facts — no invented project status, owner, "
+            "or follow-up commitment beyond what the user provided."
+        ),
+    ),
+    Judged(
         id="slack_thread_expansion",
         prompt=(
             "Search Slack for the Q4 roadmap discussion. If the top hit is "
