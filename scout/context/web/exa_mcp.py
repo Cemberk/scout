@@ -51,12 +51,10 @@ class ExaMCPBackend(ContextBackend):
         return MCPTools(url=self.url, transport="streamable-http")
 
     async def asetup(self) -> None:
-        """Connect the MCP session on the lifespan task.
+        """Connect to the Exa MCP server.
 
-        Without a connect, ``MCPTools.functions`` is empty and the
-        sub-agent sees no tools. Also: the ``mcp`` SDK's anyio cancel
-        scopes must exit on the task that entered them — connecting
-        here (lifespan task) matches where ``aclose()`` runs.
+        On failure, logs a warning; the web backend will be
+        unavailable until the next restart.
         """
         if self._mcp_tools is None:
             self._mcp_tools = self._build_tools()
@@ -65,10 +63,7 @@ class ExaMCPBackend(ContextBackend):
         try:
             await self._mcp_tools._connect()
         except Exception as exc:
-            log_warning(
-                f"ExaMCPBackend setup failed — {type(exc).__name__}: {exc}. "
-                "Web backend will be unavailable until restart."
-            )
+            log_warning(f"ExaMCPBackend setup failed — {type(exc).__name__}: {exc}.")
             self._mcp_tools = None
 
     async def aclose(self) -> None:

@@ -24,6 +24,7 @@ shutdown (awaited from ``app/main.py`` lifespan).
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Literal
 
 from agno.agent import Agent
@@ -54,6 +55,7 @@ class MCPContextProvider(ContextProvider):
         headers: dict[str, str] | None = None,
         env: dict[str, str] | None = None,
         timeout_seconds: int = 30,
+        mcp_kwargs: dict[str, Any] | None = None,
         id: str | None = None,
         name: str | None = None,
         base_instructions: str | None = None,
@@ -70,6 +72,7 @@ class MCPContextProvider(ContextProvider):
         self.headers = dict(headers) if headers else None
         self.env = dict(env) if env else None
         self.timeout_seconds = timeout_seconds
+        self.mcp_kwargs = dict(mcp_kwargs) if mcp_kwargs else {}
         self.base_instructions_text = (
             base_instructions if base_instructions is not None else DEFAULT_MCP_BASE_INSTRUCTIONS
         )
@@ -125,29 +128,16 @@ class MCPContextProvider(ContextProvider):
                 log_warning(f"MCPContextProvider[{self.id}]: close() raised {type(exc).__name__}: {exc}")
 
     async def asetup(self) -> None:
-        """Connect the MCP session in the lifespan task.
+        """Connect to the MCP server and load its tool catalog.
 
-        Two reasons this runs at startup, regardless of ``mode``:
-
-        1. ``mode=tools`` hands the raw ``MCPTools`` toolkit to the
-           calling agent via sync ``get_tools()``. Without a prior
-           ``_connect()``, the toolkit's ``functions`` dict is empty
-           and the agent sees no tools.
-        2. Task affinity. The ``mcp`` SDK uses ``anyio`` cancel scopes
-           that must be entered and exited on the same task. If we
-           connect lazily from a request handler task, ``aclose()``
-           from the lifespan task will raise
-           "Attempted to exit cancel scope in a different task".
-           Connecting in the lifespan keeps open + close in the same
-           task.
-
-        Connection failures are logged and swallowed — the provider
-        can retry on the next call. ``status()`` will surface the
-        failure to health checks.
+        Bounded by ``timeout_seconds``. On timeout or error, logs a
+        warning and continues; subsequent calls retry.
         """
         try:
-            await self._ensure_session()
+            await asyncio.wait_for(self._ensure_session(), timeout=self.timeout_seconds)
         except Exception as exc:
+            self._tools = None
+            self._tool_descriptions = []
             log_warning(
                 f"MCPContextProvider[{self.id}]: setup failed — "
                 f"{type(exc).__name__}: {exc}. Provider will retry on next call."
@@ -230,6 +220,10 @@ class MCPContextProvider(ContextProvider):
                     kwargs["server_params"] = SSEClientParams(url=self.url or "", headers=self.headers)
                 else:
                     kwargs["server_params"] = StreamableHTTPClientParams(url=self.url or "", headers=self.headers)
+
+        # Escape hatch: anything accepted by ``agno.tools.mcp.MCPTools``,
+        # user's keys win so they can override anything we computed.
+        kwargs.update(self.mcp_kwargs)
 
         return MCPTools(**kwargs)
 
