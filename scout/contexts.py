@@ -21,7 +21,6 @@ from scout.context.database import DatabaseContextProvider
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
 from scout.context.mcp import MCPContextProvider
-from scout.context.mcp.config import parse_mcp_env
 from scout.context.provider import ContextProvider
 from scout.context.slack import SlackContextProvider
 from scout.context.web.exa import ExaBackend
@@ -169,21 +168,22 @@ def _create_gdrive_provider() -> GDriveContextProvider | None:
 
 
 def _create_mcp_providers() -> list[MCPContextProvider]:
-    """One `MCPContextProvider` per slug in `MCP_SERVERS`.
+    """Registered MCP servers.
 
-    Misconfigured slugs log a warning and are skipped — one bad server
-    can't take the rest down.
+    Add a ``MCPContextProvider(...)`` entry per server. Pull secrets
+    from env via ``getenv(...)`` inside the constructor call. See
+    ``docs/MCP_CONNECT.md``.
     """
-    raw = getenv("MCP_SERVERS", "")
-    slugs = [s.strip() for s in raw.split(",") if s.strip()]
-    providers: list[MCPContextProvider] = []
-    for slug in slugs:
-        try:
-            cfg = parse_mcp_env(slug)
-            providers.append(MCPContextProvider(**cfg, model=default_model()))
-        except Exception as exc:
-            log_warning(f"MCP server {slug!r} misconfigured: {type(exc).__name__}: {exc}")
-    return providers
+    return [
+        # MCPContextProvider(
+        #     server_name="linear",
+        #     transport="stdio",
+        #     command="npx",
+        #     args=["-y", "@linear/mcp"],
+        #     env={"LINEAR_API_KEY": getenv("LINEAR_API_KEY", "")},
+        #     model=default_model(),
+        # ),
+    ]
 
 
 def status_row(ctx: ContextProvider) -> dict:
