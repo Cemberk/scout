@@ -186,6 +186,38 @@ CASES: tuple[Case, ...] = (
         max_duration_s=180,
     ),
     Case(
+        id="scout_update_round_trip",
+        # Save → update → read back. The only current coverage is INSERT
+        # round-trips (scout_save_note, scout_recall_contact); this closes
+        # the UPDATE-path gap. The body values are distinctive strings so
+        # turn 3's response_contains catches the updated body specifically,
+        # not the old one echoed back from session history.
+        prompt=(
+            "For user 'eval-update-rt-42', save a note titled 'update-probe' "
+            "with body 'status: draft'."
+        ),
+        expected_tools=("update_crm",),
+        forbidden_tools=("query_web", "query_slack", "query_gdrive"),
+        followups=(
+            FollowUp(
+                prompt=(
+                    "For user 'eval-update-rt-42', update the note titled "
+                    "'update-probe' — set the body to 'status: shipped'."
+                ),
+                expected_tools=("update_crm",),
+            ),
+            FollowUp(
+                prompt=(
+                    "For user 'eval-update-rt-42', show the current body of "
+                    "the 'update-probe' note."
+                ),
+                response_contains=("status: shipped",),
+                expected_tools=("query_crm",),
+            ),
+        ),
+        max_duration_s=240,
+    ),
+    Case(
         id="scout_ddl_on_demand",
         prompt=(
             "For user 'eval-user-42', start tracking my coffee orders. "
