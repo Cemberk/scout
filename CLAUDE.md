@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a single `agno.Agent` with N `ContextProvider`s. Ships with `WebContextProvider`, `FilesystemContextProvider`, `DatabaseContextProvider` (the CRM — user's contacts/projects/notes), `SlackContextProvider`, and `GDriveContextProvider`. GitHub, Gmail, Calendar, and a generic MCP wrapper land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
+Scout is an **enterprise context agent** — a single `agno.Agent` with N `ContextProvider`s. Ships with `WebContextProvider`, `FilesystemContextProvider`, `DatabaseContextProvider` (the CRM — user's contacts/projects/notes), `SlackContextProvider`, `GDriveContextProvider`, and `MCPContextProvider` (any MCP server → one `query_mcp_<slug>` tool on Scout). GitHub, Gmail, and Calendar land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
 
 ## Architecture
 
@@ -82,6 +82,10 @@ scout/
     ├── gdrive/
     │   ├── __init__.py
     │   └── provider.py             # GDriveContextProvider (read-only GoogleDriveTools)
+    ├── mcp/
+    │   ├── __init__.py
+    │   ├── provider.py             # MCPContextProvider — one per MCP server
+    │   └── config.py               # parse_mcp_env — env → provider kwargs
     └── web/
         ├── __init__.py
         ├── provider.py             # WebContextProvider
@@ -102,7 +106,7 @@ db/
 evals/
 ├── cases.py                        # Behavioral Case dataclass + CASES tuple
 ├── runner.py                       # In-process transport + fixtures
-├── wiring.py                       # Code-level invariants, no LLM (W1-W5)
+├── wiring.py                       # Code-level invariants, no LLM (W1-W6)
 ├── judges.py                       # LLM-scored quality tier
 └── __main__.py                     # CLI dispatch
 ```
@@ -168,6 +172,7 @@ Registered provider set (in order):
 | `DatabaseContextProvider` | always | CRM — the user's contacts/projects/notes. Exposes `query_crm` + `update_crm`; read path uses `get_readonly_engine()`, write path uses `get_sql_engine()` (scout-schema-guarded). |
 | `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting). Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md) |
 | `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; Scout authenticates as its own service account (no user impersonation). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) or `./scripts/google_setup.sh` |
+| `MCPContextProvider` | `MCP_SERVERS` (+ per-slug vars) | One per slug; transports `stdio`/`sse`/`streamable-http`. Sub-agent instructions rebuilt from `list_tools()` at connect. `aclose()` closes the session on shutdown. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md) |
 
 `build_contexts()` dedupes by `id` globally (first wins, warns on collision) so Scout never ends up with two `query_<id>` tools sharing a name.
 
@@ -225,6 +230,7 @@ Scout and every provider sub-agent run on `OpenAIResponses(id="gpt-5.4")` via `a
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` to enable Slack interface. |
 | `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |
+| `MCP_SERVERS` | No | Comma-separated slugs. Each slug registers as `mcp_<slug>` via `MCP_<SLUG>_TRANSPORT`/`_COMMAND`/`_ARGS`/`_URL`/`_HEADERS`/`_ENV`. See [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md). |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
 
@@ -252,6 +258,7 @@ from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, 
 from scout.context.database import DatabaseContextProvider
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
+from scout.context.mcp import MCPContextProvider
 from scout.context.slack import SlackContextProvider
 from scout.context.web import WebContextProvider
 from scout.context.web.parallel import ParallelBackend
