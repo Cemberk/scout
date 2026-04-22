@@ -115,7 +115,7 @@ asks for a table in another schema, explain that writes are scoped to
 
 
 # ---------------------------------------------------------------------------
-# Build Contexts
+# Create Context Providers
 # ---------------------------------------------------------------------------
 
 
