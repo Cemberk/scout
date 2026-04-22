@@ -1,10 +1,11 @@
 """Evaluate structural wiring.
 
 Checks:
-    W1  Explorer's bound tools are read-only; ``list_contexts`` present.
-    W2  Engineer wires SQL; no outbound.
-    W3  Leader has no tools (pure router).
-    W4  Every registered ``ContextProvider`` has the expected shape.
+    W1  Scout has every provider's tools + `list_contexts`; no bare `SQLTools`.
+    W2  `DatabaseContextProvider` exposes `query_crm` AND `update_crm`.
+    W3  Schema guard rejects DDL/DML targeting `public`/`ai` on the scout engine.
+    W4  Every registered `ContextProvider` has the expected shape.
+    W5  GDrive provider uses `ScoutGoogleDriveTools`, not bare `GoogleDriveTools`.
 
 Each check is a function that returns None on PASS and raises
 ``AssertionError`` on FAIL. Zero LLM, zero network — runs in under a second.
@@ -91,35 +92,90 @@ def _assert_no_outbound(names: list[str], agent: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def w1_explorer_readonly() -> None:
-    from scout.agents.explorer import explorer
+def w1_scout_tool_surface() -> None:
+    """Scout exposes every provider's tools + `list_contexts`, nothing outbound.
+
+    With single-agent Scout there's no separate Explorer/Engineer; all tools
+    are resolved through the registry. The factory is a callable so this
+    check resolves it to a concrete list.
+    """
     from scout.contexts import build_contexts, get_contexts, update_contexts
+    from scout.team import scout
 
     prev = get_contexts()
     try:
         build_contexts()
-        names = _tool_names(explorer.tools)
+        names = _tool_names(scout.tools)
     finally:
         update_contexts(prev)
 
-    _assert_no_outbound(names, "Explorer")
-    _assert_has(names, ("list_contexts",), "Explorer")
+    _assert_no_outbound(names, "Scout")
+    _assert_has(names, ("list_contexts", "query_crm", "update_crm"), "Scout")
+
+    # Scout should not hold bare SQLTools — SQL lives inside the CRM
+    # provider's sub-agents. If this regresses we lose the read/write
+    # separation the CRM provider enforces.
+    if any("run_sql_query" in n or "sql_tools" in n.lower() for n in names):
+        raise AssertionError(
+            f"Scout has bare SQL tools; SQL must be wrapped by the CRM provider. Tool list: {names}"
+        )
 
 
-def w2_engineer_write_shape() -> None:
-    from scout.agents.engineer import engineer
+def w2_crm_provider_surface() -> None:
+    """`DatabaseContextProvider` exposes both `query_crm` and `update_crm`."""
+    from scout.context.database import DatabaseContextProvider
 
-    names = _tool_names(engineer.tools)
-    _assert_has(names, ("sql_tools",), "Engineer")
-    _assert_no_outbound(names, "Engineer")
+    provider = DatabaseContextProvider()
+    tools = provider.get_tools()
+    names = _tool_names(tools)
+    _assert_has(names, ("query_crm", "update_crm"), "DatabaseContextProvider")
+
+    # The base `aupdate()` raises NotImplementedError; the CRM provider
+    # must override both `aquery` and `aupdate` — otherwise `update_crm`
+    # returns a read-only error.
+    base_aupdate = type(provider).__mro__[1].aupdate  # type: ignore[attr-defined]
+    crm_aupdate = type(provider).aupdate
+    if crm_aupdate is base_aupdate:
+        raise AssertionError("DatabaseContextProvider.aupdate is not overridden — update_crm will always return read-only")
 
 
-def w3_leader_no_tools() -> None:
-    from scout.team import scout
+def w3_schema_guard_blocks_non_scout_writes() -> None:
+    """The scout engine rejects DDL/DML against `public` / `ai` at the hook.
 
-    names = _tool_names(scout.tools)
-    if names:
-        raise AssertionError(f"Leader should be a pure router with no tools, got: {names}")
+    Belt-and-suspenders on top of `search_path=scout,public`. Exercises the
+    guard directly; if a future refactor removes the before-cursor hook,
+    this check flips red immediately.
+    """
+    from sqlalchemy import text
+
+    from db import get_sql_engine
+
+    engine = get_sql_engine()
+    bad_statements = [
+        "CREATE TABLE public.pwned (id int)",
+        "INSERT INTO public.foo VALUES (1)",
+        "INSERT INTO ai.secrets VALUES (1)",
+        "DELETE FROM public.users",
+        "UPDATE ai.sessions SET deleted = true",
+    ]
+    for stmt in bad_statements:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(stmt))
+        except RuntimeError as exc:
+            if "public" not in str(exc) and "ai" not in str(exc) and "scout" not in str(exc):
+                raise AssertionError(
+                    f"Unexpected error text for {stmt!r}: {exc}"
+                ) from exc
+            continue
+        except Exception as exc:
+            # Anything else (e.g. OperationalError because table missing) is
+            # NOT acceptable — the guard should fire first.
+            raise AssertionError(
+                f"Guard didn't fire for {stmt!r}; got {type(exc).__name__}: {exc}"
+            ) from exc
+        else:
+            raise AssertionError(f"Guard let through: {stmt!r}")
 
 
 def w4_context_protocol_shape() -> None:
@@ -163,9 +219,9 @@ def w5_gdrive_uses_scout_subclass() -> None:
 
 
 CHECKS = (
-    w1_explorer_readonly,
-    w2_engineer_write_shape,
-    w3_leader_no_tools,
+    w1_scout_tool_surface,
+    w2_crm_provider_surface,
+    w3_schema_guard_blocks_non_scout_writes,
     w4_context_protocol_shape,
     w5_gdrive_uses_scout_subclass,
 )
