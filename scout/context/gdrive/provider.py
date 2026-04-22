@@ -71,20 +71,29 @@ class GDriveContextProvider(ContextProvider):
         return answer_from_run(await self._ensure_agent().arun(question))
 
     def instructions(self) -> str:
-        if self.mode == ContextMode.agent:
-            return f"`{self.name}`: call `{self.query_tool_name}(question)` to query Google Drive."
+        if self.mode == ContextMode.tools:
+            return (
+                f"`{self.name}`: `search_files(query)` or `list_files(query)` with Drive query syntax "
+                "(e.g. `name contains 'roadmap'`, `mimeType = 'application/vnd.google-apps.document'`). "
+                "Then `read_file(file_id)` to read contents. Read-only. Note: these share tool names "
+                "with other providers — mode=tools only works in isolation."
+            )
         return (
-            f"`{self.name}`: `search_files(query)` or `list_files(query)` with Drive query syntax "
-            "(e.g. `name contains 'roadmap'`, `mimeType = 'application/vnd.google-apps.document'`). "
-            "Then `read_file(file_id)` to read contents. Read-only."
+            f"`{self.name}`: call `{self.query_tool_name}(question)` to query Google Drive — "
+            "searches by name, mimeType, modifiedTime, etc., and returns matches with webViewLinks."
         )
 
     # ------------------------------------------------------------------
     # Mode resolution
     # ------------------------------------------------------------------
-
-    def _default_tools(self) -> list:
-        return self._all_tools()
+    #
+    # Default mode wraps the Drive toolkit behind a `query_gdrive` sub-agent
+    # because `GoogleDriveTools` exposes `list_files` / `search_files` /
+    # `read_file` — names that collide with `FileTools` when both are loaded
+    # on the same agent. agno's tool resolver dedupes by name across the
+    # whole list and drops the second occurrence, silently losing Drive.
+    # The sub-agent namespaces everything under one `query_<id>` tool.
+    # Use mode=tools only when Drive is the sole file-like provider.
 
     def _all_tools(self) -> list:
         return [self._ensure_tools()]

@@ -15,14 +15,18 @@
 #    Usage:    ./scripts/google_setup.sh
 #    Prereqs:  `gcloud` installed and `gcloud auth login` completed.
 #
-#    Overrides (export before running if defaults don't fit):
-#      SCOUT_GCP_PROJECT_ID    default: scout-agent  (6-30 chars; globally unique)
+#    Interactive by default — prompts for the GCP project ID with a smart
+#    default derived from your gcloud account (e.g. ashpreet@agno.com →
+#    scout-agno). For CI / scripting, set SCOUT_GCP_PROJECT_ID to skip
+#    the prompt.
+#
+#    Overrides (export before running):
+#      SCOUT_GCP_PROJECT_ID    6-30 char globally-unique project ID.
+#                              GCP project IDs share one namespace across
+#                              all of Google Cloud (like S3 buckets).
 #      SCOUT_GCP_PROJECT_NAME  default: "Scout"
 #      SCOUT_SA_NAME           default: scout-agent  (6-30 chars)
 #      SCOUT_KEY_PATH          default: <repo>/.scout/service-account.json
-#
-#    If `scout-agent` is already taken globally, set SCOUT_GCP_PROJECT_ID
-#    to something org-scoped like `scout-<yourcompany>`.
 #
 #    The default key path lives inside the repo at `.scout/` (gitignored).
 #    This keeps Scout's credentials co-located with the project and means
@@ -44,8 +48,7 @@ DIM='\033[2m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-# Defaults
-PROJECT_ID="${SCOUT_GCP_PROJECT_ID:-scout-agent}"
+PROJECT_ID="${SCOUT_GCP_PROJECT_ID:-}"
 PROJECT_NAME="${SCOUT_GCP_PROJECT_NAME:-Scout}"
 SA_NAME="${SCOUT_SA_NAME:-scout-agent}"
 KEY_PATH="${SCOUT_KEY_PATH:-${REPO_ROOT}/.scout/service-account.json}"
@@ -78,6 +81,47 @@ if [[ -z "$ACTIVE_ACCOUNT" ]] || [[ "$ACTIVE_ACCOUNT" == "(unset)" ]]; then
     exit 1
 fi
 
+# Derive a sensible default project ID from the gcloud account:
+#   enterprise email (e.g. ashpreet@agno.com) → scout-agno
+#   personal email (gmail/icloud/etc.)        → scout-<username>
+DOMAIN_SLUG=$(echo "${ACTIVE_ACCOUNT}" | awk -F@ 'NF==2{print $2}' | awk -F. 'NF>=2{print $1}' | tr -cd 'a-z0-9-')
+case "${DOMAIN_SLUG}" in
+    gmail|googlemail|yahoo|ymail|hotmail|outlook|live|msn|icloud|me|mac|protonmail|proton|pm|aol|fastmail|zoho|tutanota|gmx|mail)
+        DOMAIN_SLUG=""
+        ;;
+esac
+if [[ -n "${DOMAIN_SLUG}" ]]; then
+    DEFAULT_PROJECT_ID="scout-${DOMAIN_SLUG}"
+else
+    USER_SLUG=$(whoami | tr '[:upper:]_' '[:lower:]-' | tr -cd 'a-z0-9-')
+    DEFAULT_PROJECT_ID="scout-${USER_SLUG:-agent}"
+fi
+# GCP requires 6-30 chars; safety pad / truncate.
+while (( ${#DEFAULT_PROJECT_ID} < 6 )); do
+    DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID}x"
+done
+if (( ${#DEFAULT_PROJECT_ID} > 30 )); then
+    DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID:0:30}"
+    DEFAULT_PROJECT_ID="${DEFAULT_PROJECT_ID%-}"
+fi
+
+if [[ -z "${PROJECT_ID}" ]]; then
+    if [[ -t 0 ]]; then
+        echo -e "    ${DIM}GCP project IDs are globally unique across all of Google Cloud${NC}"
+        echo -e "    ${DIM}(like S3 bucket names). Something org-scoped works best.${NC}"
+        echo ""
+        read -r -p "    GCP Project ID [${DEFAULT_PROJECT_ID}]: " PROJECT_ID
+        PROJECT_ID="${PROJECT_ID:-$DEFAULT_PROJECT_ID}"
+        echo ""
+    else
+        echo -e "    ${ORANGE}SCOUT_GCP_PROJECT_ID is required in non-interactive mode.${NC}"
+        echo ""
+        echo -e "    Example:"
+        echo -e "      ${DIM}SCOUT_GCP_PROJECT_ID=${DEFAULT_PROJECT_ID} ./scripts/google_setup.sh${NC}"
+        exit 1
+    fi
+fi
+
 # GCP requires 6-30 chars for both project IDs and service account names.
 validate_length() {
     local value="$1" label="$2" len=${#1}
@@ -105,9 +149,14 @@ else
 fi
 gcloud config set project "${PROJECT_ID}" --quiet 2>/dev/null
 
-# Step 2 — enable Drive API
-echo -e "    ${DIM}[2/4] Enabling Google Drive API...${NC}"
-gcloud services enable drive.googleapis.com --project="${PROJECT_ID}" --quiet
+# Step 2 — enable APIs
+#   drive.googleapis.com     : what Scout actually uses
+#   orgpolicy.googleapis.com : lets step 4 auto-override the SA-key org
+#                              policy when enterprise orgs block key
+#                              creation. Without this, v2 org policies
+#                              aren't consulted and the override no-ops.
+echo -e "    ${DIM}[2/4] Enabling APIs (Drive + Org Policy)...${NC}"
+gcloud services enable drive.googleapis.com orgpolicy.googleapis.com --project="${PROJECT_ID}" --quiet
 
 # Step 3 — service account
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
@@ -145,14 +194,19 @@ fi
 # on the org (or on the project via inheritance).
 if [[ $KEY_OK -eq 0 ]] && echo "${KEY_ERR}" | grep -q "iam.disableServiceAccountKeyCreation"; then
     echo -e "    ${DIM}      org policy blocks key creation; applying project override...${NC}"
-    if gcloud resource-manager org-policies disable-enforce \
+    if OVERRIDE_ERR=$(gcloud resource-manager org-policies disable-enforce \
         constraints/iam.disableServiceAccountKeyCreation \
-        --project="${PROJECT_ID}" --quiet &> /dev/null; then
+        --project="${PROJECT_ID}" --quiet 2>&1); then
         sleep 2  # brief propagation window
         echo -e "    ${DIM}      override applied, retrying key creation...${NC}"
         if KEY_ERR=$(create_key); then
             KEY_OK=1
         fi
+    else
+        echo -e "    ${DIM}      override failed:${NC}"
+        while IFS= read -r line; do
+            echo -e "    ${DIM}      ${line}${NC}"
+        done <<< "${OVERRIDE_ERR}"
     fi
 fi
 
@@ -169,9 +223,7 @@ if [[ $KEY_OK -eq 0 ]]; then
         echo ""
         echo -e "    ${BOLD}Fix:${NC} ask a GCP org admin to run:"
         echo ""
-        echo -e "      ${DIM}gcloud resource-manager org-policies disable-enforce \\${NC}"
-        echo -e "      ${DIM}  constraints/iam.disableServiceAccountKeyCreation \\${NC}"
-        echo -e "      ${DIM}  --project=${PROJECT_ID}${NC}"
+        echo "    gcloud resource-manager org-policies disable-enforce constraints/iam.disableServiceAccountKeyCreation --project=${PROJECT_ID}"
         echo ""
         echo -e "    Then rerun this script."
     fi
