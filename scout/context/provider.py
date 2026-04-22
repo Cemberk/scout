@@ -83,13 +83,15 @@ class ContextProvider(ABC):
         name: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
+        query_tool_name: str | None = None,
+        update_tool_name: str | None = None,
     ) -> None:
         self.id = id
         self.name = name or id
         self.mode = mode
         self.model = model
-        self.query_tool_name = f"query_{_sanitize_id(id)}"
-        self.update_tool_name = f"update_{_sanitize_id(id)}"
+        self.query_tool_name = query_tool_name or f"query_{_sanitize_id(id)}"
+        self.update_tool_name = update_tool_name or f"update_{_sanitize_id(id)}"
 
     @abstractmethod
     def query(self, question: str) -> Answer: ...
