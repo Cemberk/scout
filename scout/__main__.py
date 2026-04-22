@@ -1,7 +1,7 @@
 """CLI entry point.
 
 Usage:
-    python -m scout                     # interactive chat with the team
+    python -m scout                     # interactive chat with Scout
     python -m scout contexts            # list registered contexts + status
 """
 
