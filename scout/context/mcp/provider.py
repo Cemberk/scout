@@ -56,6 +56,7 @@ class MCPContextProvider(ContextProvider):
         timeout_seconds: int = 30,
         id: str | None = None,
         name: str | None = None,
+        base_instructions: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
     ) -> None:
@@ -69,6 +70,9 @@ class MCPContextProvider(ContextProvider):
         self.headers = dict(headers) if headers else None
         self.env = dict(env) if env else None
         self.timeout_seconds = timeout_seconds
+        self.base_instructions_text = (
+            base_instructions if base_instructions is not None else DEFAULT_MCP_BASE_INSTRUCTIONS
+        )
 
         self._validate_config()
 
@@ -261,9 +265,10 @@ class MCPContextProvider(ContextProvider):
                 f"- `{name}`: {desc}\n  Arguments: {args}"
                 for name, desc, args in self._tool_descriptions
             )
-        return _AGENT_INSTRUCTIONS_TEMPLATE.format(
-            server_name=self.server_name,
-            tool_block=tool_block,
+        return (
+            self.base_instructions_text
+            .replace("{server_name}", self.server_name)
+            .replace("{tool_block}", tool_block)
         )
 
 
@@ -300,7 +305,7 @@ def _schema_type(schema: Any) -> str:
     return str(t) if t else "any"
 
 
-_AGENT_INSTRUCTIONS_TEMPLATE = """\
+DEFAULT_MCP_BASE_INSTRUCTIONS = """\
 You answer questions by calling tools exposed by the `{server_name}` MCP server.
 
 ## Tools available

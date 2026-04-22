@@ -31,11 +31,15 @@ class WebContextProvider(ContextProvider):
         *,
         id: str = "web",
         name: str = "Web",
+        instructions: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
     ) -> None:
         super().__init__(id=id, name=name, mode=mode, model=model)
         self.backend = backend
+        self.instructions_text = (
+            instructions if instructions is not None else DEFAULT_WEB_INSTRUCTIONS
+        )
         self._agent: Agent | None = None
 
     def status(self) -> Status:
@@ -88,13 +92,13 @@ class WebContextProvider(ContextProvider):
             name=self.name,
             role="Research the web and return cited answers",
             model=self.model,
-            instructions=_AGENT_INSTRUCTIONS,
+            instructions=self.instructions_text,
             tools=self.backend.get_tools(),
             markdown=True,
         )
 
 
-_AGENT_INSTRUCTIONS = """\
+DEFAULT_WEB_INSTRUCTIONS = """\
 You answer questions by searching the web and reading relevant pages.
 
 Workflow:

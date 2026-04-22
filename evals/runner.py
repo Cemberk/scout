@@ -60,9 +60,13 @@ MCP_JIRA_STUB_TEXT = (
 
 
 def _real_crm() -> Any:
-    """Real `DatabaseContextProvider` — writes land in the scout schema."""
+    """Real `DatabaseContextProvider` — writes land in the scout schema.
+
+    Uses Scout's tuned CRM prompts so eval fixtures mirror the real wiring.
+    """
     from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
     from scout.context.database import DatabaseContextProvider
+    from scout.contexts import SCOUT_CRM_READ, SCOUT_CRM_WRITE
     from scout.settings import default_model
 
     return DatabaseContextProvider(
@@ -71,6 +75,8 @@ def _real_crm() -> Any:
         sql_engine=get_sql_engine(),
         readonly_engine=get_readonly_engine(),
         schema=SCOUT_SCHEMA,
+        read_instructions=SCOUT_CRM_READ,
+        write_instructions=SCOUT_CRM_WRITE,
         model=default_model(),
     )
 

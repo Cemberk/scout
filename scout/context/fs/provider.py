@@ -31,11 +31,15 @@ class FilesystemContextProvider(ContextProvider):
         *,
         id: str = "fs",
         name: str = "Filesystem",
+        instructions: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
     ) -> None:
         super().__init__(id=id, name=name, mode=mode, model=model)
         self.root = Path(root).expanduser().resolve()
+        self.instructions_text = (
+            instructions if instructions is not None else DEFAULT_FS_INSTRUCTIONS
+        )
         self._agent: Agent | None = None
 
     def status(self) -> Status:
@@ -88,7 +92,7 @@ class FilesystemContextProvider(ContextProvider):
             name=self.name,
             role="Answer questions by browsing files under a local root",
             model=self.model,
-            instructions=_AGENT_INSTRUCTIONS.format(root=self.root),
+            instructions=self.instructions_text.replace("{root}", str(self.root)),
             tools=[_build_file_tools(self.root)],
             markdown=True,
         )
@@ -108,7 +112,7 @@ def _build_file_tools(root: Path) -> FileTools:
     )
 
 
-_AGENT_INSTRUCTIONS = """\
+DEFAULT_FS_INSTRUCTIONS = """\
 You answer questions by browsing files under {root}.
 
 Workflow:

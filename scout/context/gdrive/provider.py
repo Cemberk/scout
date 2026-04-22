@@ -43,6 +43,7 @@ class GDriveContextProvider(ContextProvider):
         service_account_path: str | None = None,
         id: str = "gdrive",
         name: str = "Google Drive",
+        instructions: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
     ) -> None:
@@ -51,6 +52,9 @@ class GDriveContextProvider(ContextProvider):
         if not resolved:
             raise ValueError("GDriveContextProvider: GOOGLE_SERVICE_ACCOUNT_FILE is required")
         self.service_account_path: str = resolved
+        self.instructions_text = (
+            instructions if instructions is not None else DEFAULT_GDRIVE_INSTRUCTIONS
+        )
         self._tools: ScoutGoogleDriveTools | None = None
         self._agent: Agent | None = None
 
@@ -120,13 +124,13 @@ class GDriveContextProvider(ContextProvider):
             name=self.name,
             role="Answer questions by searching and reading Google Drive",
             model=self.model,
-            instructions=_AGENT_INSTRUCTIONS,
+            instructions=self.instructions_text,
             tools=[self._ensure_tools()],
             markdown=True,
         )
 
 
-_AGENT_INSTRUCTIONS = """\
+DEFAULT_GDRIVE_INSTRUCTIONS = """\
 You answer questions by searching and reading Google Drive.
 
 You authenticate as a *service account*, not an end user. The owner

@@ -41,6 +41,8 @@ class DatabaseContextProvider(ContextProvider):
         sql_engine: Engine,
         readonly_engine: Engine,
         schema: str,
+        read_instructions: str | None = None,
+        write_instructions: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
     ) -> None:
@@ -48,6 +50,12 @@ class DatabaseContextProvider(ContextProvider):
         self.sql_engine = sql_engine
         self.readonly_engine = readonly_engine
         self.schema = schema
+        self.read_instructions_text = (
+            read_instructions if read_instructions is not None else DEFAULT_READ_INSTRUCTIONS
+        )
+        self.write_instructions_text = (
+            write_instructions if write_instructions is not None else DEFAULT_WRITE_INSTRUCTIONS
+        )
         self._read_agent: Agent | None = None
         self._write_agent: Agent | None = None
 
@@ -137,7 +145,7 @@ class DatabaseContextProvider(ContextProvider):
             name=f"{self.name} Read",
             role=f"Answer questions about data in the {self.schema} schema",
             model=self.model,
-            instructions=_READ_INSTRUCTIONS.format(schema=self.schema),
+            instructions=self.read_instructions_text.replace("{schema}", self.schema),
             tools=[SQLTools(db_engine=self.readonly_engine, schema=self.schema)],
             markdown=True,
         )
@@ -148,18 +156,18 @@ class DatabaseContextProvider(ContextProvider):
             name=f"{self.name} Write",
             role=f"Modify data in the {self.schema} schema",
             model=self.model,
-            instructions=_WRITE_INSTRUCTIONS.format(schema=self.schema),
+            instructions=self.write_instructions_text.replace("{schema}", self.schema),
             tools=[SQLTools(db_engine=self.sql_engine, schema=self.schema)],
             markdown=True,
         )
 
 
-_READ_INSTRUCTIONS = """\
-You answer questions about data in the `{schema}` schema. User: `{{user_id}}`.
+DEFAULT_READ_INSTRUCTIONS = """\
+You answer questions about data in the `{schema}` schema. User: `{user_id}`.
 
 ## Workflow
 
-1. **Scope every query to `user_id = '{{user_id}}'`.** No cross-user reads.
+1. **Scope every query to `user_id = '{user_id}'`.** No cross-user reads.
 2. **Schema-qualify** table names — `{schema}.<table>`, not a bare name.
 3. **Introspect first** for unfamiliar requests: query
    `information_schema.columns WHERE table_schema = '{schema}'` to see which
@@ -175,12 +183,12 @@ tool and stop.
 """
 
 
-_WRITE_INSTRUCTIONS = """\
-You modify data in the `{schema}` schema. User: `{{user_id}}`.
+DEFAULT_WRITE_INSTRUCTIONS = """\
+You modify data in the `{schema}` schema. User: `{user_id}`.
 
 ## Workflow
 
-1. **Every write is scoped to `user_id = '{{user_id}}'`.** Include it on every INSERT.
+1. **Every write is scoped to `user_id = '{user_id}'`.** Include it on every INSERT.
 2. **Schema-qualify** — `{schema}.<table>`, never a bare name.
 3. **DDL on demand.** If the request doesn't fit an existing table, CREATE
    a new table in `{schema}` with the standard columns:

@@ -36,6 +36,7 @@ class SlackContextProvider(ContextProvider):
         token: str | None = None,
         id: str = "slack",
         name: str = "Slack",
+        instructions: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
     ) -> None:
@@ -43,6 +44,9 @@ class SlackContextProvider(ContextProvider):
         self.token = token or getenv("SLACK_BOT_TOKEN") or getenv("SLACK_TOKEN")
         if not self.token:
             raise ValueError("SlackContextProvider: SLACK_BOT_TOKEN (or SLACK_TOKEN) is required")
+        self.instructions_text = (
+            instructions if instructions is not None else DEFAULT_SLACK_INSTRUCTIONS
+        )
         self._tools: SlackTools | None = None
         self._agent: Agent | None = None
 
@@ -110,13 +114,13 @@ class SlackContextProvider(ContextProvider):
             name=self.name,
             role="Answer questions by searching and reading Slack",
             model=self.model,
-            instructions=_AGENT_INSTRUCTIONS,
+            instructions=self.instructions_text,
             tools=[self._ensure_tools()],
             markdown=True,
         )
 
 
-_AGENT_INSTRUCTIONS = """\
+DEFAULT_SLACK_INSTRUCTIONS = """\
 You answer questions by searching and reading Slack.
 
 Workflow:
