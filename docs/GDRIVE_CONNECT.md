@@ -10,7 +10,7 @@ No browser consent, no OAuth tokens, no impersonation.
 ./scripts/google_setup.sh
 ```
 
-The script prompts for a project ID with a smart default derived from your gcloud account — `ashpreet@agno.com` suggests `scout-agno`, personal emails fall back to `scout-<username>`. Hit Enter to accept or type your own. GCP project IDs are globally unique across all of Google Cloud (like S3 bucket names), so an org-scoped name avoids collisions.
+The script prompts for a project ID with a smart default derived from your gcloud account — `hello@agno.com` suggests `scout-agno`, personal emails fall back to `scout-<username>`. Hit Enter to accept or type your own. GCP project IDs are globally unique across all of Google Cloud (like S3 bucket names), so an org-scoped name avoids collisions.
 
 The script needs the `gcloud` CLI ([install](https://cloud.google.com/sdk/docs/install)) and `gcloud auth login` once. It then:
 

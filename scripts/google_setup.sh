@@ -16,7 +16,7 @@
 #    Prereqs:  `gcloud` installed and `gcloud auth login` completed.
 #
 #    Interactive by default — prompts for the GCP project ID with a smart
-#    default derived from your gcloud account (e.g. ashpreet@agno.com →
+#    default derived from your gcloud account (e.g. hello@agno.com →
 #    scout-agno). For CI / scripting, set SCOUT_GCP_PROJECT_ID to skip
 #    the prompt.
 #
@@ -82,7 +82,7 @@ if [[ -z "$ACTIVE_ACCOUNT" ]] || [[ "$ACTIVE_ACCOUNT" == "(unset)" ]]; then
 fi
 
 # Derive a sensible default project ID from the gcloud account:
-#   enterprise email (e.g. ashpreet@agno.com) → scout-agno
+#   enterprise email (e.g. hello@agno.com) → scout-agno
 #   personal email (gmail/icloud/etc.)        → scout-<username>
 DOMAIN_SLUG=$(echo "${ACTIVE_ACCOUNT}" | awk -F@ 'NF==2{print $2}' | awk -F. 'NF>=2{print $1}' | tr -cd 'a-z0-9-')
 case "${DOMAIN_SLUG}" in
