@@ -174,6 +174,34 @@ JUDGED: tuple[Judged, ...] = (
         fixture="slack_threaded",
     ),
     Judged(
+        id="mcp_citation_quality",
+        prompt="Look up Jira issue ABC-123 via MCP and tell me what it is.",
+        criteria=(
+            "Score 1-10. The MCP Jira stub returns exactly this string:\n"
+            "\"Issue ABC-123: summary='Fix login bug on Safari', "
+            "status='In Progress', assignee='alice@example.com', "
+            "updated='2026-04-10T14:22:00Z'. "
+            "URL: https://example.atlassian.net/browse/ABC-123\"\n\n"
+            "A well-formed answer routes through query_mcp_jira, cites the "
+            "fields verbatim, and doesn't invent content the stub didn't "
+            "return (no extra comments, no speculation about cause, no "
+            "made-up reporters or priorities).\n\n"
+            "Points: "
+            "(+3) the response names the issue key 'ABC-123' and the "
+            "summary 'Fix login bug on Safari' (any faithful rewording "
+            "is fine); "
+            "(+3) the response includes the status 'In Progress' AND the "
+            "assignee 'alice@example.com' (or the full URL); "
+            "(+2) no fabricated fields — no invented reporter, priority, "
+            "component, or description beyond what the stub returned. "
+            "Harmless helpfulness (offering to run a JQL search, noting "
+            "the URL can be opened) is fine; "
+            "(+2) the Jira source is clearly cited (the issue key, the URL, "
+            "or a label like 'Jira'/'MCP Jira') rather than blended into "
+            "prose that obscures provenance."
+        ),
+    ),
+    Judged(
         id="multi_provider_citation_quality",
         prompt=(
             "What do we know about the Q4 roadmap? Check Slack and Drive, "
