@@ -2,24 +2,25 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a three-role team coordinated by a Leader, built on the `ContextProvider` base class. Ships with `WebContextProvider`, `FilesystemContextProvider`, `SlackContextProvider`, and `GDriveContextProvider`. GitHub, Gmail, Calendar, and a generic MCP wrapper land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
+Scout is an **enterprise context agent** — a single `agno.Agent` with N `ContextProvider`s. Ships with `WebContextProvider`, `FilesystemContextProvider`, `DatabaseContextProvider` (the CRM — user's contacts/projects/notes), `SlackContextProvider`, `GDriveContextProvider`, and `MCPContextProvider` (any MCP server → one `query_mcp_<slug>` tool on Scout). GitHub, Gmail, and Calendar land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
 
 ## Architecture
 
 ```
-Scout (Team Leader — coordinate mode, pure router, no tools)
-├── Explorer — answers questions by asking the registered contexts.
-│              SQL read-only (scout_* tables).
-└── Engineer — owns SQL writes into scout_* tables (DDL + DML in the
-                scout schema).
+Scout (single Agent — one LLM hop per turn)
+  tools = <query_|update_ tools from every registered ContextProvider> + list_contexts
 ```
+
+Every source is a `ContextProvider`. The database is a provider too: `DatabaseContextProvider` exposes `query_crm` (reads) + `update_crm` (writes), each backed by a dedicated sub-agent so the read path never sees the write engine.
 
 ## ContextProvider
 
 `scout/context/provider.py` defines the base. Every external source subclasses `ContextProvider` and implements:
 
-- `query(question) -> Answer` / `aquery(question) -> Answer` — natural-language access
+- `query(question) -> Answer` / `aquery(question) -> Answer` — natural-language read
 - `status() -> Status` / `astatus() -> Status` — is the source reachable?
+
+Providers that support writes override `aupdate(instruction) -> Answer` (and optionally `update`). The base raises `NotImplementedError`; `_update_tool()` translates that into a readable "<name> is read-only" error so calling agents see a clean failure. Today only `DatabaseContextProvider` overrides it.
 
 `mode` controls how the provider surfaces itself to the calling agent:
 
@@ -33,16 +34,16 @@ Scout (Team Leader — coordinate mode, pure router, no tools)
 
 The full type set:
 - `Status(ok: bool, detail: str = "")`
-- `Document(id, name, uri=None, kind="file", snippet=None)` — a piece of content
+- `Document(id, name, uri=None, source=None, snippet=None)` — a piece of content
 - `Answer(results: list[Document] = [], text: str | None = None)` — what `query()` returns
 
 ## One write surface
 
 | Write surface | Owner | Call |
 |---|---|---|
-| `scout_*` user-data tables | Engineer | SQL DDL + DML, scoped to the `scout` schema (`get_sql_engine()`) |
+| `scout_*` user-data tables | `DatabaseContextProvider` write sub-agent | `update_crm(instruction)` — SQL DDL + DML, scoped to the `scout` schema (`get_sql_engine()`) |
 
-Everything else reads. Explorer uses `get_readonly_engine()` (PostgreSQL's `default_transaction_read_only`). The scout engine has a `before_cursor_execute` hook that rejects any DDL/DML targeting `public` or `ai`.
+Everything else reads. The CRM read sub-agent uses `get_readonly_engine()` (PostgreSQL's `default_transaction_read_only`). The scout engine has a `before_cursor_execute` hook that rejects any DDL/DML targeting `public` or `ai` — so even if Scout is tricked into calling `update_crm` with an out-of-schema statement, the engine rejects it.
 
 ## Interfaces
 
@@ -60,18 +61,19 @@ Both Slack env vars must be set for the interface to light up; otherwise `interf
 scout/
 ├── __init__.py
 ├── __main__.py                     # CLI: chat | contexts
-├── team.py                         # Leader + two specialists, coordinate mode
+├── agent.py                        # The single `scout` Agent
+├── instructions.py                 # Scout-tuned prompts: SCOUT_INSTRUCTIONS + CRM read/write
 ├── settings.py                     # Runtime objects: agent_db + default_model() factory
-├── contexts.py                     # build/get/update_contexts + list_contexts tool + status row helpers
-├── agents/
-│   ├── explorer.py                 # per-provider query_* + list_contexts + read-only SQL
-│   └── engineer.py                 # SQL writes on the scout schema
+├── contexts.py                     # create/get/update/close_context_providers + list_contexts tool + status row helpers
 └── context/                        # The library — ships to agno.context
     ├── __init__.py
     ├── _utils.py                   # answer_from_run
     ├── backend.py                  # ContextBackend ABC
     ├── mode.py                     # ContextMode enum
-    ├── provider.py                 # ContextProvider ABC + Status/Document/Answer
+    ├── provider.py                 # ContextProvider ABC + Status/Document/Answer + _update_tool()
+    ├── database/
+    │   ├── __init__.py
+    │   └── provider.py             # DatabaseContextProvider — CRM (query_crm + update_crm)
     ├── fs/
     │   ├── __init__.py
     │   └── provider.py             # FilesystemContextProvider (read-only FileTools)
@@ -81,6 +83,10 @@ scout/
     ├── gdrive/
     │   ├── __init__.py
     │   └── provider.py             # GDriveContextProvider (read-only GoogleDriveTools)
+    ├── mcp/
+    │   ├── __init__.py
+    │   ├── provider.py             # MCPContextProvider — one per MCP server
+    │   └── config.py               # parse_mcp_env — env → provider kwargs
     └── web/
         ├── __init__.py
         ├── provider.py             # WebContextProvider
@@ -99,10 +105,10 @@ db/
 └── tables.py                       # Canonical DDL: scout_contacts / projects / notes
 
 evals/
-├── cases.py                        # Behavioral Case dataclass + CASES tuple (7 cases)
+├── cases.py                        # Behavioral Case dataclass + CASES tuple
 ├── runner.py                       # In-process transport + fixtures
-├── wiring.py                       # Code-level invariants, no LLM (W1-W4)
-├── judges.py                       # LLM-scored quality tier (1 case)
+├── wiring.py                       # Code-level invariants, no LLM (W1-W6)
+├── judges.py                       # LLM-scored quality tier
 └── __main__.py                     # CLI dispatch
 ```
 
@@ -146,8 +152,8 @@ Docker picks up `.env` automatically via `docker compose`, so code inside `scout
 
 | Tier | Command | Speed | LLM? | What it catches |
 |---|---|---|---|---|
-| Wiring | `python -m evals wiring` | <1s | No | Agent tool shape drifts (reader wires a writer, Leader gains tools) |
-| Behavioral | `python -m evals` | ~3min | Yes (gpt-5.4) | Leader routes wrong, agents over-tool, responses miss expected substrings |
+| Wiring | `python -m evals wiring` | <1s | No | Scout's tool shape drifts (bare SQL leaks onto Scout, CRM provider loses `update_crm`, schema guard disappears) |
+| Behavioral | `python -m evals` | ~3min | Yes (gpt-5.4) | Scout picks the wrong tool, over-tools, responses miss expected substrings |
 | Judges | `python -m evals judges` | ~1min/case | Yes | Answer quality a regex can't express |
 
 Flags: `--case <id>` narrows to one case; `--verbose` prints response + tool previews. Details: [`docs/EVALS.md`](docs/EVALS.md).
@@ -156,7 +162,7 @@ Flags: `--case <id>` narrows to one case; `--verbose` prints response + tool pre
 
 ## Contexts
 
-`scout/contexts.py::build_contexts()` is the env-driven factory. The app lifespan calls it at startup to warm a module-level cache; `get_contexts()` lazy-builds on first access. `update_contexts()` swaps the cached list in place (used by eval fixtures). The web provider is always on; others opt-in via env.
+`scout/contexts.py::create_context_providers()` is the env-driven factory. The app lifespan calls it at startup to warm a module-level cache; `get_context_providers()` lazy-builds on first access. `update_context_providers()` swaps the cached list in place (used by eval fixtures). The web provider is always on; others opt-in via env.
 
 Registered provider set (in order):
 
@@ -164,10 +170,12 @@ Registered provider set (in order):
 |---|---|---|
 | `WebContextProvider` | always | Backend picked below |
 | `FilesystemContextProvider` | always | Read-only; `FileTools` scoped to `FS_ROOT` in `scout/contexts.py` (defaults to the scout repo) |
+| `DatabaseContextProvider` | always | CRM — the user's contacts/projects/notes. Exposes `query_crm` + `update_crm`; read path uses `get_readonly_engine()`, write path uses `get_sql_engine()` (scout-schema-guarded). |
 | `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting). Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md) |
 | `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; Scout authenticates as its own service account (no user impersonation). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) or `./scripts/google_setup.sh` |
+| `MCPContextProvider` | `MCP_SERVERS` (+ per-slug vars) | One per slug; transports `stdio`/`sse`/`streamable-http`. Sub-agent instructions rebuilt from `list_tools()` at connect. `aclose()` closes the session on shutdown. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md) |
 
-`build_contexts()` dedupes by `id` globally (first wins, warns on collision) so Explorer never ends up with two `query_<id>` tools sharing a name.
+`create_context_providers()` dedupes by `id` globally (first wins, warns on collision) so Scout never ends up with two `query_<id>` tools sharing a name.
 
 Web backend selection (first match wins):
 
@@ -187,21 +195,21 @@ Shipped tables under the `scout` schema (created on first startup via `db/tables
 | `scout_projects` | Things in motion | `name`, `status`, `tags TEXT[]` |
 | `scout_notes` | Free-form notes | `title`, `body`, `tags TEXT[]`, `source_url` |
 
-Beyond these three, Engineer creates new `scout_*` tables on demand — always in the `scout` schema, always with the standard columns.
+Beyond these three, the CRM provider's write sub-agent creates new `scout_*` tables on demand — always in the `scout` schema, always with the standard columns.
 
-## Tools by Agent
+## Tools on Scout
 
-| Agent | Tools |
-|-------|-------|
-| Explorer | `SQLTools` (**read-only engine**, `scout` schema), `query_<id>` (one per registered provider via `provider.get_tools()`), `list_contexts` |
-| Engineer | `SQLTools` (scout engine, **schema-guarded** to `scout`) |
-| Leader | (none — pure router) |
+| Surface | Tools |
+|---------|-------|
+| Scout (single Agent) | `query_<id>` + `update_<id>` for each registered provider (`provider.get_tools()`), plus `list_contexts` |
+| CRM read sub-agent | `SQLTools` (**read-only engine**, `scout` schema) |
+| CRM write sub-agent | `SQLTools` (scout engine, **schema-guarded** to `scout`) |
 
-**Per-provider tools are built by the registry.** `scout.contexts.build_contexts()` builds the provider list and caches it on the module; `get_contexts()` reads it (lazy-builds on first access). Explorer's `tools=explorer_tools` is a callable (`cache_callables=False`), so agno resolves the tool list from the current registry on every run. The app lifespan calls `build_contexts()` once at startup to warm the cache and log which backend was selected; eval fixtures swap contexts via `update_contexts`.
+**Per-provider tools are built by the registry.** `scout.contexts.create_context_providers()` builds the provider list and caches it on the module; `get_context_providers()` reads it (lazy-builds on first access). Scout's `tools=scout_tools` is a callable (`cache_callables=False`), so agno resolves the tool list from the current registry on every run. The app lifespan calls `create_context_providers()` once at startup to warm the cache and log which backend was selected; eval fixtures swap providers via `update_context_providers`.
 
 ## API Endpoints
 
-On top of AgentOS's defaults (`/teams/scout/runs`, `/health`, …):
+On top of AgentOS's defaults (`/agents/scout/runs`, `/health`, …):
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -211,7 +219,7 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`, …):
 
 ## Model
 
-Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`, built through the `default_model()` factory in `scout/settings.py` (fresh instance per agent — avoids shared-state footguns). `WebContextProvider`'s sub-agent takes a `model=` kwarg so the library stays portable to `agno.context` — no hard OpenAI dep inside `scout/context/`.
+Scout and every provider sub-agent run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`, built through the `default_model()` factory in `scout/settings.py` (fresh instance per agent — avoids shared-state footguns). Each provider takes a `model=` kwarg so the library stays portable to `agno.context` — no hard OpenAI dep inside `scout/context/`.
 
 ## Environment Variables
 
@@ -223,6 +231,7 @@ Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.mode
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` to enable Slack interface. |
 | `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |
+| `MCP_SERVERS` | No | Comma-separated slugs. Each slug registers as `mcp_<slug>` via `MCP_<SLUG>_TRANSPORT`/`_COMMAND`/`_ARGS`/`_URL`/`_HEADERS`/`_ENV`. See [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md). |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
 
@@ -230,25 +239,27 @@ Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.mode
 
 ### ContextProvider
 
-Every external source subclasses `ContextProvider` (in `scout/context/provider.py`). Each provider lives in its own folder under `scout/context/<kind>/` — the class is in `provider.py`, pluggable backends are flat modules in the same folder (e.g. `scout/context/web/parallel.py`). Implementation is agentic by default — `_build_agent()` wraps a sub-agent with backend tools when needed (lazy). Each provider exposes its tools via `.get_tools()`; Explorer wires them directly.
+Every external source subclasses `ContextProvider` (in `scout/context/provider.py`). Each provider lives in its own folder under `scout/context/<kind>/` — the class is in `provider.py`, pluggable backends are flat modules in the same folder (e.g. `scout/context/web/parallel.py`). Implementation is agentic by default — `_build_agent()` wraps a sub-agent with backend tools when needed (lazy). Each provider exposes its tools via `.get_tools()`; Scout wires them directly via the `scout_tools()` callable factory.
 
 ### Database
 
 - Use `get_postgres_db()` from the `db` module for agent session storage.
-- Use `get_sql_engine()` for tools that need to write to the `scout` schema (Engineer, migrations). This engine has a guard that rejects writes to `public` / `ai`.
-- Use `get_readonly_engine()` for tools that should never write (Explorer). PostgreSQL's `default_transaction_read_only` enforces this at the DB level.
+- Use `get_sql_engine()` for tools that need to write to the `scout` schema (CRM write sub-agent, migrations). This engine has a guard that rejects writes to `public` / `ai`.
+- Use `get_readonly_engine()` for tools that should never write (CRM read sub-agent). PostgreSQL's `default_transaction_read_only` enforces this at the DB level.
 - `db/tables.py` runs at startup; safe to rerun.
 
 ### Imports
 
 ```python
 from db import db_url, get_postgres_db, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
-from scout.team import scout
+from scout.agent import scout
 from scout.settings import agent_db
-from scout.contexts import build_contexts, get_contexts, update_contexts, list_contexts, status_row, astatus_row
+from scout.contexts import create_context_providers, get_context_providers, update_context_providers, list_contexts, status_row, astatus_row
 from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
+from scout.context.database import DatabaseContextProvider
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
+from scout.context.mcp import MCPContextProvider
 from scout.context.slack import SlackContextProvider
 from scout.context.web import WebContextProvider
 from scout.context.web.parallel import ParallelBackend

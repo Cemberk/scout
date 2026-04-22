@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from scout.contexts import get_contexts, status_row
+from scout.contexts import get_context_providers, status_row
 
 
 class QueryRequest(BaseModel):
@@ -29,7 +29,7 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
 
     @router.get("/contexts")
     def list_contexts_route():
-        return [status_row(ctx) for ctx in get_contexts()]
+        return [status_row(ctx) for ctx in get_context_providers()]
 
     @router.get("/contexts/{target_id:path}/status")
     def context_status(target_id: str):
@@ -53,7 +53,7 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
 
 
 def _target(target_id: str):
-    for ctx in get_contexts():
+    for ctx in get_context_providers():
         if ctx.id == target_id:
             return ctx
     return None

@@ -3,10 +3,15 @@ Context Providers
 =================
 
 A `ContextProvider` exposes a source of information — a folder of files,
-the web, a database, an inbox — to an agent. Subclasses implement two methods:
+the web, a database, an inbox — to an agent. Subclasses implement:
 
 - `query(question)` / `aquery(question)` — natural-language access; returns an `Answer`
 - `status()` / `astatus()` — is the source reachable?
+
+Providers that support writes also override `aupdate()` (and optionally
+`update()`); the default raises `NotImplementedError` so read-only
+providers inherit a clean failure that `_update_tool()` surfaces as
+"<name> is read-only".
 
 `mode` controls how the provider surfaces itself to the calling agent:
 
@@ -56,7 +61,7 @@ class Document:
     id: str
     name: str
     uri: str | None = None
-    kind: str = "file"
+    source: str | None = None
     snippet: str | None = None
 
 
@@ -78,12 +83,15 @@ class ContextProvider(ABC):
         name: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
+        query_tool_name: str | None = None,
+        update_tool_name: str | None = None,
     ) -> None:
         self.id = id
         self.name = name or id
         self.mode = mode
         self.model = model
-        self.query_tool_name = f"query_{_sanitize_id(id)}"
+        self.query_tool_name = query_tool_name or f"query_{_sanitize_id(id)}"
+        self.update_tool_name = update_tool_name or f"update_{_sanitize_id(id)}"
 
     @abstractmethod
     def query(self, question: str) -> Answer: ...
@@ -91,11 +99,37 @@ class ContextProvider(ABC):
     @abstractmethod
     async def aquery(self, question: str) -> Answer: ...
 
+    def update(self, instruction: str) -> Answer:
+        """Apply a natural-language write. Default: read-only.
+
+        Override for providers that support writes (e.g. a database or
+        inbox). The base raises `NotImplementedError` so `_update_tool`
+        can report "<name> is read-only" to the calling agent.
+        """
+        raise NotImplementedError(f"{type(self).__name__} is read-only")
+
+    async def aupdate(self, instruction: str) -> Answer:
+        """Async variant of `update()`. Default: read-only."""
+        raise NotImplementedError(f"{type(self).__name__} is read-only")
+
     @abstractmethod
     def status(self) -> Status: ...
 
     @abstractmethod
     async def astatus(self) -> Status: ...
+
+    async def aclose(self) -> None:
+        """Release any resources this provider is holding. Default: no-op.
+
+        Override in subclasses that keep long-lived state — an open MCP
+        session, a watched inbox, a webhook subscription. The app lifespan
+        awaits ``aclose()`` across every registered provider on shutdown
+        with ``asyncio.gather(return_exceptions=True)`` so one stuck
+        teardown can't block the others. Must be safe to call even if the
+        provider was never fully initialized (e.g. lazy session never
+        connected).
+        """
+        return None
 
     def instructions(self) -> str:
         """How a calling agent should use this provider.
@@ -139,6 +173,24 @@ class ContextProvider(ABC):
             return json.dumps(payload)
 
         return _query
+
+    def _update_tool(self):
+        provider = self
+
+        @tool(name=self.update_tool_name)
+        async def _update(instruction: str) -> str:
+            try:
+                answer = await provider.aupdate(instruction)
+            except NotImplementedError:
+                return json.dumps({"error": f"{provider.name} is read-only"})
+            except Exception as exc:
+                return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+            payload: dict = {"results": [asdict(r) for r in answer.results]}
+            if answer.text is not None:
+                payload["text"] = answer.text
+            return json.dumps(payload)
+
+        return _update
 
     def _all_tools(self) -> list:
         return [self._query_tool()]

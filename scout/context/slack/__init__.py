@@ -1,3 +1,3 @@
-from scout.context.slack.provider import SlackContextProvider
+from scout.context.slack.provider import DEFAULT_SLACK_INSTRUCTIONS, SlackContextProvider
 
-__all__ = ["SlackContextProvider"]
+__all__ = ["DEFAULT_SLACK_INSTRUCTIONS", "SlackContextProvider"]

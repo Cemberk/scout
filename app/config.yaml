@@ -1,6 +1,6 @@
 chat:
   quick_prompts:
     scout:
-      - "What is Agno? Cite your source."
-      - "Save a note titled 'ideas' with body 'scout is a context agent'."
-      - "Which contexts are registered right now?"
+      - "Which tools do you have access to?"
+      - "Which contexts are you connected to?"
+      - "Walk me through the Scout codebase"

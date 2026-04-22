@@ -1,10 +1,12 @@
 """Evaluate structural wiring.
 
 Checks:
-    W1  Explorer's bound tools are read-only; ``list_contexts`` present.
-    W2  Engineer wires SQL; no outbound.
-    W3  Leader has no tools (pure router).
-    W4  Every registered ``ContextProvider`` has the expected shape.
+    W1  Scout has every provider's tools + `list_contexts`; no bare `SQLTools`.
+    W2  `DatabaseContextProvider` exposes `query_crm` AND `update_crm`.
+    W3  Schema guard rejects DDL/DML targeting `public`/`ai` on the scout engine.
+    W4  Every registered `ContextProvider` has the expected shape.
+    W5  GDrive provider uses `ScoutGoogleDriveTools`, not bare `GoogleDriveTools`.
+    W6  `MCPContextProvider` implements the lifecycle interface cleanly.
 
 Each check is a function that returns None on PASS and raises
 ``AssertionError`` on FAIL. Zero LLM, zero network — runs in under a second.
@@ -91,42 +93,103 @@ def _assert_no_outbound(names: list[str], agent: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def w1_explorer_readonly() -> None:
-    from scout.agents.explorer import explorer
-    from scout.contexts import build_contexts, get_contexts, update_contexts
+def w1_scout_tool_surface() -> None:
+    """Scout exposes every provider's tools + `list_contexts`, nothing outbound.
 
-    prev = get_contexts()
+    With single-agent Scout all tools are resolved through the registry.
+    The factory is a callable so this check resolves it to a concrete list.
+    """
+    from scout.contexts import (
+        create_context_providers,
+        get_context_providers,
+        update_context_providers,
+    )
+    from scout.agent import scout
+
+    prev = get_context_providers()
     try:
-        build_contexts()
-        names = _tool_names(explorer.tools)
+        create_context_providers()
+        names = _tool_names(scout.tools)
     finally:
-        update_contexts(prev)
+        update_context_providers(prev)
 
-    _assert_no_outbound(names, "Explorer")
-    _assert_has(names, ("list_contexts",), "Explorer")
+    _assert_no_outbound(names, "Scout")
+    _assert_has(names, ("list_contexts", "query_crm", "update_crm"), "Scout")
 
-
-def w2_engineer_write_shape() -> None:
-    from scout.agents.engineer import engineer
-
-    names = _tool_names(engineer.tools)
-    _assert_has(names, ("sql_tools",), "Engineer")
-    _assert_no_outbound(names, "Engineer")
+    # Scout should not hold bare SQLTools — SQL lives inside the CRM
+    # provider's sub-agents. If this regresses we lose the read/write
+    # separation the CRM provider enforces.
+    if any("run_sql_query" in n or "sql_tools" in n.lower() for n in names):
+        raise AssertionError(f"Scout has bare SQL tools; SQL must be wrapped by the CRM provider. Tool list: {names}")
 
 
-def w3_leader_no_tools() -> None:
-    from scout.team import scout
+def w2_crm_provider_surface() -> None:
+    """`DatabaseContextProvider` exposes both `query_crm` and `update_crm`."""
+    from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
+    from scout.context.database import DatabaseContextProvider
 
-    names = _tool_names(scout.tools)
-    if names:
-        raise AssertionError(f"Leader should be a pure router with no tools, got: {names}")
+    provider = DatabaseContextProvider(
+        id="crm",
+        name="CRM",
+        sql_engine=get_sql_engine(),
+        readonly_engine=get_readonly_engine(),
+        schema=SCOUT_SCHEMA,
+    )
+    tools = provider.get_tools()
+    names = _tool_names(tools)
+    _assert_has(names, ("query_crm", "update_crm"), "DatabaseContextProvider")
+
+    # The base `aupdate()` raises NotImplementedError; the CRM provider
+    # must override both `aquery` and `aupdate` — otherwise `update_crm`
+    # returns a read-only error.
+    base_aupdate = type(provider).__mro__[1].aupdate  # type: ignore[attr-defined]
+    crm_aupdate = type(provider).aupdate
+    if crm_aupdate is base_aupdate:
+        raise AssertionError(
+            "DatabaseContextProvider.aupdate is not overridden — update_crm will always return read-only"
+        )
+
+
+def w3_schema_guard_blocks_non_scout_writes() -> None:
+    """The scout engine rejects DDL/DML against `public` / `ai` at the hook.
+
+    Belt-and-suspenders on top of `search_path=scout,public`. Exercises the
+    guard directly; if a future refactor removes the before-cursor hook,
+    this check flips red immediately.
+    """
+    from sqlalchemy import text
+
+    from db import get_sql_engine
+
+    engine = get_sql_engine()
+    bad_statements = [
+        "CREATE TABLE public.pwned (id int)",
+        "INSERT INTO public.foo VALUES (1)",
+        "INSERT INTO ai.secrets VALUES (1)",
+        "DELETE FROM public.users",
+        "UPDATE ai.sessions SET deleted = true",
+    ]
+    for stmt in bad_statements:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(stmt))
+        except RuntimeError as exc:
+            if "public" not in str(exc) and "ai" not in str(exc) and "scout" not in str(exc):
+                raise AssertionError(f"Unexpected error text for {stmt!r}: {exc}") from exc
+            continue
+        except Exception as exc:
+            # Anything else (e.g. OperationalError because table missing) is
+            # NOT acceptable — the guard should fire first.
+            raise AssertionError(f"Guard didn't fire for {stmt!r}; got {type(exc).__name__}: {exc}") from exc
+        else:
+            raise AssertionError(f"Guard let through: {stmt!r}")
 
 
 def w4_context_protocol_shape() -> None:
     from scout.context.provider import ContextProvider
-    from scout.contexts import build_contexts
+    from scout.contexts import create_context_providers
 
-    for ctx in build_contexts():
+    for ctx in create_context_providers():
         if not isinstance(ctx, ContextProvider):
             raise AssertionError(f"ContextProvider {ctx.id!r} is not a subclass of ContextProvider")
         for attr in ("id", "name"):
@@ -157,17 +220,68 @@ def w5_gdrive_uses_scout_subclass() -> None:
         )
 
 
+def w6_mcp_provider_lifecycle() -> None:
+    """`MCPContextProvider` implements the lifecycle interface cleanly.
+
+    Pins the contract Scout relies on for MCP servers:
+    - exposes `query_mcp_<slug>` via `get_tools()`;
+    - `aclose` is callable and safe pre-connect (no session yet);
+    - `status()` never raises when the session hasn't connected;
+    - sync `query()` refuses (MCP is async-only).
+    """
+    import asyncio
+
+    from scout.context.mcp import MCPContextProvider
+    from scout.context.provider import ContextProvider
+
+    provider = MCPContextProvider(
+        server_name="wiring_probe",
+        transport="stdio",
+        command="echo",
+        args=["unused"],
+    )
+
+    if not isinstance(provider, ContextProvider):
+        raise AssertionError("MCPContextProvider does not subclass ContextProvider")
+
+    if provider.id != "mcp_wiring_probe":
+        raise AssertionError(f"expected id 'mcp_wiring_probe', got {provider.id!r}")
+
+    names = _tool_names(provider.get_tools())
+    if not any("query_mcp_wiring_probe" in n for n in names):
+        raise AssertionError(f"MCPContextProvider missing query_mcp_<slug> tool; saw {names}")
+
+    status = provider.status()
+    if not status.ok:
+        raise AssertionError(f"status() should not fail pre-connect: {status.detail}")
+
+    # aclose must be safe to await even though the session was never created.
+    try:
+        asyncio.run(provider.aclose())
+    except Exception as exc:
+        raise AssertionError(f"aclose() raised pre-connect: {type(exc).__name__}: {exc}") from exc
+
+    # Sync query must refuse — MCP sessions are async-only.
+    try:
+        provider.query("ping")
+    except NotImplementedError:
+        pass
+    else:
+        raise AssertionError("MCPContextProvider.query() must raise NotImplementedError")
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 
 
 CHECKS = (
-    w1_explorer_readonly,
-    w2_engineer_write_shape,
-    w3_leader_no_tools,
+    w1_scout_tool_surface,
+    w2_crm_provider_surface,
+    w3_schema_guard_blocks_non_scout_writes,
     w4_context_protocol_shape,
     w5_gdrive_uses_scout_subclass,
+    w6_mcp_provider_lifecycle,
 )
 
 

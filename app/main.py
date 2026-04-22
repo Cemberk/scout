@@ -11,10 +11,8 @@ from agno.os import AgentOS
 
 from app.router import create_router
 from db import get_postgres_db
-from scout.agents.engineer import engineer
-from scout.agents.explorer import explorer
-from scout.contexts import build_contexts
-from scout.team import scout
+from scout.contexts import close_context_providers, create_context_providers
+from scout.agent import scout
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -34,7 +32,7 @@ if SLACK_BOT_TOKEN and SLACK_SIGNING_SECRET:
 
     interfaces.append(
         Slack(
-            team=scout,
+            agent=scout,
             streaming=True,
             token=SLACK_BOT_TOKEN,
             signing_secret=SLACK_SIGNING_SECRET,
@@ -51,8 +49,11 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     from db.tables import create_tables
 
     create_tables()
-    build_contexts()
-    yield
+    create_context_providers()
+    try:
+        yield
+    finally:
+        await close_context_providers()
 
 
 # ---------------------------------------------------------------------------
@@ -66,8 +67,7 @@ agent_os = AgentOS(
     authorization=runtime_env == "prd",
     lifespan=lifespan,
     db=get_postgres_db(),
-    teams=[scout],
-    agents=[explorer, engineer],
+    agents=[scout],
     interfaces=interfaces,
     config=str(Path(__file__).parent / "config.yaml"),
 )

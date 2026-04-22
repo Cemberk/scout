@@ -36,6 +36,7 @@ class SlackContextProvider(ContextProvider):
         token: str | None = None,
         id: str = "slack",
         name: str = "Slack",
+        instructions: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
     ) -> None:
@@ -43,6 +44,7 @@ class SlackContextProvider(ContextProvider):
         self.token = token or getenv("SLACK_BOT_TOKEN") or getenv("SLACK_TOKEN")
         if not self.token:
             raise ValueError("SlackContextProvider: SLACK_BOT_TOKEN (or SLACK_TOKEN) is required")
+        self.instructions_text = instructions if instructions is not None else DEFAULT_SLACK_INSTRUCTIONS
         self._tools: SlackTools | None = None
         self._agent: Agent | None = None
 
@@ -59,20 +61,25 @@ class SlackContextProvider(ContextProvider):
         return answer_from_run(await self._ensure_agent().arun(question))
 
     def instructions(self) -> str:
-        if self.mode == ContextMode.agent:
-            return f"`{self.name}`: call `{self.query_tool_name}(question)` to search Slack."
-        return (
-            f"`{self.name}`: `search_workspace` for topic/catch-up queries across the workspace; "
-            "`get_channel_history` for latest messages in a known channel; `get_thread(channel_id, ts)` "
-            "to expand a thread; `get_channel_info` / `get_user_info` to resolve names. Read-only."
-        )
+        if self.mode == ContextMode.tools:
+            return (
+                f"`{self.name}`: `search_workspace` for topic/catch-up queries across the workspace; "
+                "`get_channel_history` for latest messages in a known channel; `get_thread(channel_id, ts)` "
+                "to expand a thread; `get_channel_info` / `get_user_info` to resolve names. Read-only."
+            )
+        return f"`{self.name}`: call `{self.query_tool_name}(question)` to search Slack."
 
     # ------------------------------------------------------------------
     # Mode resolution
     # ------------------------------------------------------------------
 
+    # Wrap in a `query_slack` sub-agent by default — seven flat SlackTools
+    # methods (`search_workspace`, `get_channel_history`, `get_thread`,
+    # `list_users`, `get_user_info`, `get_channel_info`, `list_channels`)
+    # bloat the calling agent's prompt. The sub-agent orchestrates the
+    # multi-call dance internally. mode=tools still surfaces them flat.
     def _default_tools(self) -> list:
-        return self._all_tools()
+        return [self._query_tool()]
 
     def _all_tools(self) -> list:
         return [self._ensure_tools()]
@@ -110,13 +117,13 @@ class SlackContextProvider(ContextProvider):
             name=self.name,
             role="Answer questions by searching and reading Slack",
             model=self.model,
-            instructions=_AGENT_INSTRUCTIONS,
+            instructions=self.instructions_text,
             tools=[self._ensure_tools()],
             markdown=True,
         )
 
 
-_AGENT_INSTRUCTIONS = """\
+DEFAULT_SLACK_INSTRUCTIONS = """\
 You answer questions by searching and reading Slack.
 
 Workflow:

@@ -4,7 +4,7 @@ Scout is a **context agent** — an agent that explores information sources and 
 
 Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
 
-Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, and **Google Drive**. GitHub, Gmail, Calendar, and a generic MCP wrapper land in the next release.
+Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, **Google Drive**, a **CRM** (the user's own contacts / projects / notes, stored in Postgres), and any **MCP server** (point `MCP_SERVERS` at stdio/HTTP MCP endpoints and each becomes its own `query_mcp_<slug>` tool). GitHub, Gmail, and Calendar land in the next release.
 
 ## Quick start
 
@@ -32,15 +32,11 @@ Step-by-step setup (app manifest, scopes, install flow): [docs/SLACK_CONNECT.md]
 
 ## How it works
 
-Scout is a three-role team coordinated by a Leader:
+Scout is a single agent with N context providers. One LLM hop per turn — no router, no specialists. Every source (web, files, Slack, Drive, the user's own CRM) is a `ContextProvider` that surfaces namespaced tools on Scout.
 
-- **Leader** — pure router. Routes intent to the right specialist; never holds tools itself.
-- **Explorer** — read-only question answering via the registered contexts + read-only SQL on `scout_*` tables.
-- **Engineer** — owns SQL writes into the `scout` schema (DDL + DML).
-
-> *"Find the latest benchmark numbers for model X."* → Leader routes to **Explorer** → Explorer calls `web_search`, cites sources.
+> *"Find the latest benchmark numbers for model X."* → Scout calls `web_search`, cites sources.
 >
-> *"Save that as a note."* → Leader routes to **Engineer** → Engineer `INSERT`s into `scout.scout_notes`.
+> *"Save that as a note."* → Scout calls `update_crm` → the CRM provider's write sub-agent `INSERT`s into `scout.scout_notes`.
 
 ## Contexts
 
@@ -58,8 +54,10 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 |---|---|---|
 | **`WebContextProvider`** | always on — picks a backend based on keys below | `web_search` / `web_extract` |
 | **`FilesystemContextProvider`** | always on — rooted at the scout repo (see `FS_ROOT` in [`scout/contexts.py`](scout/contexts.py)) | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` |
+| **`DatabaseContextProvider`** (CRM) | always on — Postgres via `DB_*` | `query_crm` reads the user's contacts / projects / notes; `update_crm` saves or modifies them. Two internal sub-agents so the read path never sees the write engine; writes are scoped to the `scout` schema and guarded at the engine layer. |
 | **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md). |
 | **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Scout authenticates as its own service account — share folders with the SA email to grant access. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) (or `./scripts/google_setup.sh` for the automated path). |
+| **`MCPContextProvider`** | `MCP_SERVERS` + per-slug vars | Wraps any MCP server (stdio / SSE / streamable-HTTP). One `query_mcp_<slug>` tool on Scout per slug; sub-agent instructions built dynamically from `list_tools()`. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md). |
 
 **Web backends**, first-match selection:
 
@@ -91,7 +89,7 @@ Scout writes user data to `scout_*` tables, created on first startup:
 - `scout_projects` — things in motion (`name, status, tags[]`)
 - `scout_notes` — free-form notes (`title, body, tags[], source_url`)
 
-All tables carry `id SERIAL PK`, `user_id TEXT NOT NULL`, `created_at TIMESTAMPTZ`. Engineer creates new `scout_*` tables on demand when intent doesn't fit an existing one.
+All tables carry `id SERIAL PK`, `user_id TEXT NOT NULL`, `created_at TIMESTAMPTZ`. The CRM provider's write sub-agent creates new `scout_*` tables on demand when intent doesn't fit an existing one.
 
 ## CLI
 
@@ -104,7 +102,7 @@ Host-shell invocations need `.env` loaded — `direnv allow .` once, or `set -a;
 
 ## API
 
-On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
+On top of AgentOS's defaults (`/agents/scout/runs`, `/health`):
 
 | Endpoint | Method | Purpose |
 |---|---|---|

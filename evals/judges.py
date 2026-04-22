@@ -37,12 +37,24 @@ JUDGED: tuple[Judged, ...] = (
         id="capabilities_clarity",
         prompt="What can you do? Explain in 2-3 sentences.",
         criteria=(
-            "Score 1-10. Points: "
-            "(+4) both specialists are named — Explorer, Engineer; "
-            "(+3) each specialist's role is described concretely (not generic handwaving); "
+            "Score 1-10. Scout is a single context agent — no team, no "
+            "specialists. It answers by querying its registered contexts.\n\n"
+            "The default fixture registers these contexts: Web, Slack, "
+            "Google Drive, CRM (the user's contacts/projects/notes). "
+            "A well-formed answer names some of these by category so the "
+            "user understands what Scout can actually reach. "
+            "Generic phrases like 'search the web' or 'remember notes' "
+            "count — the exact provider name isn't required.\n\n"
+            "Points: "
+            "(+3) the answer mentions READING external context (web/slack/drive "
+            "or any concrete external source) by name or clear paraphrase; "
+            "(+3) the answer mentions MEMORY / CRM — contacts, notes, projects, "
+            "or an equivalent 'remember'/'save'/'track' capability; "
             "(+2) the answer is concise (roughly 2-3 sentences, not a long essay); "
-            "(+1) the answer does NOT promise features Scout doesn't have — no wiki, "
-            "slack, gmail, drive, email sending, calendar."
+            "(+1) the answer does NOT name old specialists (no 'Explorer', no "
+            "'Engineer' as roles Scout delegates to); "
+            "(+1) the answer does NOT promise features Scout doesn't have — no "
+            "email sending, calendar, gmail, wiki, etc."
         ),
     ),
     Judged(
@@ -51,7 +63,7 @@ JUDGED: tuple[Judged, ...] = (
         criteria=(
             "Score 1-10. The stub Drive context returns exactly this string:\n"
             "\"File: 'Q4 Roadmap 2026.gdoc' (application/vnd.google-apps.document). "
-            "webViewLink: https://drive.google.com/file/d/1eval_stub/view\"\n\n"
+            'webViewLink: https://drive.google.com/file/d/1eval_stub/view"\n\n'
             "Award points for SUBSTANCE, not framing. Harmless helpfulness — "
             "confidence levels, offers to look further, caveats about only having "
             "metadata — does not cost points unless it introduces invented facts.\n\n"
@@ -61,7 +73,7 @@ JUDGED: tuple[Judged, ...] = (
             "(+3) the response includes the webViewLink or a drive.google.com URL "
             "traceable to the stub (file id `1eval_stub` or the full link); "
             "(+2) the response does NOT fabricate content beyond what the stub "
-            "returned. Stating the MIME type, calling it \"a Google Docs file\", "
+            'returned. Stating the MIME type, calling it "a Google Docs file", '
             "saying it appears to be a Q4 roadmap by filename, or offering to do "
             "follow-up work are all fine. Deduct only for invented authors, made-up "
             "body text, or details that contradict or extend the stub; "
@@ -70,16 +82,14 @@ JUDGED: tuple[Judged, ...] = (
         ),
     ),
     Judged(
-        id="leader_concise_write_ack",
+        id="scout_concise_write_ack",
         prompt=(
-            "For user 'eval-user-42', save a note titled 'ship status' with "
-            "body 'API release slipping to next week'."
+            "For user 'eval-user-42', save a note titled 'ship status' with body 'API release slipping to next week'."
         ),
         criteria=(
             "Score 1-10. This is a write — the user wants a short "
-            "acknowledgment, not a debrief. Scout delegates to Engineer, "
-            "Engineer runs SQL, and the final response should be a short "
-            "confirmation.\n\n"
+            "acknowledgment, not a debrief. Scout calls update_crm and "
+            "the final response should be a short confirmation.\n\n"
             "Echoing DB-assigned fields that come out of the INSERT (the "
             "SERIAL id, created_at timestamp, or the schema name like "
             "'scout.scout_notes') is NOT fabrication — those are facts the "
@@ -98,6 +108,39 @@ JUDGED: tuple[Judged, ...] = (
             "the target shape, NOT padding; "
             "(+1) no fabricated facts — no invented project status, owner, "
             "or follow-up commitment beyond what the user provided."
+        ),
+    ),
+    Judged(
+        id="crm_query_quality",
+        prompt=(
+            "For user 'eval-judge-crm', save a note titled 'judge-probe' "
+            "with body 'this is the body the judge is looking for'. Then, "
+            "in the same turn, list the notes the user has saved so far."
+        ),
+        criteria=(
+            "Score 1-10. This combines a write and a read through the CRM "
+            "provider. Scout should call update_crm, then query_crm, and "
+            "report back.\n\n"
+            "The judge-probe note gets inserted into scout.scout_notes with "
+            "user_id='eval-judge-crm', title='judge-probe', body='this is "
+            "the body the judge is looking for'. The list-back should "
+            "surface that row. Note: this user may have MORE notes from "
+            "prior test runs — the user_id is reused across the 5-run "
+            "sweep. Extra historical rows in the list are NOT fabrication; "
+            "they are real data.\n\n"
+            "Points: "
+            "(+4) the write is confirmed (Scout says it saved / stored / "
+            "added the note, mentioning 'judge-probe' or the body text); "
+            "(+3) the list-back includes a row titled 'judge-probe' — "
+            "proves the read path works and the new row is visible; "
+            "(+2) no fabricated columns — Scout doesn't invent columns "
+            "(owner, author, tags that weren't set) or hallucinate values "
+            "that aren't in the DB. Historical rows with real titles from "
+            "prior runs DO NOT count as fabrication; only made-up content "
+            "does; "
+            "(+1) the response is focused — a write confirmation + a short "
+            "list. No capability menus, no 'I can also search slack' "
+            "follow-ups, no multi-provider fan-out."
         ),
     ),
     Judged(
@@ -130,23 +173,48 @@ JUDGED: tuple[Judged, ...] = (
         fixture="slack_threaded",
     ),
     Judged(
-        id="multi_provider_citation_quality",
-        prompt=(
-            "What do we know about the Q4 roadmap? Check Slack and Drive, "
-            "and cite your sources distinctly."
+        id="mcp_citation_quality",
+        prompt="Look up Jira issue ABC-123 via MCP and tell me what it is.",
+        criteria=(
+            "Score 1-10. The MCP Jira stub returns exactly this string:\n"
+            "\"Issue ABC-123: summary='Fix login bug on Safari', "
+            "status='In Progress', assignee='alice@example.com', "
+            "updated='2026-04-10T14:22:00Z'. "
+            'URL: https://example.atlassian.net/browse/ABC-123"\n\n'
+            "A well-formed answer routes through query_mcp_jira, cites the "
+            "fields verbatim, and doesn't invent content the stub didn't "
+            "return (no extra comments, no speculation about cause, no "
+            "made-up reporters or priorities).\n\n"
+            "Points: "
+            "(+3) the response names the issue key 'ABC-123' and the "
+            "summary 'Fix login bug on Safari' (any faithful rewording "
+            "is fine); "
+            "(+3) the response includes the status 'In Progress' AND the "
+            "assignee 'alice@example.com' (or the full URL); "
+            "(+2) no fabricated fields — no invented reporter, priority, "
+            "component, or description beyond what the stub returned. "
+            "Harmless helpfulness (offering to run a JQL search, noting "
+            "the URL can be opened) is fine; "
+            "(+2) the Jira source is clearly cited (the issue key, the URL, "
+            "or a label like 'Jira'/'MCP Jira') rather than blended into "
+            "prose that obscures provenance."
         ),
+    ),
+    Judged(
+        id="multi_provider_citation_quality",
+        prompt=("What do we know about the Q4 roadmap? Check Slack and Drive, and cite your sources distinctly."),
         criteria=(
             "Score 1-10. The stub contexts return exactly these strings:\n"
             "Slack → \"From #eng-roadmap (U07EVAL): 'Q4 roadmap finalized for "
             "2026-03-11'. Permalink: https://example.slack.com/archives/C07EVAL/p1712345000\"\n"
             "Drive → \"File: 'Q4 Roadmap 2026.gdoc' (application/vnd.google-apps.document). "
-            "webViewLink: https://drive.google.com/file/d/1eval_stub/view\"\n\n"
-            "The Slack quote the agent surfaces is literally \"Q4 roadmap finalized for "
-            "2026-03-11\" — accept that phrasing (and minor rewordings like "
+            'webViewLink: https://drive.google.com/file/d/1eval_stub/view"\n\n'
+            'The Slack quote the agent surfaces is literally "Q4 roadmap finalized for '
+            '2026-03-11" — accept that phrasing (and minor rewordings like '
             "\"finalized 2026-03-11\") as faithful. The user id 'U07EVAL' is in the "
             "stub, so echoing it isn't fabrication.\n\n"
             "Award points for SUBSTANCE, not framing. Harmless helpfulness — "
-            "confidence levels, caveats, offers of follow-up, \"bottom line\" "
+            'confidence levels, caveats, offers of follow-up, "bottom line" '
             "sections — does not cost points unless it introduces invented facts.\n\n"
             "Points: "
             "(+3) both sources are cited and clearly distinguished (not blended "
@@ -183,7 +251,7 @@ def run_judged(case: Judged) -> JudgedResult:
     """Run one judged case."""
     import uuid
 
-    from scout.team import scout as team
+    from scout.agent import scout as team
 
     prev = install_fixture(build_fixture(case.fixture))
 

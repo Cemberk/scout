@@ -31,11 +31,13 @@ class FilesystemContextProvider(ContextProvider):
         *,
         id: str = "fs",
         name: str = "Filesystem",
+        instructions: str | None = None,
         mode: ContextMode = ContextMode.default,
         model: Model | None = None,
     ) -> None:
         super().__init__(id=id, name=name, mode=mode, model=model)
         self.root = Path(root).expanduser().resolve()
+        self.instructions_text = instructions if instructions is not None else DEFAULT_FS_INSTRUCTIONS
         self._agent: Agent | None = None
 
     def status(self) -> Status:
@@ -55,20 +57,25 @@ class FilesystemContextProvider(ContextProvider):
         return answer_from_run(await self._ensure_agent().arun(question))
 
     def instructions(self) -> str:
-        if self.mode == ContextMode.agent:
-            return f"`{self.name}`: call `{self.query_tool_name}(question)` to query files under {self.root}."
-        return (
-            f"`{self.name}`: browse files under {self.root}. Use `list_files` / `search_files` "
-            "(glob) / `search_content` (text search) / `read_file` / `read_file_chunk`. "
-            "Paths are relative to the root."
-        )
+        if self.mode == ContextMode.tools:
+            return (
+                f"`{self.name}`: browse files under {self.root}. Use `list_files` / `search_files` "
+                "(glob) / `search_content` (text search) / `read_file` / `read_file_chunk`. "
+                "Paths are relative to the root."
+            )
+        return f"`{self.name}`: call `{self.query_tool_name}(question)` to query files under {self.root}."
 
     # ------------------------------------------------------------------
     # Mode resolution
     # ------------------------------------------------------------------
 
+    # Wrap in a `query_fs` sub-agent because `FileTools` exposes
+    # `list_files` / `search_files` / `read_file` — names that collide with
+    # `GoogleDriveTools`, and agno's tool resolver dedupes by name across
+    # the whole list (silently dropping the second toolkit). mode=tools
+    # only works when FS is the sole file-like provider.
     def _default_tools(self) -> list:
-        return self._all_tools()
+        return [self._query_tool()]
 
     def _all_tools(self) -> list:
         return [_build_file_tools(self.root)]
@@ -88,7 +95,7 @@ class FilesystemContextProvider(ContextProvider):
             name=self.name,
             role="Answer questions by browsing files under a local root",
             model=self.model,
-            instructions=_AGENT_INSTRUCTIONS.format(root=self.root),
+            instructions=self.instructions_text.replace("{root}", str(self.root)),
             tools=[_build_file_tools(self.root)],
             markdown=True,
         )
@@ -108,7 +115,7 @@ def _build_file_tools(root: Path) -> FileTools:
     )
 
 
-_AGENT_INSTRUCTIONS = """\
+DEFAULT_FS_INSTRUCTIONS = """\
 You answer questions by browsing files under {root}.
 
 Workflow:

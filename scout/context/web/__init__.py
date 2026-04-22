@@ -1,3 +1,3 @@
-from scout.context.web.provider import WebContextProvider
+from scout.context.web.provider import DEFAULT_WEB_INSTRUCTIONS, WebContextProvider
 
-__all__ = ["WebContextProvider"]
+__all__ = ["DEFAULT_WEB_INSTRUCTIONS", "WebContextProvider"]
