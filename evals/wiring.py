@@ -6,6 +6,7 @@ Checks:
     W3  Schema guard rejects DDL/DML targeting `public`/`ai` on the scout engine.
     W4  Every registered `ContextProvider` has the expected shape.
     W5  GDrive provider uses `ScoutGoogleDriveTools`, not bare `GoogleDriveTools`.
+    W6  `MCPContextProvider` implements the lifecycle interface cleanly.
 
 Each check is a function that returns None on PASS and raises
 ``AssertionError`` on FAIL. Zero LLM, zero network — runs in under a second.
@@ -212,6 +213,60 @@ def w5_gdrive_uses_scout_subclass() -> None:
         )
 
 
+def w6_mcp_provider_lifecycle() -> None:
+    """`MCPContextProvider` implements the lifecycle interface cleanly.
+
+    Pins the contract Scout relies on for MCP servers:
+    - exposes `query_mcp_<slug>` via `get_tools()`;
+    - `aclose` is callable and safe pre-connect (no session yet);
+    - `status()` never raises when the session hasn't connected;
+    - sync `query()` refuses (MCP is async-only).
+    """
+    import asyncio
+
+    from scout.context.mcp import MCPContextProvider
+    from scout.context.provider import ContextProvider
+
+    provider = MCPContextProvider(
+        server_name="wiring_probe",
+        transport="stdio",
+        command="echo",
+        args=["unused"],
+    )
+
+    if not isinstance(provider, ContextProvider):
+        raise AssertionError("MCPContextProvider does not subclass ContextProvider")
+
+    if provider.id != "mcp_wiring_probe":
+        raise AssertionError(
+            f"expected id 'mcp_wiring_probe', got {provider.id!r}"
+        )
+
+    names = _tool_names(provider.get_tools())
+    if not any("query_mcp_wiring_probe" in n for n in names):
+        raise AssertionError(
+            f"MCPContextProvider missing query_mcp_<slug> tool; saw {names}"
+        )
+
+    status = provider.status()
+    if not status.ok:
+        raise AssertionError(f"status() should not fail pre-connect: {status.detail}")
+
+    # aclose must be safe to await even though the session was never created.
+    try:
+        asyncio.run(provider.aclose())
+    except Exception as exc:
+        raise AssertionError(f"aclose() raised pre-connect: {type(exc).__name__}: {exc}") from exc
+
+    # Sync query must refuse — MCP sessions are async-only.
+    try:
+        provider.query("ping")
+    except NotImplementedError:
+        pass
+    else:
+        raise AssertionError("MCPContextProvider.query() must raise NotImplementedError")
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -223,6 +278,7 @@ CHECKS = (
     w3_schema_guard_blocks_non_scout_writes,
     w4_context_protocol_shape,
     w5_gdrive_uses_scout_subclass,
+    w6_mcp_provider_lifecycle,
 )
 
 
