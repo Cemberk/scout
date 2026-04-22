@@ -68,7 +68,7 @@ MCPContextProvider(
 
 `tools` flattens the server's tools onto Scout directly. Cheaper (no extra hops) and simpler. Right when the server has few, distinctively-named tools (e.g. `get_current_time`) — Scout can route perfectly well with no help.
 
-`mode=tools` MCP sessions are pre-warmed in the app lifespan so the toolkit's `functions` dict is populated before Scout's agent pulls its tool list.
+MCP sessions connect on startup (via `asetup()` on the lifespan task), regardless of mode. That's required for `mode=tools` to see the server's functions, and it keeps the `mcp` SDK's anyio cancel scope on the same task that `aclose()` will exit on.
 
 ### stdio executables
 

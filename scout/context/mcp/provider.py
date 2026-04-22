@@ -124,25 +124,33 @@ class MCPContextProvider(ContextProvider):
             except Exception as exc:
                 log_warning(f"MCPContextProvider[{self.id}]: close() raised {type(exc).__name__}: {exc}")
 
-    async def aprewarm(self) -> None:
-        """Connect the MCP session when ``mode=tools``.
+    async def asetup(self) -> None:
+        """Connect the MCP session in the lifespan task.
 
-        ``mode=tools`` hands the raw ``MCPTools`` toolkit to the calling
-        agent via ``get_tools()`` (which is sync). Without a prior
-        ``_connect()``, the toolkit's ``functions`` dict is empty and
-        the agent sees no tools. The lifespan awaits this on startup.
+        Two reasons this runs at startup, regardless of ``mode``:
 
-        ``mode=default`` (sub-agent wrap) stays lazy — the sub-agent
-        connects on first ``aquery()``.
+        1. ``mode=tools`` hands the raw ``MCPTools`` toolkit to the
+           calling agent via sync ``get_tools()``. Without a prior
+           ``_connect()``, the toolkit's ``functions`` dict is empty
+           and the agent sees no tools.
+        2. Task affinity. The ``mcp`` SDK uses ``anyio`` cancel scopes
+           that must be entered and exited on the same task. If we
+           connect lazily from a request handler task, ``aclose()``
+           from the lifespan task will raise
+           "Attempted to exit cancel scope in a different task".
+           Connecting in the lifespan keeps open + close in the same
+           task.
+
+        Connection failures are logged and swallowed — the provider
+        can retry on the next call. ``status()`` will surface the
+        failure to health checks.
         """
-        if self.mode != ContextMode.tools:
-            return
         try:
             await self._ensure_session()
         except Exception as exc:
             log_warning(
-                f"MCPContextProvider[{self.id}]: prewarm failed — "
-                f"{type(exc).__name__}: {exc}. Tools will not be visible until reconnect."
+                f"MCPContextProvider[{self.id}]: setup failed — "
+                f"{type(exc).__name__}: {exc}. Provider will retry on next call."
             )
 
     def instructions(self) -> str:

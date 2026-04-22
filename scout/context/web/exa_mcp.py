@@ -14,6 +14,8 @@ from __future__ import annotations
 from os import getenv
 from typing import Any
 
+from agno.utils.log import log_warning
+
 from scout.context.backend import ContextBackend
 from scout.context.provider import Status
 
@@ -40,7 +42,42 @@ class ExaMCPBackend(ContextBackend):
 
     def get_tools(self) -> list:
         if self._mcp_tools is None:
-            from agno.tools.mcp import MCPTools
-
-            self._mcp_tools = MCPTools(url=self.url, transport="streamable-http")
+            self._mcp_tools = self._build_tools()
         return [self._mcp_tools]
+
+    def _build_tools(self) -> Any:
+        from agno.tools.mcp import MCPTools
+
+        return MCPTools(url=self.url, transport="streamable-http")
+
+    async def asetup(self) -> None:
+        """Connect the MCP session on the lifespan task.
+
+        Without a connect, ``MCPTools.functions`` is empty and the
+        sub-agent sees no tools. Also: the ``mcp`` SDK's anyio cancel
+        scopes must exit on the task that entered them — connecting
+        here (lifespan task) matches where ``aclose()`` runs.
+        """
+        if self._mcp_tools is None:
+            self._mcp_tools = self._build_tools()
+        if getattr(self._mcp_tools, "initialized", False):
+            return
+        try:
+            await self._mcp_tools._connect()
+        except Exception as exc:
+            log_warning(
+                f"ExaMCPBackend setup failed — {type(exc).__name__}: {exc}. "
+                "Web backend will be unavailable until restart."
+            )
+            self._mcp_tools = None
+
+    async def aclose(self) -> None:
+        """Close the MCP session and drop cached state."""
+        tools = self._mcp_tools
+        self._mcp_tools = None
+        if tools is None:
+            return
+        try:
+            await tools.close()
+        except Exception as exc:
+            log_warning(f"ExaMCPBackend close raised {type(exc).__name__}: {exc}")

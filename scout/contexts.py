@@ -130,21 +130,25 @@ async def close_context_providers() -> None:
             log_warning(f"context {provider.id!r} aclose raised {type(outcome).__name__}: {outcome}")
 
 
-async def prewarm_context_providers() -> None:
+async def setup_context_providers() -> None:
     """Eagerly initialize providers that need async setup before
-    ``get_tools()`` returns usable tools (e.g. ``mode=tools`` MCP servers
-    whose function list is only populated after ``_connect()``).
+    ``get_tools()`` returns usable tools (e.g. MCP sessions whose
+    function list is only populated after ``_connect()``).
+
+    Runs on the lifespan task so that MCP providers' open + close
+    happen in the same task (the ``mcp`` SDK's anyio cancel scopes
+    require it).
     """
     providers = list(get_context_providers())
     if not providers:
         return
     results = await asyncio.gather(
-        *(p.aprewarm() for p in providers),
+        *(p.asetup() for p in providers),
         return_exceptions=True,
     )
     for provider, outcome in zip(providers, results, strict=True):
         if isinstance(outcome, BaseException):
-            log_warning(f"context {provider.id!r} aprewarm raised {type(outcome).__name__}: {outcome}")
+            log_warning(f"context {provider.id!r} asetup raised {type(outcome).__name__}: {outcome}")
 
 
 def _create_web_provider() -> WebContextProvider:

@@ -131,15 +131,15 @@ class ContextProvider(ABC):
         """
         return None
 
-    async def aprewarm(self) -> None:
-        """Eagerly prepare any state that ``get_tools()`` depends on.
-        Default: no-op.
+    async def asetup(self) -> None:
+        """Eagerly prepare any state the provider needs. Default: no-op.
 
-        Override in subclasses where ``mode=tools`` returns a toolkit
-        that needs async initialization before its functions are
-        callable (e.g. an MCP session that only populates its tool list
-        after ``_connect()``). The app lifespan awaits ``aprewarm()``
-        across every registered provider on startup.
+        Override in subclasses that need async initialization —
+        connecting an MCP session, opening a watch stream, priming a
+        cache. The app lifespan awaits ``asetup()`` across every
+        registered provider on startup. Paired with ``aclose()``.
+
+        Must be safe to call multiple times (idempotent).
         """
         return None
 
