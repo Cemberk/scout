@@ -61,9 +61,10 @@ Both Slack env vars must be set for the interface to light up; otherwise `interf
 scout/
 ├── __init__.py
 ├── __main__.py                     # CLI: chat | contexts
-├── team.py                         # Single `scout` Agent (kept filename for import stability)
+├── agent.py                        # The single `scout` Agent
+├── instructions.py                 # Scout-tuned prompts: SCOUT_INSTRUCTIONS + CRM read/write
 ├── settings.py                     # Runtime objects: agent_db + default_model() factory
-├── contexts.py                     # create/get/update_context_providers + list_contexts tool + status row helpers
+├── contexts.py                     # create/get/update/close_context_providers + list_contexts tool + status row helpers
 └── context/                        # The library — ships to agno.context
     ├── __init__.py
     ├── _utils.py                   # answer_from_run
@@ -251,7 +252,7 @@ Every external source subclasses `ContextProvider` (in `scout/context/provider.p
 
 ```python
 from db import db_url, get_postgres_db, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
-from scout.team import scout
+from scout.agent import scout
 from scout.settings import agent_db
 from scout.contexts import create_context_providers, get_context_providers, update_context_providers, list_contexts, status_row, astatus_row
 from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status

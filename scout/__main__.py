@@ -23,7 +23,7 @@ def main() -> None:
         print(json.dumps(asyncio.run(_contexts_rows()), indent=2))
         return
 
-    from scout.team import scout
+    from scout.agent import scout
 
     scout.cli_app(stream=True)
 

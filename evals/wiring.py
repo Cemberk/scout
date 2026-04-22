@@ -104,7 +104,7 @@ def w1_scout_tool_surface() -> None:
         get_context_providers,
         update_context_providers,
     )
-    from scout.team import scout
+    from scout.agent import scout
 
     prev = get_context_providers()
     try:

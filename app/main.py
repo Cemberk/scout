@@ -12,7 +12,7 @@ from agno.os import AgentOS
 from app.router import create_router
 from db import get_postgres_db
 from scout.contexts import close_context_providers, create_context_providers
-from scout.team import scout
+from scout.agent import scout
 
 # ---------------------------------------------------------------------------
 # Environment

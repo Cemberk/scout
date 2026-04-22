@@ -370,7 +370,7 @@ class TurnResult:
 def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], float, list[TurnResult]]:
     import uuid
 
-    from scout.team import scout as team
+    from scout.agent import scout as team
 
     # Fresh session per case so prior runs' history doesn't leak in. agno
     # reuses session_id when not passed, and the team runs with

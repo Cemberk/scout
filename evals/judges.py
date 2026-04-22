@@ -251,7 +251,7 @@ def run_judged(case: Judged) -> JudgedResult:
     """Run one judged case."""
     import uuid
 
-    from scout.team import scout as team
+    from scout.agent import scout as team
 
     prev = install_fixture(build_fixture(case.fixture))
 

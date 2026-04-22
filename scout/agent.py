@@ -33,7 +33,6 @@ def scout_tools() -> list:
 scout = Agent(
     id="scout",
     name="Scout",
-    role="Enterprise context agent",
     model=default_model(),
     db=agent_db,
     instructions=SCOUT_INSTRUCTIONS,

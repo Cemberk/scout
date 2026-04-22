@@ -32,7 +32,7 @@ Run wiring first — it catches structural regressions fastest. `--case <id>` na
 1. Run each tier. Note every FAIL / ERROR.
 2. Re-run failures with `--case <id> --verbose`.
 3. Diagnose one of three:
-   - **Agent bug** → fix instructions in `scout/team.py` (Scout's top-level prompt) or `scout/context/**/*.py` (a provider sub-agent's prompt).
+   - **Agent bug** → fix instructions in `scout/instructions.py` (Scout's top-level prompt + tuned CRM prompts) or `scout/context/**/*.py` (a provider sub-agent's prompt).
    - **Stale assertion** → edit the case; commit note explains why.
    - **Runner bug** (a whole class of cases fails with the same error) → fix `evals/runner.py` or `evals/wiring.py`.
 4. Confirm green. Commit. One fix per commit.
