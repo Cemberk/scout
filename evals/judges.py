@@ -102,13 +102,19 @@ class JudgedResult:
 
 def run_judged(case: Judged) -> JudgedResult:
     """Run one judged case."""
+    import uuid
+
     from scout.team import scout as team
 
     prev = install_fixture(build_fixture(case.fixture))
 
     start = time.monotonic()
     try:
-        run_result = asyncio.run(team.arun(case.prompt))
+        # Fresh session per case so prior runs' history doesn't leak in.
+        # Team has `add_history_to_context=True, num_history_runs=5`, and
+        # agno reuses session_id when not passed — causing cross-case drift.
+        session_id = f"eval-judge-{case.id}-{uuid.uuid4().hex[:8]}"
+        run_result = asyncio.run(team.arun(case.prompt, session_id=session_id))
         response = getattr(run_result, "content", None) or ""
         duration = time.monotonic() - start
 

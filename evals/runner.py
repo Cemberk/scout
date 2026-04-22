@@ -130,10 +130,17 @@ def _stub_context(ctx_id: str, display_name: str, answer_text: str):
 
 
 def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], float]:
+    import uuid
+
     from scout.team import scout as team
 
+    # Fresh session per case so prior runs' history doesn't leak in. agno
+    # reuses session_id when not passed, and the team runs with
+    # `add_history_to_context=True` — cross-case state made judges tier
+    # flake until this was pinned.
+    session_id = f"eval-{case.id}-{uuid.uuid4().hex[:8]}"
     start = time.monotonic()
-    result = asyncio.run(team.arun(case.prompt))
+    result = asyncio.run(team.arun(case.prompt, session_id=session_id))
     duration = time.monotonic() - start
 
     content = getattr(result, "content", None) or ""
