@@ -48,11 +48,11 @@ Run wiring first — it catches structural regressions fastest. `--case <id>` na
 | Scout refuses when a tool-call is expected | Prompt stacks safety triggers | Strip loaded phrases ("API keys", "just do it") |
 | `expected_tools=("query_web",)` but run used `web_search` | Case stub-shaped | Use substring `("web",)` |
 | `Async function X can't be used with synchronous agent.run()` across many cases | Runner regressed to sync | Ensure `_run_in_process` uses `asyncio.run(scout.arun(...))` |
-| Read-only agent got a writer tool | Code wrong | Fix `tools=` in `scout/agents/<name>.py` |
+| Read-only agent got a writer tool | Code wrong | Fix `tools=` in `scout/agent.py` (Scout) or `scout/context/<kind>/provider.py` (provider sub-agents) |
 
 ## Out of scope — flag, don't fix
 
-Adding new agents/tools, changing `ContextProvider`, changing team shape, dropping cases to turn green, re-adding removed features (Doctor, LearningMachine, ReasoningTools, introspect).
+Adding new providers, changing `ContextProvider`, changing Scout's tool surface, dropping cases to turn green.
 
 **Flagging:** append to `tmp/flagged.md` with `## <case_id>` + symptom + why out-of-scope. Move on; don't get stuck. Exit non-zero if `tmp/flagged.md` gained entries this run.
 

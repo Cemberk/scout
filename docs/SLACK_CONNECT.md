@@ -153,7 +153,7 @@ Scout uses [Agno's Slack interface](https://docs.agno.com/deploy/interfaces/slac
 from agno.os.interfaces.slack import Slack
 
 Slack(
-    team=scout,
+    agent=scout,
     token=SLACK_BOT_TOKEN,
     signing_secret=SLACK_SIGNING_SECRET,
     resolve_user_identity=True,

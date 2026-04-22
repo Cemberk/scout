@@ -23,6 +23,7 @@ Each invariant is a function that returns `None` on PASS and raises `AssertionEr
 - `W3` The scout engine's `before_cursor_execute` hook rejects DDL/DML against `public` / `ai`.
 - `W4` Every registered `ContextProvider` has the expected shape (`id`/`name` + `query`/`status`/`get_tools`/`instructions`).
 - `W5` `GDriveContextProvider` uses `ScoutGoogleDriveTools` (the shared-drive-aware subclass).
+- `W6` `MCPContextProvider` implements the lifecycle interface cleanly — exposes `query_mcp_<slug>`, `aclose` is safe pre-connect, `status()` doesn't raise when unconnected, sync `query()` refuses (MCP is async-only).
 
 ```bash
 python -m evals wiring          # exits 0 on PASS, non-zero on FAIL

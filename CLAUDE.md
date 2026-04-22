@@ -232,6 +232,7 @@ Scout and every provider sub-agent run on `OpenAIResponses(id="gpt-5.4")` via `a
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
+| `AGENTOS_URL` | No | Scheduler base URL; defaults to `http://127.0.0.1:8000`. |
 
 ## Conventions
 

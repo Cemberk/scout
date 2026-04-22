@@ -121,6 +121,8 @@ On top of AgentOS's defaults (`/agents/scout/runs`, `/health`):
 | `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |
 | `DB_*` | No | Postgres (compose defaults work) |
+| `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
+| `AGENTOS_URL` | No | Scheduler base URL. Defaults to `http://127.0.0.1:8000`. |
 
 Full list in [`example.env`](example.env).
 
