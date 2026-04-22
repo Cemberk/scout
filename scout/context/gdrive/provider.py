@@ -87,13 +87,19 @@ class GDriveContextProvider(ContextProvider):
     # Mode resolution
     # ------------------------------------------------------------------
     #
-    # Default mode wraps the Drive toolkit behind a `query_gdrive` sub-agent
+    # `_default_tools` wraps the Drive toolkit behind a `query_gdrive` sub-agent
     # because `GoogleDriveTools` exposes `list_files` / `search_files` /
     # `read_file` — names that collide with `FileTools` when both are loaded
     # on the same agent. agno's tool resolver dedupes by name across the
     # whole list and drops the second occurrence, silently losing Drive.
     # The sub-agent namespaces everything under one `query_<id>` tool.
     # Use mode=tools only when Drive is the sole file-like provider.
+
+    def _default_tools(self) -> list:
+        # One namespaced `query_gdrive` tool backed by the sub-agent built
+        # in `_build_agent()`. See the comment block above for why we don't
+        # expose the Drive toolkit directly in default mode.
+        return [self._query_tool()]
 
     def _all_tools(self) -> list:
         return [self._ensure_tools()]
