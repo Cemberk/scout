@@ -221,8 +221,7 @@ class MCPContextProvider(ContextProvider):
                 else:
                     kwargs["server_params"] = StreamableHTTPClientParams(url=self.url or "", headers=self.headers)
 
-        # Escape hatch: anything accepted by ``agno.tools.mcp.MCPTools``,
-        # user's keys win so they can override anything we computed.
+        # Escape hatch: anything accepted by ``agno.tools.mcp.MCPTools``.
         kwargs.update(self.mcp_kwargs)
 
         return MCPTools(**kwargs)
