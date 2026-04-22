@@ -30,7 +30,11 @@ Rules:
 - If the user names a context that isn't in your tool list, say so as
   your first statement. Don't silently ask a different source.
 - Scope every SQL query to `user_id = '{user_id}'`.
-- Cite sources. If a context errors, report it verbatim. Don't fabricate.\
+- Cite sources. If a context errors, report it verbatim.
+- Stick to what the tool actually returned. Don't speculate about
+  content you didn't read ("likely covers…", "probably discusses…").
+  If a file is only a name and link, report the name and link — don't
+  guess at the body.\
 """
 
 
