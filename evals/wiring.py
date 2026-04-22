@@ -123,9 +123,16 @@ def w1_scout_tool_surface() -> None:
 
 def w2_crm_provider_surface() -> None:
     """`DatabaseContextProvider` exposes both `query_crm` and `update_crm`."""
+    from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
     from scout.context.database import DatabaseContextProvider
 
-    provider = DatabaseContextProvider()
+    provider = DatabaseContextProvider(
+        id="crm",
+        name="CRM",
+        sql_engine=get_sql_engine(),
+        readonly_engine=get_readonly_engine(),
+        schema=SCOUT_SCHEMA,
+    )
     tools = provider.get_tools()
     names = _tool_names(tools)
     _assert_has(names, ("query_crm", "update_crm"), "DatabaseContextProvider")

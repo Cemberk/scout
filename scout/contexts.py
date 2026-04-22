@@ -15,6 +15,7 @@ from pathlib import Path
 from agno.tools import tool
 from agno.utils.log import log_info, log_warning
 
+from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
 from scout.context.database import DatabaseContextProvider
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
@@ -118,7 +119,14 @@ def _build_filesystem() -> FilesystemContextProvider:
 
 
 def _build_database() -> DatabaseContextProvider:
-    return DatabaseContextProvider(model=default_model())
+    return DatabaseContextProvider(
+        id="crm",
+        name="CRM",
+        sql_engine=get_sql_engine(),
+        readonly_engine=get_readonly_engine(),
+        schema=SCOUT_SCHEMA,
+        model=default_model(),
+    )
 
 
 def _build_slack() -> SlackContextProvider | None:

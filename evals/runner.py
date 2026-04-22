@@ -61,10 +61,18 @@ MCP_JIRA_STUB_TEXT = (
 
 def _real_crm() -> Any:
     """Real `DatabaseContextProvider` — writes land in the scout schema."""
+    from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
     from scout.context.database import DatabaseContextProvider
     from scout.settings import default_model
 
-    return DatabaseContextProvider(model=default_model())
+    return DatabaseContextProvider(
+        id="crm",
+        name="CRM",
+        sql_engine=get_sql_engine(),
+        readonly_engine=get_readonly_engine(),
+        schema=SCOUT_SCHEMA,
+        model=default_model(),
+    )
 
 
 def build_fixture(name: str) -> list[Any]:
