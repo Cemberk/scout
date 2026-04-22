@@ -156,7 +156,30 @@ CASES: tuple[Case, ...] = (
         ),
         # Writes go through the namespaced update tool now.
         expected_tools=("update_crm",),
-        forbidden_tools=("query_web", "query_slack", "query_gdrive"),
+        max_duration_s=180,
+    ),
+    Case(
+        id="scout_recall_contact",
+        # Confirms the read-path works on the contacts table (scout_save_note
+        # already covers the notes round-trip). Uses a pre-seeded fixture user
+        # so the case isn't order-dependent — we save a contact in turn 1 and
+        # read it back in turn 2 within the same session.
+        prompt=(
+            "For user 'eval-recall-contact-42', save a new contact: name "
+            "'Recall Target', email 'recall@example.com', tag 'eval'."
+        ),
+        expected_tools=("update_crm",),
+        followups=(
+            FollowUp(
+                prompt=(
+                    "For user 'eval-recall-contact-42', list any contacts "
+                    "tagged 'eval'."
+                ),
+                response_contains=("Recall Target",),
+                expected_tools=("query_crm",),
+                forbidden_tools=("query_web", "query_slack", "query_gdrive"),
+            ),
+        ),
         max_duration_s=180,
     ),
     Case(
