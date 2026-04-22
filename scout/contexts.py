@@ -175,14 +175,13 @@ def _create_mcp_providers() -> list[MCPContextProvider]:
     ``docs/MCP_CONNECT.md``.
     """
     return [
-        # MCPContextProvider(
-        #     server_name="linear",
-        #     transport="stdio",
-        #     command="npx",
-        #     args=["-y", "@linear/mcp"],
-        #     env={"LINEAR_API_KEY": getenv("LINEAR_API_KEY", "")},
-        #     model=default_model(),
-        # ),
+        MCPContextProvider(
+            server_name="time",
+            transport="stdio",
+            command="uvx",
+            args=["mcp-server-time"],
+            model=default_model(),
+        ),
     ]
 
 
