@@ -8,6 +8,7 @@ Slack and Google Drive light up when their env vars are set.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from os import getenv
 from pathlib import Path
@@ -187,6 +188,25 @@ def get_context_providers() -> list[ContextProvider]:
 def update_context_providers(new_providers: list[ContextProvider]) -> None:
     """Swap the cached provider list in place. Used by eval fixtures."""
     context_providers[:] = new_providers
+
+
+async def close_context_providers() -> None:
+    """Release resources held by every cached provider.
+
+    Providers that hold resources (MCP sessions, watch streams) override
+    `aclose()`; the base class default is a no-op. `return_exceptions=True`
+    so one stuck teardown can't block others on the way down.
+    """
+    providers = list(get_context_providers())
+    if not providers:
+        return
+    results = await asyncio.gather(
+        *(p.aclose() for p in providers),
+        return_exceptions=True,
+    )
+    for provider, outcome in zip(providers, results, strict=True):
+        if isinstance(outcome, BaseException):
+            log_warning(f"context {provider.id!r} aclose raised {type(outcome).__name__}: {outcome}")
 
 
 def _create_web_provider() -> WebContextProvider:
