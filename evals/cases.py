@@ -96,9 +96,12 @@ CASES: tuple[Case, ...] = (
     ),
     Case(
         id="explorer_multi_provider",
+        # Explicit tool-calling verbs ("Search … and query …") so the Leader
+        # doesn't try to answer from chat history on a softer "what do we know"
+        # phrasing. This case was flaky with softer phrasing.
         prompt=(
-            "Summarize what we know about the Q4 roadmap from both Slack and "
-            "Google Drive; cite each source."
+            "Search our Slack workspace and query Google Drive for Q4 roadmap "
+            "references. Report what each source says and cite both."
         ),
         expected_agent="explorer",
         expected_tools=("query_gdrive", "slack"),
