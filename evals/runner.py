@@ -47,6 +47,16 @@ FS_STUB_TEXT = (
     "File: docs/EVALS.md (under /app). Contains the 3-tier eval overview — "
     "wiring, behavioral, judges. Path relative to root."
 )
+MCP_JIRA_STUB_TOOLS = (
+    {"name": "get_issue", "description": "Fetch one issue by key."},
+    {"name": "search_issues", "description": "JQL search across issues."},
+    {"name": "list_projects", "description": "List accessible projects."},
+)
+MCP_JIRA_STUB_TEXT = (
+    "Issue ABC-123: summary='Fix login bug on Safari', status='In Progress', "
+    "assignee='alice@example.com', updated='2026-04-10T14:22:00Z'. "
+    "URL: https://example.atlassian.net/browse/ABC-123"
+)
 
 
 def _real_crm() -> Any:
@@ -76,6 +86,13 @@ def build_fixture(name: str) -> list[Any]:
             _stub_context("web", "Web (stub)", WEB_STUB_TEXT),
             _stub_context("slack", "Slack (stub)", SLACK_STUB_TEXT),
             _stub_context("gdrive", "Google Drive (stub)", GDRIVE_STUB_TEXT),
+            _stub_mcp_context("jira", list(MCP_JIRA_STUB_TOOLS), MCP_JIRA_STUB_TEXT),
+            _real_crm(),
+        ]
+    if name == "mcp_unavailable":
+        return [
+            _stub_context("web", "Web (stub)", WEB_STUB_TEXT),
+            _stub_mcp_context("jira", list(MCP_JIRA_STUB_TOOLS), MCP_JIRA_STUB_TEXT, ok=False),
             _real_crm(),
         ]
     if name == "default_with_fs":
@@ -84,6 +101,7 @@ def build_fixture(name: str) -> list[Any]:
             _stub_context("slack", "Slack (stub)", SLACK_STUB_TEXT),
             _stub_context("gdrive", "Google Drive (stub)", GDRIVE_STUB_TEXT),
             _stub_context("fs", "Filesystem (stub)", FS_STUB_TEXT),
+            _stub_mcp_context("jira", list(MCP_JIRA_STUB_TOOLS), MCP_JIRA_STUB_TEXT),
             _real_crm(),
         ]
     if name == "injected":
@@ -237,6 +255,60 @@ def restore_contexts(prev: list[Any]) -> None:
     from scout.contexts import update_contexts
 
     update_contexts(prev)
+
+
+def _stub_mcp_context(
+    server_name: str,
+    tools: list[dict],
+    query_response: str | Callable[[str], Any],
+    *,
+    ok: bool = True,
+):
+    """A ContextProvider that mimics an MCP-wrapped source without a real
+    MCP session.
+
+    Exposes the same shape as ``MCPContextProvider``: ``id=mcp_<server>``,
+    status includes the declared tool count, sync ``query`` raises if
+    ``ok=False`` so the wrapped tool returns a JSON error payload — the
+    same path Scout sees when a real MCP server is offline.
+
+    ``tools`` is only used to render the status detail line; the stub's
+    sub-agent isn't invoked (Scout's `query_mcp_<server>` goes straight
+    to ``query_response`` via the ``ContextProvider`` base's tool
+    wrapper).
+    """
+    from scout.context.provider import Answer, ContextProvider
+    from scout.context.provider import Status as ProviderStatus
+
+    tool_count = len(tools)
+
+    class StubMCPContext(ContextProvider):
+        def __init__(self) -> None:
+            super().__init__(id=f"mcp_{server_name}", name=f"{server_name} (stub MCP)")
+
+        def status(self) -> ProviderStatus:
+            if not ok:
+                return ProviderStatus(ok=False, detail=f"mcp {server_name}: connection refused")
+            return ProviderStatus(
+                ok=True,
+                detail=f"mcp: {server_name} ({tool_count} tool{'s' if tool_count != 1 else ''})",
+            )
+
+        async def astatus(self) -> ProviderStatus:
+            return self.status()
+
+        def query(self, question: str) -> Answer:
+            if not ok:
+                raise RuntimeError(f"mcp {server_name}: connection refused")
+            if callable(query_response):
+                result = query_response(question)
+                return result if isinstance(result, Answer) else Answer(text=str(result))
+            return Answer(text=query_response)
+
+        async def aquery(self, question: str) -> Answer:
+            return self.query(question)
+
+    return StubMCPContext()
 
 
 def _stub_context(ctx_id: str, display_name: str, answer: str | Callable[[str], Any]):
