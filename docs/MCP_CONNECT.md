@@ -59,7 +59,17 @@ MCPContextProvider(
 | `env` | stdio (optional) | Env vars passed to the child process. |
 | `url` | sse / streamable-http | Server URL. |
 | `headers` | sse / streamable-http (optional) | HTTP headers dict. |
-| `timeout_seconds` | optional | MCP read timeout. Default 30. |
+| `timeout_seconds` | optional | Bounds both the initial connect (in `asetup()`) and each MCP read. Default 30. |
+| `mcp_kwargs` | optional | Escape hatch: `dict` of extra kwargs passed through to `agno.tools.mcp.MCPTools(**kwargs)`. User's keys win over our computed ones. |
+| `mode` | optional | `ContextMode.default` (sub-agent wrap — one `query_mcp_<slug>` tool on Scout) or `ContextMode.tools` (flatten — the server's tools appear directly on Scout). |
+
+### When to pick `mode=tools` vs `mode=default`
+
+`default` routes Scout → sub-agent → MCP, which adds two LLM hops but isolates tool namespaces. Right when the server has many tools, cryptic tool names, or names that collide with another MCP server (e.g. `search`, `create_issue`).
+
+`tools` flattens the server's tools onto Scout directly. Cheaper (no extra hops) and simpler. Right when the server has few, distinctively-named tools (e.g. `get_current_time`) — Scout can route perfectly well with no help.
+
+MCP sessions connect on startup (via `asetup()` on the lifespan task), regardless of mode. That's required for `mode=tools` to see the server's functions, and it keeps the `mcp` SDK's anyio cancel scope on the same task that `aclose()` will exit on.
 
 ### stdio executables
 

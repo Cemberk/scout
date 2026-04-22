@@ -14,6 +14,8 @@ from __future__ import annotations
 from os import getenv
 from typing import Any
 
+from agno.utils.log import log_warning
+
 from scout.context.backend import ContextBackend
 from scout.context.provider import Status
 
@@ -40,7 +42,37 @@ class ExaMCPBackend(ContextBackend):
 
     def get_tools(self) -> list:
         if self._mcp_tools is None:
-            from agno.tools.mcp import MCPTools
-
-            self._mcp_tools = MCPTools(url=self.url, transport="streamable-http")
+            self._mcp_tools = self._build_tools()
         return [self._mcp_tools]
+
+    def _build_tools(self) -> Any:
+        from agno.tools.mcp import MCPTools
+
+        return MCPTools(url=self.url, transport="streamable-http")
+
+    async def asetup(self) -> None:
+        """Connect to the Exa MCP server.
+
+        On failure, logs a warning; the web backend will be
+        unavailable until the next restart.
+        """
+        if self._mcp_tools is None:
+            self._mcp_tools = self._build_tools()
+        if getattr(self._mcp_tools, "initialized", False):
+            return
+        try:
+            await self._mcp_tools._connect()
+        except Exception as exc:
+            log_warning(f"ExaMCPBackend setup failed — {type(exc).__name__}: {exc}.")
+            self._mcp_tools = None
+
+    async def aclose(self) -> None:
+        """Close the MCP session and drop cached state."""
+        tools = self._mcp_tools
+        self._mcp_tools = None
+        if tools is None:
+            return
+        try:
+            await tools.close()
+        except Exception as exc:
+            log_warning(f"ExaMCPBackend close raised {type(exc).__name__}: {exc}")

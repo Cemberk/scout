@@ -131,6 +131,18 @@ class ContextProvider(ABC):
         """
         return None
 
+    async def asetup(self) -> None:
+        """Eagerly prepare any state the provider needs. Default: no-op.
+
+        Override in subclasses that need async initialization —
+        connecting an MCP session, opening a watch stream, priming a
+        cache. The app lifespan awaits ``asetup()`` across every
+        registered provider on startup. Paired with ``aclose()``.
+
+        Must be safe to call multiple times (idempotent).
+        """
+        return None
+
     def instructions(self) -> str:
         """How a calling agent should use this provider.
 

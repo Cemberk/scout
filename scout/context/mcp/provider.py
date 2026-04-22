@@ -24,6 +24,7 @@ shutdown (awaited from ``app/main.py`` lifespan).
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Literal
 
 from agno.agent import Agent
@@ -54,6 +55,7 @@ class MCPContextProvider(ContextProvider):
         headers: dict[str, str] | None = None,
         env: dict[str, str] | None = None,
         timeout_seconds: int = 30,
+        mcp_kwargs: dict[str, Any] | None = None,
         id: str | None = None,
         name: str | None = None,
         base_instructions: str | None = None,
@@ -70,6 +72,7 @@ class MCPContextProvider(ContextProvider):
         self.headers = dict(headers) if headers else None
         self.env = dict(env) if env else None
         self.timeout_seconds = timeout_seconds
+        self.mcp_kwargs = dict(mcp_kwargs) if mcp_kwargs else {}
         self.base_instructions_text = (
             base_instructions if base_instructions is not None else DEFAULT_MCP_BASE_INSTRUCTIONS
         )
@@ -123,6 +126,22 @@ class MCPContextProvider(ContextProvider):
                 await tools.close()
             except Exception as exc:
                 log_warning(f"MCPContextProvider[{self.id}]: close() raised {type(exc).__name__}: {exc}")
+
+    async def asetup(self) -> None:
+        """Connect to the MCP server and load its tool catalog.
+
+        Bounded by ``timeout_seconds``. On timeout or error, logs a
+        warning and continues; subsequent calls retry.
+        """
+        try:
+            await asyncio.wait_for(self._ensure_session(), timeout=self.timeout_seconds)
+        except Exception as exc:
+            self._tools = None
+            self._tool_descriptions = []
+            log_warning(
+                f"MCPContextProvider[{self.id}]: setup failed — "
+                f"{type(exc).__name__}: {exc}. Provider will retry on next call."
+            )
 
     def instructions(self) -> str:
         if self.mode == ContextMode.tools:
@@ -201,6 +220,9 @@ class MCPContextProvider(ContextProvider):
                     kwargs["server_params"] = SSEClientParams(url=self.url or "", headers=self.headers)
                 else:
                     kwargs["server_params"] = StreamableHTTPClientParams(url=self.url or "", headers=self.headers)
+
+        # Escape hatch: anything accepted by ``agno.tools.mcp.MCPTools``.
+        kwargs.update(self.mcp_kwargs)
 
         return MCPTools(**kwargs)
 

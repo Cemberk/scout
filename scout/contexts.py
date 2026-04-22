@@ -21,6 +21,7 @@ from scout.context.database import DatabaseContextProvider
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
 from scout.context.mcp import MCPContextProvider
+from scout.context.mode import ContextMode
 from scout.context.provider import ContextProvider
 from scout.context.slack import SlackContextProvider
 from scout.context.web.exa import ExaBackend
@@ -129,6 +130,25 @@ async def close_context_providers() -> None:
             log_warning(f"context {provider.id!r} aclose raised {type(outcome).__name__}: {outcome}")
 
 
+async def setup_context_providers() -> list[ContextProvider]:
+    """Initialize providers — build the registry (if not already built)
+    and run async setup on each.
+
+    Returns the ready-to-use provider list.
+    """
+    providers = get_context_providers()
+    if not providers:
+        return providers
+    results = await asyncio.gather(
+        *(p.asetup() for p in providers),
+        return_exceptions=True,
+    )
+    for provider, outcome in zip(providers, results, strict=True):
+        if isinstance(outcome, BaseException):
+            log_warning(f"context {provider.id!r} asetup raised {type(outcome).__name__}: {outcome}")
+    return providers
+
+
 def _create_web_provider() -> WebContextProvider:
     model = default_model()
     if getenv("PARALLEL_API_KEY"):
@@ -180,6 +200,7 @@ def _create_mcp_providers() -> list[MCPContextProvider]:
             transport="stdio",
             command="uvx",
             args=["mcp-server-time"],
+            mode=ContextMode.tools,
             model=default_model(),
         ),
     ]
