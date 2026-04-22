@@ -137,6 +137,26 @@ def w4_context_protocol_shape() -> None:
                 raise AssertionError(f"ContextProvider {ctx.id!r} missing callable method {method!r}")
 
 
+def w5_gdrive_uses_scout_subclass() -> None:
+    """GDrive provider must use `ScoutGoogleDriveTools`, not bare `GoogleDriveTools`.
+
+    The bare upstream toolkit queries `corpora=user` and misses every file
+    the SA doesn't own directly (shared folders, Shared Drives). Regressing
+    to bare `GoogleDriveTools` silently breaks every real deployment, so
+    pin the subclass here.
+    """
+    from scout.context.gdrive import GDriveContextProvider
+    from scout.context.gdrive.tools import ScoutGoogleDriveTools
+
+    provider = GDriveContextProvider(service_account_path="/tmp/eval-wiring-stub.json")
+    toolkit = provider._ensure_tools()
+    if not isinstance(toolkit, ScoutGoogleDriveTools):
+        raise AssertionError(
+            f"GDriveContextProvider._ensure_tools() returned {type(toolkit).__name__}; "
+            f"expected ScoutGoogleDriveTools so shared-folder / Shared-Drive files are visible"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -147,6 +167,7 @@ CHECKS = (
     w2_engineer_write_shape,
     w3_leader_no_tools,
     w4_context_protocol_shape,
+    w5_gdrive_uses_scout_subclass,
 )
 
 
