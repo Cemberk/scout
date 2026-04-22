@@ -130,24 +130,24 @@ def create_context_providers() -> list[ContextProvider]:
     (first one wins) so Scout never ends up with two `query_<id>` tools
     sharing a name.
     """
-    new_providers: list[ContextProvider] = [
+    configured_providers: list[ContextProvider] = [
         _create_web_provider(),
         _create_filesystem_provider(),
         _create_database_provider(),
     ]
-    for builder in (_create_slack_provider, _create_gdrive_provider):
+    for factory in (_create_slack_provider, _create_gdrive_provider):
         try:
-            ctx = builder()
+            provider = factory()
         except Exception as exc:
-            log_warning(f"{builder.__name__} failed: {exc}")
+            log_warning(f"{factory.__name__} failed: {exc}")
             continue
-        if ctx is not None:
-            new_providers.append(ctx)
-    new_providers.extend(_create_mcp_providers())
+        if provider is not None:
+            configured_providers.append(provider)
+    configured_providers.extend(_create_mcp_providers())
 
     seen: set[str] = set()
     deduped: list[ContextProvider] = []
-    for registered in new_providers:
+    for registered in configured_providers:
         if registered.id in seen:
             log_warning(
                 f"context id {registered.id!r} already registered; skipping duplicate ({type(registered).__name__})"
