@@ -47,15 +47,14 @@ class GDriveContextProvider(ContextProvider):
         model: Model | None = None,
     ) -> None:
         super().__init__(id=id, name=name, mode=mode, model=model)
-        self.service_account_path = service_account_path or getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
-        if not self.service_account_path:
+        resolved = service_account_path or getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+        if not resolved:
             raise ValueError("GDriveContextProvider: GOOGLE_SERVICE_ACCOUNT_FILE is required")
+        self.service_account_path: str = resolved
         self._tools: GoogleDriveTools | None = None
         self._agent: Agent | None = None
 
     def status(self) -> Status:
-        if not self.service_account_path:
-            return Status(ok=False, detail="GOOGLE_SERVICE_ACCOUNT_FILE not set")
         path = Path(self.service_account_path).expanduser()
         if not path.exists():
             return Status(ok=False, detail=f"service account file not found: {path}")
@@ -83,22 +82,12 @@ class GDriveContextProvider(ContextProvider):
             "searches by name, mimeType, modifiedTime, etc., and returns matches with webViewLinks."
         )
 
-    # ------------------------------------------------------------------
-    # Mode resolution
-    # ------------------------------------------------------------------
-    #
-    # `_default_tools` wraps the Drive toolkit behind a `query_gdrive` sub-agent
-    # because `GoogleDriveTools` exposes `list_files` / `search_files` /
-    # `read_file` — names that collide with `FileTools` when both are loaded
-    # on the same agent. agno's tool resolver dedupes by name across the
-    # whole list and drops the second occurrence, silently losing Drive.
-    # The sub-agent namespaces everything under one `query_<id>` tool.
-    # Use mode=tools only when Drive is the sole file-like provider.
-
+    # Wrap in a `query_gdrive` sub-agent because `GoogleDriveTools` exposes
+    # `list_files` / `search_files` / `read_file` — names that collide with
+    # `FileTools`, and agno's tool resolver dedupes by name across the whole
+    # list (silently dropping the second toolkit). mode=tools only works when
+    # Drive is the sole file-like provider.
     def _default_tools(self) -> list:
-        # One namespaced `query_gdrive` tool backed by the sub-agent built
-        # in `_build_agent()`. See the comment block above for why we don't
-        # expose the Drive toolkit directly in default mode.
         return [self._query_tool()]
 
     def _all_tools(self) -> list:
