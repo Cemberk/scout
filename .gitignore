@@ -62,7 +62,7 @@ tmp
 .claude
 .conductor
 
-# Scout local state — Docker uses named volumes
+# Scout local state — credentials, tokens, provider state
 .scout/
 
 # Optional: local PyPI creds (uncomment if you ever create it)

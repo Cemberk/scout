@@ -165,7 +165,7 @@ Registered provider set (in order):
 | `WebContextProvider` | always | Backend picked below |
 | `FilesystemContextProvider` | always | Read-only; `FileTools` scoped to `FS_ROOT` in `scout/contexts.py` (defaults to the scout repo) |
 | `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting). Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md) |
-| `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; service-account auth (optional delegation via `GOOGLE_DELEGATED_USER`). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) |
+| `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; Scout authenticates as its own service account (no user impersonation). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) or `./scripts/google_setup.sh` |
 
 `build_contexts()` dedupes by `id` globally (first wins, warns on collision) so Explorer never ends up with two `query_<id>` tools sharing a name.
 
@@ -222,8 +222,7 @@ Every agent and the Leader run on `OpenAIResponses(id="gpt-5.4")` via `agno.mode
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK). Ignored if `PARALLEL_API_KEY` is set. |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` to enable Slack interface. |
 | `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
-| `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to a Google service-account JSON key. Activates the Drive context provider. |
-| `GOOGLE_DELEGATED_USER` | No | Optional — user email to impersonate via domain-wide delegation. |
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |
 | `DB_HOST / PORT / USER / PASS / DATABASE` | No | PostgreSQL config. Compose defaults work locally. |
 | `RUNTIME_ENV` | No | `dev` for hot reload (compose sets this); `prd` enables JWT-gated endpoints. |
 

@@ -59,7 +59,7 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | **`WebContextProvider`** | always on — picks a backend based on keys below | `web_search` / `web_extract` |
 | **`FilesystemContextProvider`** | always on — rooted at the scout repo (see `FS_ROOT` in [`scout/contexts.py`](scout/contexts.py)) | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` |
 | **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md). |
-| **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Service-account auth; share folders with the SA email or set `GOOGLE_DELEGATED_USER`. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md). |
+| **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Scout authenticates as its own service account — share folders with the SA email to grant access. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) (or `./scripts/google_setup.sh` for the automated path). |
 
 **Web backends**, first-match selection:
 
@@ -121,8 +121,7 @@ On top of AgentOS's defaults (`/teams/scout/runs`, `/health`):
 | `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK path). Ignored if `PARALLEL_API_KEY` is set. |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` for the Slack interface; alone, activates the Slack context provider. |
 | `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
-| `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to a Google service-account JSON key. Activates the Drive context provider. |
-| `GOOGLE_DELEGATED_USER` | No | Optional — user email to impersonate via domain-wide delegation. |
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |
 | `DB_*` | No | Postgres (compose defaults work) |
 
 Full list in [`example.env`](example.env).
