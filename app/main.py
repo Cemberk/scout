@@ -3,15 +3,17 @@ AgentOS Entrypoint
 ==================
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from os import getenv
 from pathlib import Path
 
 from agno.os import AgentOS
+from agno.utils.log import log_warning
 
 from app.router import create_router
 from db import get_postgres_db
-from scout.contexts import build_contexts
+from scout.contexts import build_contexts, get_contexts
 from scout.team import scout
 
 # ---------------------------------------------------------------------------
@@ -50,7 +52,25 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
 
     create_tables()
     build_contexts()
-    yield
+    try:
+        yield
+    finally:
+        # Providers that hold resources (MCP sessions, watch streams)
+        # override `aclose()`; the base class default is a no-op.
+        # `return_exceptions=True` so one stuck teardown can't block
+        # others on the way down.
+        providers = list(get_contexts())
+        if providers:
+            results = await asyncio.gather(
+                *(p.aclose() for p in providers),
+                return_exceptions=True,
+            )
+            for provider, outcome in zip(providers, results, strict=True):
+                if isinstance(outcome, BaseException):
+                    log_warning(
+                        f"context {provider.id!r} aclose raised "
+                        f"{type(outcome).__name__}: {outcome}"
+                    )
 
 
 # ---------------------------------------------------------------------------
