@@ -15,6 +15,7 @@ from pathlib import Path
 from agno.tools import tool
 from agno.utils.log import log_info, log_warning
 
+from scout.context.database import DatabaseContextProvider
 from scout.context.fs import FilesystemContextProvider
 from scout.context.gdrive import GDriveContextProvider
 from scout.context.provider import ContextProvider
@@ -46,7 +47,7 @@ def build_contexts() -> list[ContextProvider]:
     (first one wins) so Explorer never ends up with two `query_<id>` tools
     sharing a name.
     """
-    new_contexts: list[ContextProvider] = [_build_web(), _build_filesystem()]
+    new_contexts: list[ContextProvider] = [_build_web(), _build_filesystem(), _build_database()]
     for builder in (_build_slack, _build_gdrive):
         try:
             ctx = builder()
@@ -111,6 +112,10 @@ def _build_web() -> WebContextProvider:
 
 def _build_filesystem() -> FilesystemContextProvider:
     return FilesystemContextProvider(root=FS_ROOT, model=default_model())
+
+
+def _build_database() -> DatabaseContextProvider:
+    return DatabaseContextProvider(model=default_model())
 
 
 def _build_slack() -> SlackContextProvider | None:
