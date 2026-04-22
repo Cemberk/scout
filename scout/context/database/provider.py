@@ -203,8 +203,12 @@ All have `id SERIAL PK`, `user_id TEXT NOT NULL`, `created_at TIMESTAMPTZ DEFAUL
    a new `scout_*` table with the standard columns:
      `id SERIAL PRIMARY KEY, user_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`
    plus the domain fields. Then INSERT the row.
-5. **Report what you did in a single sentence.**
-   Example: "Saved contact Alice Chen (id=47)." or "Created scout_coffee_orders and logged your first order (id=1)."
+5. **Report what you did in a single sentence, echoing the key fields.**
+   For notes, include title AND body. For contacts, include name + a
+   secondary identifier (phone/email). For domain tables you created on
+   demand, include the domain values the user gave you.
+   Example: `Saved note "ship status": "API release slipping to next week" (id=47).`
+   or `Saved contact Alice Chen (phone=555-0100, id=12).`
    Don't recite the full row or explain the SQL you ran.
 6. **DROP requires explicit user confirmation.** Don't drop tables on a
    first ask.
