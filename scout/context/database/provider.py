@@ -99,10 +99,8 @@ class DatabaseContextProvider(ContextProvider):
     def instructions(self) -> str:
         if self.mode == ContextMode.tools:
             return (
-                f"`{self.name}`: use `run_sql_query` directly against the `{self.schema}` schema. "
-                "NOTE: mode=tools does NOT preserve the read/write split — both read "
-                "and write SQLTools instances are exposed. Prefer the default two-tool "
-                f"surface (`{self.query_tool_name}` / `{self.update_tool_name}`) unless you have a reason."
+                f"`{self.name}`: read-only `run_sql_query` against the `{self.schema}` schema. "
+                "Writes require mode=default (two-tool surface)."
             )
         return (
             f"`{self.name}`: call `{self.query_tool_name}(question)` to read data in the "
@@ -117,13 +115,13 @@ class DatabaseContextProvider(ContextProvider):
         return [self._query_tool(), self._update_tool()]
 
     def _all_tools(self) -> list:
-        # Caveat: mode=tools skips the read/write sub-agent split, so the
-        # calling agent sees both SQLTools instances. The engine-level
-        # guard (if any) still fires for writes outside the schema.
-        return [
-            SQLTools(db_engine=self.readonly_engine, schema=self.schema),
-            SQLTools(db_engine=self.sql_engine, schema=self.schema),
-        ]
+        # mode=tools returns only the readonly SQLTools. The read/write
+        # split the default sub-agent mode provides doesn't flatten into a
+        # single tool list cleanly, and silent write exposure is the wrong
+        # default. Writes require mode=default (two-tool surface:
+        # query_<id> / update_<id>) or explicit instantiation of a second
+        # writable provider.
+        return [SQLTools(db_engine=self.readonly_engine, schema=self.schema)]
 
     # ------------------------------------------------------------------
     # Sub-agents
