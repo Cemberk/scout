@@ -34,13 +34,30 @@ class CaseResult:
 
 
 def build_fixture(name: str) -> list[Any]:
-    """Build contexts for a fixture by name: ``default`` | ``real``."""
+    """Build contexts for a fixture by name: ``default`` | ``real``.
+
+    The ``default`` fixture stubs every provider Scout ships with today so
+    behavioral cases can exercise provider routing without hitting real APIs.
+    Each stub exposes one ``query_<id>`` tool with a deterministic answer.
+    """
     if name == "default":
         return [
             _stub_context(
                 "web",
                 "Web (stub)",
                 "Stub web answer for eval purposes. Cited: https://example.com/stub",
+            ),
+            _stub_context(
+                "slack",
+                "Slack (stub)",
+                "From #eng-roadmap (U07EVAL): 'Q4 roadmap finalized for 2026-03-11'. "
+                "Permalink: https://example.slack.com/archives/C07EVAL/p1712345000",
+            ),
+            _stub_context(
+                "gdrive",
+                "Google Drive (stub)",
+                "File: 'Q4 Roadmap 2026.gdoc' (application/vnd.google-apps.document). "
+                "webViewLink: https://drive.google.com/file/d/1eval_stub/view",
             ),
         ]
     if name == "real":
