@@ -95,9 +95,8 @@ def _assert_no_outbound(names: list[str], agent: str) -> None:
 def w1_scout_tool_surface() -> None:
     """Scout exposes every provider's tools + `list_contexts`, nothing outbound.
 
-    With single-agent Scout there's no separate Explorer/Engineer; all tools
-    are resolved through the registry. The factory is a callable so this
-    check resolves it to a concrete list.
+    With single-agent Scout all tools are resolved through the registry.
+    The factory is a callable so this check resolves it to a concrete list.
     """
     from scout.contexts import build_contexts, get_contexts, update_contexts
     from scout.team import scout

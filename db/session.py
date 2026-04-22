@@ -70,13 +70,13 @@ def get_readonly_engine() -> Engine:
 
     Uses PostgreSQL's ``default_transaction_read_only`` so any INSERT,
     UPDATE, DELETE, CREATE, DROP, or ALTER is rejected at the database level.
-    Hand this to read-only agents (Explorer, Leader) so their
+    Hand this to read-only agents (Scout's CRM read sub-agent) so their
     SQLTools cannot mutate state regardless of how they're prompted.
 
     Also sets ``search_path=scout,public`` so unqualified references like
     ``SELECT * FROM scout_notes`` resolve — matching the scout engine's
-    behaviour. Without this, Explorer's SQL would fail on anything but
-    ``scout.scout_notes``.
+    behaviour. Without this, the read sub-agent's SQL would fail on anything
+    but ``scout.scout_notes``.
     """
     return create_engine(
         db_url,
@@ -128,10 +128,10 @@ def create_knowledge(name: str, table_name: str) -> Knowledge:
 # Write guard for the scout engine
 # ---------------------------------------------------------------------------
 # Catches explicit writes to public.* / ai.* (the shapes agents actually
-# produce). Reads are allowed — Engineer's introspect_schema needs them.
-# Not comprehensive: misses CREATE SCHEMA, COPY … FROM, GRANT/REVOKE, DO
-# blocks, function side-effects. DB-level grants + search_path are the
-# primary defense.
+# produce). Reads are allowed — the CRM write sub-agent introspects the
+# information_schema before DDL. Not comprehensive: misses CREATE SCHEMA,
+# COPY … FROM, GRANT/REVOKE, DO blocks, function side-effects. DB-level
+# grants + search_path are the primary defense.
 
 
 _NON_SCOUT_WRITE_RE = re.compile(

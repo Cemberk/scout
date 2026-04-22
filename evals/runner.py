@@ -165,7 +165,7 @@ def _threaded_slack_stub():
     `reply_count > 0`.
 
     The ContextProvider wrapper keeps the usual id/name/query surface so
-    Explorer's per-provider wiring works unchanged — we just override
+    Scout's per-provider wiring works unchanged — we just override
     `_default_tools` to expose the two explicit tools.
     """
     import json

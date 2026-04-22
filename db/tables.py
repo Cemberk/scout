@@ -9,14 +9,14 @@ agno framework owns the heavy schema (sessions, knowledge vectors). The
 DDL here is ``CREATE TABLE IF NOT EXISTS`` + ``ADD COLUMN IF NOT EXISTS``
 so reruns are safe.
 
-User data (canonical, Day-1 shape for the Engineer agent):
+User data (canonical, Day-1 shape for the CRM context provider):
 - ``scout.scout_contacts``  — people: name, emails, phone, tags, notes.
 - ``scout.scout_projects``  — things in motion: name, status, tags.
 - ``scout.scout_notes``     — free-form notes: title, body, tags, source_url.
 
 Every user-data table carries the same standard columns:
 ``id SERIAL PK``, ``user_id TEXT NOT NULL``, ``created_at TIMESTAMPTZ``.
-Beyond these three, the Engineer agent creates tables on demand.
+Beyond these three, the CRM provider's write sub-agent creates tables on demand.
 """
 
 from __future__ import annotations
