@@ -261,7 +261,15 @@ def _stub_context(ctx_id: str, display_name: str, answer: str | Callable[[str], 
 # ---------------------------------------------------------------------------
 
 
-def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], float]:
+@dataclass
+class TurnResult:
+    content: str
+    tools: list[str]
+    delegated: list[str]
+    errors: list[str]
+
+
+def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], float, list[TurnResult]]:
     import uuid
 
     from scout.team import scout as team
@@ -269,17 +277,32 @@ def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], f
     # Fresh session per case so prior runs' history doesn't leak in. agno
     # reuses session_id when not passed, and the team runs with
     # `add_history_to_context=True` — cross-case state made judges tier
-    # flake until this was pinned.
+    # flake until this was pinned. Follow-up turns reuse this session_id
+    # so the agent has memory across the multi-turn case.
     session_id = f"eval-{case.id}-{uuid.uuid4().hex[:8]}"
     start = time.monotonic()
     result = asyncio.run(team.arun(case.prompt, session_id=session_id))
+    primary = _extract_turn(result)
+    followups: list[TurnResult] = []
+    for follow in case.followups:
+        f_result = asyncio.run(team.arun(follow.prompt, session_id=session_id))
+        followups.append(_extract_turn(f_result))
     duration = time.monotonic() - start
+    return (
+        primary.content,
+        primary.tools,
+        primary.delegated,
+        primary.errors,
+        duration,
+        followups,
+    )
 
+
+def _extract_turn(result: Any) -> TurnResult:
     content = getattr(result, "content", None) or ""
     tools = _tool_names_from(result)
     errors = _tool_errors_from(result)
     delegated: list[str] = []
-
     for member in getattr(result, "member_responses", None) or []:
         aid = getattr(member, "agent_id", None)
         if aid is None and isinstance(member, dict):
@@ -288,8 +311,7 @@ def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], f
             delegated.append(str(aid))
         tools.extend(_tool_names_from(member))
         errors.extend(_tool_errors_from(member))
-
-    return content, tools, delegated, errors, duration
+    return TurnResult(content=content, tools=tools, delegated=delegated, errors=errors)
 
 
 def _tool_names_from(obj: Any) -> list[str]:
@@ -386,18 +408,37 @@ def run_case(case: Case) -> CaseResult:
 
     try:
         try:
-            content, tools, delegated, errors, duration = _run_in_process(case)
+            content, tools, delegated, errors, duration, followups = _run_in_process(case)
         except Exception as exc:
             return _error(case.id, f"{type(exc).__name__}: {exc}")
 
         failures = _assert_case(case, content, tools, delegated, errors, duration)
+        for idx, (follow, turn) in enumerate(zip(case.followups, followups, strict=False), start=2):
+            for needle in follow.response_contains:
+                if needle.lower() not in turn.content.lower():
+                    failures.append(f"turn {idx} missing substring: {needle!r}")
+            for needle in follow.response_forbids:
+                if needle.lower() in turn.content.lower():
+                    failures.append(f"turn {idx} contains forbidden substring: {needle!r}")
+            for pattern in follow.response_matches:
+                if not re.search(pattern, turn.content, re.IGNORECASE):
+                    failures.append(f"turn {idx} doesn't match regex: {pattern!r}")
+            for want in follow.expected_tools:
+                if not any(want in t for t in turn.tools):
+                    failures.append(f"turn {idx} expected tool {want!r} not called; saw {turn.tools}")
+            for bad in follow.forbidden_tools:
+                if hits := [t for t in turn.tools if bad in t]:
+                    failures.append(f"turn {idx} forbidden tool {bad!r} was called: {hits}")
+            failures.extend(f"turn {idx} run error: {e}" for e in turn.errors)
+
+        combined_tools = list(tools) + [t for f in followups for t in f.tools]
         return CaseResult(
             case_id=case.id,
             status="PASS" if not failures else "FAIL",
             duration_s=duration,
             failures=failures,
             response=content,
-            tool_names=tools,
+            tool_names=combined_tools,
             delegated=delegated,
             errors=errors,
         )

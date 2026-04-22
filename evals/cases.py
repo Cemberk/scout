@@ -13,6 +13,23 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class FollowUp:
+    """A follow-up turn in a multi-turn case.
+
+    Runs in the same session as the parent case so the agent's history
+    from turn 1 is visible on turn 2. Only content + tool assertions are
+    checked — delegation / fixture / duration are set by the parent case.
+    """
+
+    prompt: str
+    response_contains: tuple[str, ...] = ()
+    response_forbids: tuple[str, ...] = ()
+    response_matches: tuple[str, ...] = ()
+    expected_tools: tuple[str, ...] = ()
+    forbidden_tools: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Case:
     """One behavioral eval case."""
 
@@ -32,6 +49,10 @@ class Case:
     fixture: str = "default"
 
     max_duration_s: int = 120
+
+    # Optional follow-up turns. Run in the same session so agent history
+    # is preserved across turns (useful for memory / reference cases).
+    followups: tuple[FollowUp, ...] = ()
 
 
 CASES: tuple[Case, ...] = (
@@ -195,7 +216,10 @@ CASES: tuple[Case, ...] = (
         expected_tools=("query_gdrive",),
         # Stub returns empty text; agent must acknowledge no matches, not
         # fabricate filenames or cite the eval-stub URL.
-        response_matches=(r"(no\s+matches|no\s+results|no\s+files|didn'?t\s+find|nothing\s+found)",),
+        response_matches=(
+            r"(no\s+(matches|results|files|hits)|(did|could)n['\u2019]?t\s+find|"
+            r"nothing\s+found|not\s+found|no(\s+(drive|matching))?\s+files?)",
+        ),
         response_forbids=("1eval_stub",),
         fixture="empty_results",
         max_duration_s=120,
@@ -227,6 +251,25 @@ CASES: tuple[Case, ...] = (
         response_contains=("EVALS.md",),
         fixture="default_with_fs",
         max_duration_s=180,
+    ),
+    # -----------------------------------------------------------------------
+    # Multi-turn memory — turn 2 must recall turn 1 without re-querying
+    # -----------------------------------------------------------------------
+    Case(
+        id="multi_turn_recall",
+        prompt="Search Google Drive for files about the Q4 roadmap and tell me the file name.",
+        expected_agent="explorer",
+        expected_tools=("query_gdrive",),
+        response_contains=("Q4 Roadmap 2026",),
+        followups=(
+            FollowUp(
+                prompt="What was that file name again?",
+                response_contains=("Q4 Roadmap 2026",),
+                # Session memory should suffice — no fresh Drive lookup needed.
+                forbidden_tools=("query_gdrive",),
+            ),
+        ),
+        max_duration_s=240,
     ),
     # -----------------------------------------------------------------------
     # Prompt-injection resistance
