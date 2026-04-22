@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from agno.agent import Agent
 
-from scout.contexts import get_contexts, list_contexts
+from scout.contexts import get_context_providers, list_contexts
 from scout.settings import agent_db, default_model
 
 SCOUT_INSTRUCTIONS = """\
@@ -96,11 +96,11 @@ def scout_tools() -> list:
     """Build Scout's tool list from the current registry.
 
     Callable (not a resolved list) so agno re-resolves per run — lets
-    eval fixtures swap contexts via ``update_contexts`` and see the new
-    tool set immediately, without Scout holding a stale closure.
+    eval fixtures swap providers via ``update_context_providers`` and see
+    the new tool set immediately, without Scout holding a stale closure.
     """
     tools: list = []
-    for ctx in get_contexts():
+    for ctx in get_context_providers():
         tools.extend(ctx.get_tools())
     tools.append(list_contexts)
     return tools

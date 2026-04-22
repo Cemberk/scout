@@ -119,31 +119,35 @@ asks for a table in another schema, explain that writes are scoped to
 # ---------------------------------------------------------------------------
 
 
-contexts: list[ContextProvider] = []
+context_providers: list[ContextProvider] = []
 
 
-def build_contexts() -> list[ContextProvider]:
-    """Build the registered contexts from env and cache them for the process.
+def create_context_providers() -> list[ContextProvider]:
+    """Build the registered context providers from env and cache them for the process.
 
     Optional builders are wrapped in try/except so one bad config doesn't take
     the whole registry down. Duplicate `id`s are dropped with a warning
-    (first one wins) so Explorer never ends up with two `query_<id>` tools
+    (first one wins) so Scout never ends up with two `query_<id>` tools
     sharing a name.
     """
-    new_contexts: list[ContextProvider] = [_build_web(), _build_filesystem(), _build_database()]
-    for builder in (_build_slack, _build_gdrive):
+    new_providers: list[ContextProvider] = [
+        _create_web_provider(),
+        _create_filesystem_provider(),
+        _create_database_provider(),
+    ]
+    for builder in (_create_slack_provider, _create_gdrive_provider):
         try:
             ctx = builder()
         except Exception as exc:
             log_warning(f"{builder.__name__} failed: {exc}")
             continue
         if ctx is not None:
-            new_contexts.append(ctx)
-    new_contexts.extend(_build_mcp_providers())
+            new_providers.append(ctx)
+    new_providers.extend(_create_mcp_providers())
 
     seen: set[str] = set()
     deduped: list[ContextProvider] = []
-    for registered in new_contexts:
+    for registered in new_providers:
         if registered.id in seen:
             log_warning(
                 f"context id {registered.id!r} already registered; skipping duplicate ({type(registered).__name__})"
@@ -152,13 +156,13 @@ def build_contexts() -> list[ContextProvider]:
         seen.add(registered.id)
         deduped.append(registered)
 
-    contexts[:] = deduped
-    _log_contexts(deduped)
-    return list(contexts)
+    context_providers[:] = deduped
+    _log_context_providers(deduped)
+    return list(context_providers)
 
 
-def _log_contexts(ctxs: list[ContextProvider]) -> None:
-    """Log the resolved context set with each provider's status detail."""
+def _log_context_providers(ctxs: list[ContextProvider]) -> None:
+    """Log the resolved provider set with each provider's status detail."""
     if not ctxs:
         log_info("Context Providers: (none)")
         return
@@ -173,19 +177,19 @@ def _log_contexts(ctxs: list[ContextProvider]) -> None:
     log_info("\n".join(lines))
 
 
-def get_contexts() -> list[ContextProvider]:
-    """Return the cached context list, building on first access."""
-    if not contexts:
-        build_contexts()
-    return list(contexts)
+def get_context_providers() -> list[ContextProvider]:
+    """Return the cached provider list, building on first access."""
+    if not context_providers:
+        create_context_providers()
+    return list(context_providers)
 
 
-def update_contexts(new_contexts: list[ContextProvider]) -> None:
-    """Swap the cached context list in place. Used by eval fixtures."""
-    contexts[:] = new_contexts
+def update_context_providers(new_providers: list[ContextProvider]) -> None:
+    """Swap the cached provider list in place. Used by eval fixtures."""
+    context_providers[:] = new_providers
 
 
-def _build_web() -> WebContextProvider:
+def _create_web_provider() -> WebContextProvider:
     model = default_model()
     if getenv("PARALLEL_API_KEY"):
         return WebContextProvider(backend=ParallelBackend(), model=model)
@@ -194,11 +198,11 @@ def _build_web() -> WebContextProvider:
     return WebContextProvider(backend=ExaMCPBackend(), model=model)
 
 
-def _build_filesystem() -> FilesystemContextProvider:
+def _create_filesystem_provider() -> FilesystemContextProvider:
     return FilesystemContextProvider(root=FS_ROOT, model=default_model())
 
 
-def _build_database() -> DatabaseContextProvider:
+def _create_database_provider() -> DatabaseContextProvider:
     return DatabaseContextProvider(
         id="crm",
         name="CRM",
@@ -211,19 +215,19 @@ def _build_database() -> DatabaseContextProvider:
     )
 
 
-def _build_slack() -> SlackContextProvider | None:
+def _create_slack_provider() -> SlackContextProvider | None:
     if not (getenv("SLACK_BOT_TOKEN") or getenv("SLACK_TOKEN")):
         return None
     return SlackContextProvider(model=default_model())
 
 
-def _build_gdrive() -> GDriveContextProvider | None:
+def _create_gdrive_provider() -> GDriveContextProvider | None:
     if not getenv("GOOGLE_SERVICE_ACCOUNT_FILE"):
         return None
     return GDriveContextProvider(model=default_model())
 
 
-def _build_mcp_providers() -> list[MCPContextProvider]:
+def _create_mcp_providers() -> list[MCPContextProvider]:
     """One `MCPContextProvider` per slug in `MCP_SERVERS`.
 
     Misconfigured slugs log a warning and are skipped — one bad server
@@ -266,5 +270,5 @@ async def list_contexts() -> str:
     Returns:
         JSON list of ``{id, name, ok, detail}``.
     """
-    rows = [await astatus_row(ctx) for ctx in contexts]
+    rows = [await astatus_row(ctx) for ctx in context_providers]
     return json.dumps(rows)

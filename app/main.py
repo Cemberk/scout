@@ -13,7 +13,7 @@ from agno.utils.log import log_warning
 
 from app.router import create_router
 from db import get_postgres_db
-from scout.contexts import build_contexts, get_contexts
+from scout.contexts import create_context_providers, get_context_providers
 from scout.team import scout
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
     from db.tables import create_tables
 
     create_tables()
-    build_contexts()
+    create_context_providers()
     try:
         yield
     finally:
@@ -59,7 +59,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
         # override `aclose()`; the base class default is a no-op.
         # `return_exceptions=True` so one stuck teardown can't block
         # others on the way down.
-        providers = list(get_contexts())
+        providers = list(get_context_providers())
         if providers:
             results = await asyncio.gather(
                 *(p.aclose() for p in providers),

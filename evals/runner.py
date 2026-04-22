@@ -177,9 +177,9 @@ def build_fixture(name: str) -> list[Any]:
             _real_crm(),
         ]
     if name == "real":
-        from scout.contexts import build_contexts
+        from scout.contexts import create_context_providers
 
-        return build_contexts()
+        return create_context_providers()
 
     raise ValueError(f"unknown fixture {name!r}")
 
@@ -258,17 +258,17 @@ def _threaded_slack_stub():
 
 def install_fixture(contexts: list[Any]) -> list[Any]:
     """Install contexts; return the prior list so the caller can restore."""
-    from scout.contexts import get_contexts, update_contexts
+    from scout.contexts import get_context_providers, update_context_providers
 
-    prev = get_contexts()
-    update_contexts(contexts)
+    prev = get_context_providers()
+    update_context_providers(contexts)
     return prev
 
 
 def restore_contexts(prev: list[Any]) -> None:
-    from scout.contexts import update_contexts
+    from scout.contexts import update_context_providers
 
-    update_contexts(prev)
+    update_context_providers(prev)
 
 
 def _stub_mcp_context(

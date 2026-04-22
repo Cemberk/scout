@@ -63,7 +63,7 @@ scout/
 ├── __main__.py                     # CLI: chat | contexts
 ├── team.py                         # Single `scout` Agent (kept filename for import stability)
 ├── settings.py                     # Runtime objects: agent_db + default_model() factory
-├── contexts.py                     # build/get/update_contexts + list_contexts tool + status row helpers
+├── contexts.py                     # create/get/update_context_providers + list_contexts tool + status row helpers
 └── context/                        # The library — ships to agno.context
     ├── __init__.py
     ├── _utils.py                   # answer_from_run
@@ -161,7 +161,7 @@ Flags: `--case <id>` narrows to one case; `--verbose` prints response + tool pre
 
 ## Contexts
 
-`scout/contexts.py::build_contexts()` is the env-driven factory. The app lifespan calls it at startup to warm a module-level cache; `get_contexts()` lazy-builds on first access. `update_contexts()` swaps the cached list in place (used by eval fixtures). The web provider is always on; others opt-in via env.
+`scout/contexts.py::create_context_providers()` is the env-driven factory. The app lifespan calls it at startup to warm a module-level cache; `get_context_providers()` lazy-builds on first access. `update_context_providers()` swaps the cached list in place (used by eval fixtures). The web provider is always on; others opt-in via env.
 
 Registered provider set (in order):
 
@@ -174,7 +174,7 @@ Registered provider set (in order):
 | `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; Scout authenticates as its own service account (no user impersonation). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) or `./scripts/google_setup.sh` |
 | `MCPContextProvider` | `MCP_SERVERS` (+ per-slug vars) | One per slug; transports `stdio`/`sse`/`streamable-http`. Sub-agent instructions rebuilt from `list_tools()` at connect. `aclose()` closes the session on shutdown. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md) |
 
-`build_contexts()` dedupes by `id` globally (first wins, warns on collision) so Scout never ends up with two `query_<id>` tools sharing a name.
+`create_context_providers()` dedupes by `id` globally (first wins, warns on collision) so Scout never ends up with two `query_<id>` tools sharing a name.
 
 Web backend selection (first match wins):
 
@@ -204,7 +204,7 @@ Beyond these three, the CRM provider's write sub-agent creates new `scout_*` tab
 | CRM read sub-agent | `SQLTools` (**read-only engine**, `scout` schema) |
 | CRM write sub-agent | `SQLTools` (scout engine, **schema-guarded** to `scout`) |
 
-**Per-provider tools are built by the registry.** `scout.contexts.build_contexts()` builds the provider list and caches it on the module; `get_contexts()` reads it (lazy-builds on first access). Scout's `tools=scout_tools` is a callable (`cache_callables=False`), so agno resolves the tool list from the current registry on every run. The app lifespan calls `build_contexts()` once at startup to warm the cache and log which backend was selected; eval fixtures swap contexts via `update_contexts`.
+**Per-provider tools are built by the registry.** `scout.contexts.create_context_providers()` builds the provider list and caches it on the module; `get_context_providers()` reads it (lazy-builds on first access). Scout's `tools=scout_tools` is a callable (`cache_callables=False`), so agno resolves the tool list from the current registry on every run. The app lifespan calls `create_context_providers()` once at startup to warm the cache and log which backend was selected; eval fixtures swap providers via `update_context_providers`.
 
 ## API Endpoints
 
@@ -253,7 +253,7 @@ Every external source subclasses `ContextProvider` (in `scout/context/provider.p
 from db import db_url, get_postgres_db, get_sql_engine, get_readonly_engine, SCOUT_SCHEMA
 from scout.team import scout
 from scout.settings import agent_db
-from scout.contexts import build_contexts, get_contexts, update_contexts, list_contexts, status_row, astatus_row
+from scout.contexts import create_context_providers, get_context_providers, update_context_providers, list_contexts, status_row, astatus_row
 from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
 from scout.context.database import DatabaseContextProvider
 from scout.context.fs import FilesystemContextProvider

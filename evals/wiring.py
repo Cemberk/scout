@@ -99,15 +99,19 @@ def w1_scout_tool_surface() -> None:
     With single-agent Scout all tools are resolved through the registry.
     The factory is a callable so this check resolves it to a concrete list.
     """
-    from scout.contexts import build_contexts, get_contexts, update_contexts
+    from scout.contexts import (
+        create_context_providers,
+        get_context_providers,
+        update_context_providers,
+    )
     from scout.team import scout
 
-    prev = get_contexts()
+    prev = get_context_providers()
     try:
-        build_contexts()
+        create_context_providers()
         names = _tool_names(scout.tools)
     finally:
-        update_contexts(prev)
+        update_context_providers(prev)
 
     _assert_no_outbound(names, "Scout")
     _assert_has(names, ("list_contexts", "query_crm", "update_crm"), "Scout")
@@ -187,9 +191,9 @@ def w3_schema_guard_blocks_non_scout_writes() -> None:
 
 def w4_context_protocol_shape() -> None:
     from scout.context.provider import ContextProvider
-    from scout.contexts import build_contexts
+    from scout.contexts import create_context_providers
 
-    for ctx in build_contexts():
+    for ctx in create_context_providers():
         if not isinstance(ctx, ContextProvider):
             raise AssertionError(f"ContextProvider {ctx.id!r} is not a subclass of ContextProvider")
         for attr in ("id", "name"):
