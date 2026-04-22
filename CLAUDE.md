@@ -34,7 +34,7 @@ Providers that support writes override `aupdate(instruction) -> Answer` (and opt
 
 The full type set:
 - `Status(ok: bool, detail: str = "")`
-- `Document(id, name, uri=None, kind="file", snippet=None)` — a piece of content
+- `Document(id, name, uri=None, source=None, snippet=None)` — a piece of content
 - `Answer(results: list[Document] = [], text: str | None = None)` — what `query()` returns
 
 ## One write surface

@@ -61,7 +61,7 @@ class Document:
     id: str
     name: str
     uri: str | None = None
-    kind: str = "file"
+    source: str | None = None
     snippet: str | None = None
 
 
