@@ -267,6 +267,29 @@ CASES: tuple[Case, ...] = (
         max_duration_s=180,
     ),
     # -----------------------------------------------------------------------
+    # MCP provider coverage
+    # -----------------------------------------------------------------------
+    Case(
+        id="scout_mcp_query",
+        prompt="Look up Jira issue ABC-123 and tell me its status and assignee.",
+        # Substring match catches the provider-level `query_mcp_jira` tool.
+        expected_tools=("mcp_jira",),
+        response_contains=("ABC-123", "alice@example.com"),
+        max_duration_s=180,
+    ),
+    Case(
+        id="scout_mcp_unavailable",
+        prompt="Look up Jira issue ABC-123 via MCP.",
+        # Stub is marked ok=false. Scout should report the failure and
+        # not fabricate issue content.
+        response_forbids=("Fix login bug", "In Progress"),
+        response_matches=(
+            r"(error|unavailable|offline|could not|fail|connection|can(n|')?t\s+reach)",
+        ),
+        fixture="mcp_unavailable",
+        max_duration_s=120,
+    ),
+    # -----------------------------------------------------------------------
     # Filesystem provider coverage
     # -----------------------------------------------------------------------
     Case(
