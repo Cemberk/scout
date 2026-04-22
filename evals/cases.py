@@ -83,6 +83,16 @@ CASES: tuple[Case, ...] = (
         ),
         max_duration_s=60,
     ),
+    Case(
+        id="scout_list_tools",
+        prompt="Which tools do you have access to?",
+        # Self-referential — name actual function-calling tools from the
+        # tool list, not just the contexts behind them. Must NOT call
+        # list_contexts (that tool is for live status, not self-description).
+        response_contains=("query_web", "query_crm", "update_crm"),
+        forbidden_tools=("query_", "update_", "list_contexts"),
+        max_duration_s=60,
+    ),
     # -----------------------------------------------------------------------
     # External context reads
     # -----------------------------------------------------------------------
