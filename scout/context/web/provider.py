@@ -37,9 +37,7 @@ class WebContextProvider(ContextProvider):
     ) -> None:
         super().__init__(id=id, name=name, mode=mode, model=model)
         self.backend = backend
-        self.instructions_text = (
-            instructions if instructions is not None else DEFAULT_WEB_INSTRUCTIONS
-        )
+        self.instructions_text = instructions if instructions is not None else DEFAULT_WEB_INSTRUCTIONS
         self._agent: Agent | None = None
 
     def status(self) -> Status:

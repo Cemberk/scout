@@ -63,9 +63,7 @@ def parse_mcp_env(slug: str) -> dict[str, Any]:
         raise ValueError(f"{prefix}TRANSPORT is required")
     transport = transport.lower()
     if transport not in ("stdio", "sse", "streamable-http"):
-        raise ValueError(
-            f"{prefix}TRANSPORT={transport!r} is not one of stdio/sse/streamable-http"
-        )
+        raise ValueError(f"{prefix}TRANSPORT={transport!r} is not one of stdio/sse/streamable-http")
 
     kwargs: dict[str, Any] = {
         "server_name": slug,
@@ -97,9 +95,7 @@ def parse_mcp_env(slug: str) -> dict[str, Any]:
         try:
             kwargs["timeout_seconds"] = int(timeout)
         except ValueError as exc:
-            raise ValueError(
-                f"{prefix}TIMEOUT_SECONDS={timeout!r} is not a valid integer"
-            ) from exc
+            raise ValueError(f"{prefix}TIMEOUT_SECONDS={timeout!r} is not a valid integer") from exc
 
     return kwargs
 
@@ -131,6 +127,7 @@ def _interpolate(value: str, *, field: str) -> str:
     skips this server rather than silently passing an empty auth header
     that would produce a confusing 401 downstream.
     """
+
     def _sub(match: re.Match[str]) -> str:
         var = match.group(1)
         resolved = getenv(var)

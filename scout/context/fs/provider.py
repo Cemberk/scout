@@ -37,9 +37,7 @@ class FilesystemContextProvider(ContextProvider):
     ) -> None:
         super().__init__(id=id, name=name, mode=mode, model=model)
         self.root = Path(root).expanduser().resolve()
-        self.instructions_text = (
-            instructions if instructions is not None else DEFAULT_FS_INSTRUCTIONS
-        )
+        self.instructions_text = instructions if instructions is not None else DEFAULT_FS_INSTRUCTIONS
         self._agent: Agent | None = None
 
     def status(self) -> Status:

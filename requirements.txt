@@ -8,7 +8,7 @@ annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0
 attrs==26.1.0
-certifi==2026.2.25
+certifi==2026.4.22
 cffi==2.0.0
 charset-normalizer==3.4.7
 click==8.3.2
@@ -25,7 +25,7 @@ fastapi-cloud-cli==0.17.0
 fastar==0.11.0
 frozenlist==1.8.0
 gitdb==4.0.12
-gitpython==3.1.46
+gitpython==3.1.47
 google-api-core==2.30.3
 google-api-python-client==2.194.0
 google-auth==2.49.2
@@ -55,9 +55,9 @@ multidict==6.7.1
 numpy==2.4.4
 oauthlib==3.3.1
 openai==2.32.0
-openinference-instrumentation==0.1.46
-openinference-instrumentation-agno==0.1.30
-openinference-semantic-conventions==0.1.28
+openinference-instrumentation==0.1.47
+openinference-instrumentation-agno==0.1.31
+openinference-semantic-conventions==0.1.29
 opentelemetry-api==1.41.0
 opentelemetry-instrumentation==0.62b0
 opentelemetry-sdk==1.41.0

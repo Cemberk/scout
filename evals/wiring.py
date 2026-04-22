@@ -120,9 +120,7 @@ def w1_scout_tool_surface() -> None:
     # provider's sub-agents. If this regresses we lose the read/write
     # separation the CRM provider enforces.
     if any("run_sql_query" in n or "sql_tools" in n.lower() for n in names):
-        raise AssertionError(
-            f"Scout has bare SQL tools; SQL must be wrapped by the CRM provider. Tool list: {names}"
-        )
+        raise AssertionError(f"Scout has bare SQL tools; SQL must be wrapped by the CRM provider. Tool list: {names}")
 
 
 def w2_crm_provider_surface() -> None:
@@ -147,7 +145,9 @@ def w2_crm_provider_surface() -> None:
     base_aupdate = type(provider).__mro__[1].aupdate  # type: ignore[attr-defined]
     crm_aupdate = type(provider).aupdate
     if crm_aupdate is base_aupdate:
-        raise AssertionError("DatabaseContextProvider.aupdate is not overridden — update_crm will always return read-only")
+        raise AssertionError(
+            "DatabaseContextProvider.aupdate is not overridden — update_crm will always return read-only"
+        )
 
 
 def w3_schema_guard_blocks_non_scout_writes() -> None:
@@ -175,16 +175,12 @@ def w3_schema_guard_blocks_non_scout_writes() -> None:
                 conn.execute(text(stmt))
         except RuntimeError as exc:
             if "public" not in str(exc) and "ai" not in str(exc) and "scout" not in str(exc):
-                raise AssertionError(
-                    f"Unexpected error text for {stmt!r}: {exc}"
-                ) from exc
+                raise AssertionError(f"Unexpected error text for {stmt!r}: {exc}") from exc
             continue
         except Exception as exc:
             # Anything else (e.g. OperationalError because table missing) is
             # NOT acceptable — the guard should fire first.
-            raise AssertionError(
-                f"Guard didn't fire for {stmt!r}; got {type(exc).__name__}: {exc}"
-            ) from exc
+            raise AssertionError(f"Guard didn't fire for {stmt!r}; got {type(exc).__name__}: {exc}") from exc
         else:
             raise AssertionError(f"Guard let through: {stmt!r}")
 
@@ -249,15 +245,11 @@ def w6_mcp_provider_lifecycle() -> None:
         raise AssertionError("MCPContextProvider does not subclass ContextProvider")
 
     if provider.id != "mcp_wiring_probe":
-        raise AssertionError(
-            f"expected id 'mcp_wiring_probe', got {provider.id!r}"
-        )
+        raise AssertionError(f"expected id 'mcp_wiring_probe', got {provider.id!r}")
 
     names = _tool_names(provider.get_tools())
     if not any("query_mcp_wiring_probe" in n for n in names):
-        raise AssertionError(
-            f"MCPContextProvider missing query_mcp_<slug> tool; saw {names}"
-        )
+        raise AssertionError(f"MCPContextProvider missing query_mcp_<slug> tool; saw {names}")
 
     status = provider.status()
     if not status.ok:

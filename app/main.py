@@ -67,10 +67,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
             )
             for provider, outcome in zip(providers, results, strict=True):
                 if isinstance(outcome, BaseException):
-                    log_warning(
-                        f"context {provider.id!r} aclose raised "
-                        f"{type(outcome).__name__}: {outcome}"
-                    )
+                    log_warning(f"context {provider.id!r} aclose raised {type(outcome).__name__}: {outcome}")
 
 
 # ---------------------------------------------------------------------------

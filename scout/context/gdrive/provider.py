@@ -52,9 +52,7 @@ class GDriveContextProvider(ContextProvider):
         if not resolved:
             raise ValueError("GDriveContextProvider: GOOGLE_SERVICE_ACCOUNT_FILE is required")
         self.service_account_path: str = resolved
-        self.instructions_text = (
-            instructions if instructions is not None else DEFAULT_GDRIVE_INSTRUCTIONS
-        )
+        self.instructions_text = instructions if instructions is not None else DEFAULT_GDRIVE_INSTRUCTIONS
         self._tools: ScoutGoogleDriveTools | None = None
         self._agent: Agent | None = None
 

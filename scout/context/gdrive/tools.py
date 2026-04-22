@@ -32,9 +32,7 @@ class ScoutGoogleDriveTools(GoogleDriveTools):
     """Drive toolkit that searches personal + shared + Shared Drive corpora."""
 
     @authenticate
-    def search_files(
-        self, query: Optional[str] = None, max_results: int = 10, page_token: Optional[str] = None
-    ) -> str:
+    def search_files(self, query: Optional[str] = None, max_results: int = 10, page_token: Optional[str] = None) -> str:
         if max_results < 1:
             return json.dumps({"error": "max_results must be greater than 0"})
         try:
@@ -74,11 +72,7 @@ class ScoutGoogleDriveTools(GoogleDriveTools):
 
     def _get_file_metadata(self, file_id: str, fields: str) -> dict:
         service = cast(Resource, self.service)
-        return (
-            service.files()
-            .get(fileId=file_id, fields=fields, supportsAllDrives=True)
-            .execute()
-        )
+        return service.files().get(fileId=file_id, fields=fields, supportsAllDrives=True).execute()
 
     @authenticate
     def read_file(self, file_id: str) -> str:

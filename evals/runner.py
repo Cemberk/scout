@@ -169,8 +169,7 @@ def build_fixture(name: str) -> list[Any]:
                 "Google Drive (stub)",
                 "Found 20 files matching your query:\n"
                 + "\n".join(
-                    f"- File {i:02d}: 'Roadmap Notes {i:02d}.gdoc' "
-                    f"(https://drive.google.com/file/d/1bulk_{i:02d}/view)"
+                    f"- File {i:02d}: 'Roadmap Notes {i:02d}.gdoc' (https://drive.google.com/file/d/1bulk_{i:02d}/view)"
                     for i in range(1, 21)
                 ),
             ),
@@ -230,9 +229,7 @@ def _threaded_slack_stub():
     @tool(name="get_thread_stub")
     async def get_thread_stub(channel_id: str, ts: str) -> str:
         """Stubbed Slack thread expansion. Returns replies for the message."""
-        return json.dumps(
-            {"channel_id": channel_id, "root_ts": ts, "replies": THREAD_REPLIES}
-        )
+        return json.dumps({"channel_id": channel_id, "root_ts": ts, "replies": THREAD_REPLIES})
 
     class ThreadedSlackStub(ContextProvider):
         def __init__(self) -> None:

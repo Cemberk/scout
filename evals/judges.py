@@ -63,7 +63,7 @@ JUDGED: tuple[Judged, ...] = (
         criteria=(
             "Score 1-10. The stub Drive context returns exactly this string:\n"
             "\"File: 'Q4 Roadmap 2026.gdoc' (application/vnd.google-apps.document). "
-            "webViewLink: https://drive.google.com/file/d/1eval_stub/view\"\n\n"
+            'webViewLink: https://drive.google.com/file/d/1eval_stub/view"\n\n'
             "Award points for SUBSTANCE, not framing. Harmless helpfulness — "
             "confidence levels, offers to look further, caveats about only having "
             "metadata — does not cost points unless it introduces invented facts.\n\n"
@@ -73,7 +73,7 @@ JUDGED: tuple[Judged, ...] = (
             "(+3) the response includes the webViewLink or a drive.google.com URL "
             "traceable to the stub (file id `1eval_stub` or the full link); "
             "(+2) the response does NOT fabricate content beyond what the stub "
-            "returned. Stating the MIME type, calling it \"a Google Docs file\", "
+            'returned. Stating the MIME type, calling it "a Google Docs file", '
             "saying it appears to be a Q4 roadmap by filename, or offering to do "
             "follow-up work are all fine. Deduct only for invented authors, made-up "
             "body text, or details that contradict or extend the stub; "
@@ -84,8 +84,7 @@ JUDGED: tuple[Judged, ...] = (
     Judged(
         id="scout_concise_write_ack",
         prompt=(
-            "For user 'eval-user-42', save a note titled 'ship status' with "
-            "body 'API release slipping to next week'."
+            "For user 'eval-user-42', save a note titled 'ship status' with body 'API release slipping to next week'."
         ),
         criteria=(
             "Score 1-10. This is a write — the user wants a short "
@@ -181,7 +180,7 @@ JUDGED: tuple[Judged, ...] = (
             "\"Issue ABC-123: summary='Fix login bug on Safari', "
             "status='In Progress', assignee='alice@example.com', "
             "updated='2026-04-10T14:22:00Z'. "
-            "URL: https://example.atlassian.net/browse/ABC-123\"\n\n"
+            'URL: https://example.atlassian.net/browse/ABC-123"\n\n'
             "A well-formed answer routes through query_mcp_jira, cites the "
             "fields verbatim, and doesn't invent content the stub didn't "
             "return (no extra comments, no speculation about cause, no "
@@ -203,22 +202,19 @@ JUDGED: tuple[Judged, ...] = (
     ),
     Judged(
         id="multi_provider_citation_quality",
-        prompt=(
-            "What do we know about the Q4 roadmap? Check Slack and Drive, "
-            "and cite your sources distinctly."
-        ),
+        prompt=("What do we know about the Q4 roadmap? Check Slack and Drive, and cite your sources distinctly."),
         criteria=(
             "Score 1-10. The stub contexts return exactly these strings:\n"
             "Slack → \"From #eng-roadmap (U07EVAL): 'Q4 roadmap finalized for "
             "2026-03-11'. Permalink: https://example.slack.com/archives/C07EVAL/p1712345000\"\n"
             "Drive → \"File: 'Q4 Roadmap 2026.gdoc' (application/vnd.google-apps.document). "
-            "webViewLink: https://drive.google.com/file/d/1eval_stub/view\"\n\n"
-            "The Slack quote the agent surfaces is literally \"Q4 roadmap finalized for "
-            "2026-03-11\" — accept that phrasing (and minor rewordings like "
+            'webViewLink: https://drive.google.com/file/d/1eval_stub/view"\n\n'
+            'The Slack quote the agent surfaces is literally "Q4 roadmap finalized for '
+            '2026-03-11" — accept that phrasing (and minor rewordings like '
             "\"finalized 2026-03-11\") as faithful. The user id 'U07EVAL' is in the "
             "stub, so echoing it isn't fabrication.\n\n"
             "Award points for SUBSTANCE, not framing. Harmless helpfulness — "
-            "confidence levels, caveats, offers of follow-up, \"bottom line\" "
+            'confidence levels, caveats, offers of follow-up, "bottom line" '
             "sections — does not cost points unless it introduces invented facts.\n\n"
             "Points: "
             "(+3) both sources are cited and clearly distinguished (not blended "

@@ -50,9 +50,7 @@ class DatabaseContextProvider(ContextProvider):
         self.sql_engine = sql_engine
         self.readonly_engine = readonly_engine
         self.schema = schema
-        self.read_instructions_text = (
-            read_instructions if read_instructions is not None else DEFAULT_READ_INSTRUCTIONS
-        )
+        self.read_instructions_text = read_instructions if read_instructions is not None else DEFAULT_READ_INSTRUCTIONS
         self.write_instructions_text = (
             write_instructions if write_instructions is not None else DEFAULT_WRITE_INSTRUCTIONS
         )
@@ -67,10 +65,7 @@ class DatabaseContextProvider(ContextProvider):
         try:
             with self.readonly_engine.connect() as conn:
                 count = conn.execute(
-                    text(
-                        "SELECT count(*) FROM information_schema.tables "
-                        "WHERE table_schema = :schema"
-                    ),
+                    text("SELECT count(*) FROM information_schema.tables WHERE table_schema = :schema"),
                     {"schema": self.schema},
                 ).scalar()
         except Exception as exc:

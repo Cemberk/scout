@@ -132,8 +132,7 @@ CASES: tuple[Case, ...] = (
     Case(
         id="scout_save_note",
         prompt=(
-            "For user 'eval-user-42', save a note titled 'eval-check' with "
-            "body 'eval suite verified scaffolding'."
+            "For user 'eval-user-42', save a note titled 'eval-check' with body 'eval suite verified scaffolding'."
         ),
         expected_tools=("update_crm",),
         forbidden_tools=("query_web", "query_slack", "query_gdrive"),
@@ -150,10 +149,7 @@ CASES: tuple[Case, ...] = (
     ),
     Case(
         id="scout_save_contact",
-        prompt=(
-            "For user 'eval-user-42', add a new contact: name 'John Doe', "
-            "phone '555-0100', tag 'vendor'."
-        ),
+        prompt=("For user 'eval-user-42', add a new contact: name 'John Doe', phone '555-0100', tag 'vendor'."),
         # Writes go through the namespaced update tool now.
         expected_tools=("update_crm",),
         max_duration_s=180,
@@ -171,10 +167,7 @@ CASES: tuple[Case, ...] = (
         expected_tools=("update_crm",),
         followups=(
             FollowUp(
-                prompt=(
-                    "For user 'eval-recall-contact-42', list any contacts "
-                    "tagged 'eval'."
-                ),
+                prompt=("For user 'eval-recall-contact-42', list any contacts tagged 'eval'."),
                 response_contains=("Recall Target",),
                 expected_tools=("query_crm",),
                 forbidden_tools=("query_web", "query_slack", "query_gdrive"),
@@ -216,27 +209,21 @@ CASES: tuple[Case, ...] = (
         # Stub's query raises; the wrapped tool returns a JSON error payload.
         # Scout must surface the error state rather than invent an answer.
         response_forbids=("Guido van Rossum",),
-        response_matches=(
-            r"(error|unavailable|offline|could not|failed|can(n|')?t\s+reach|no\s+(results|answer))",
-        ),
+        response_matches=(r"(error|unavailable|offline|could not|failed|can(n|')?t\s+reach|no\s+(results|answer))",),
         fixture="web_errors",
         max_duration_s=120,
     ),
     Case(
         id="scout_slack_degraded",
         prompt="Search Slack for recent discussion about onboarding.",
-        response_matches=(
-            r"(error|unavailable|offline|could not|failed|can(n|')?t\s+reach)",
-        ),
+        response_matches=(r"(error|unavailable|offline|could not|failed|can(n|')?t\s+reach)",),
         fixture="slack_errors",
         max_duration_s=120,
     ),
     Case(
         id="scout_gdrive_degraded",
         prompt="Search Google Drive for files about the Q4 roadmap.",
-        response_matches=(
-            r"(error|unavailable|offline|could not|failed|can(n|')?t\s+reach)",
-        ),
+        response_matches=(r"(error|unavailable|offline|could not|failed|can(n|')?t\s+reach)",),
         fixture="gdrive_errors",
         max_duration_s=120,
     ),
@@ -283,9 +270,7 @@ CASES: tuple[Case, ...] = (
         # Stub is marked ok=false. Scout should report the failure and
         # not fabricate issue content.
         response_forbids=("Fix login bug", "In Progress"),
-        response_matches=(
-            r"(error|unavailable|offline|could not|fail|connection|can(n|')?t\s+reach)",
-        ),
+        response_matches=(r"(error|unavailable|offline|could not|fail|connection|can(n|')?t\s+reach)",),
         fixture="mcp_unavailable",
         max_duration_s=120,
     ),

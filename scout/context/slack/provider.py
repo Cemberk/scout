@@ -44,9 +44,7 @@ class SlackContextProvider(ContextProvider):
         self.token = token or getenv("SLACK_BOT_TOKEN") or getenv("SLACK_TOKEN")
         if not self.token:
             raise ValueError("SlackContextProvider: SLACK_BOT_TOKEN (or SLACK_TOKEN) is required")
-        self.instructions_text = (
-            instructions if instructions is not None else DEFAULT_SLACK_INSTRUCTIONS
-        )
+        self.instructions_text = instructions if instructions is not None else DEFAULT_SLACK_INSTRUCTIONS
         self._tools: SlackTools | None = None
         self._agent: Agent | None = None
 

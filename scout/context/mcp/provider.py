@@ -103,8 +103,7 @@ class MCPContextProvider(ContextProvider):
 
     def query(self, question: str) -> Answer:
         raise NotImplementedError(
-            "MCPContextProvider does not support sync query(); use aquery() "
-            "(MCP sessions are async-only)."
+            "MCPContextProvider does not support sync query(); use aquery() (MCP sessions are async-only)."
         )
 
     async def aquery(self, question: str) -> Answer:
@@ -123,10 +122,7 @@ class MCPContextProvider(ContextProvider):
             try:
                 await tools.close()
             except Exception as exc:
-                log_warning(
-                    f"MCPContextProvider[{self.id}]: close() raised "
-                    f"{type(exc).__name__}: {exc}"
-                )
+                log_warning(f"MCPContextProvider[{self.id}]: close() raised {type(exc).__name__}: {exc}")
 
     def instructions(self) -> str:
         if self.mode == ContextMode.tools:
@@ -165,18 +161,12 @@ class MCPContextProvider(ContextProvider):
     def _validate_config(self) -> None:
         if self.transport == "stdio":
             if not self.command:
-                raise ValueError(
-                    f"MCPContextProvider[{self.id}]: transport=stdio requires `command`"
-                )
+                raise ValueError(f"MCPContextProvider[{self.id}]: transport=stdio requires `command`")
         elif self.transport in ("sse", "streamable-http"):
             if not self.url:
-                raise ValueError(
-                    f"MCPContextProvider[{self.id}]: transport={self.transport} requires `url`"
-                )
+                raise ValueError(f"MCPContextProvider[{self.id}]: transport={self.transport} requires `url`")
         else:
-            raise ValueError(
-                f"MCPContextProvider[{self.id}]: unknown transport {self.transport!r}"
-            )
+            raise ValueError(f"MCPContextProvider[{self.id}]: unknown transport {self.transport!r}")
 
     def _detail_ok(self) -> str:
         n = len(self._tool_descriptions)
@@ -208,13 +198,9 @@ class MCPContextProvider(ContextProvider):
                 )
 
                 if self.transport == "sse":
-                    kwargs["server_params"] = SSEClientParams(
-                        url=self.url or "", headers=self.headers
-                    )
+                    kwargs["server_params"] = SSEClientParams(url=self.url or "", headers=self.headers)
                 else:
-                    kwargs["server_params"] = StreamableHTTPClientParams(
-                        url=self.url or "", headers=self.headers
-                    )
+                    kwargs["server_params"] = StreamableHTTPClientParams(url=self.url or "", headers=self.headers)
 
         return MCPTools(**kwargs)
 
@@ -262,13 +248,10 @@ class MCPContextProvider(ContextProvider):
             tool_block = "(no tools discovered — the server may be misconfigured)"
         else:
             tool_block = "\n".join(
-                f"- `{name}`: {desc}\n  Arguments: {args}"
-                for name, desc, args in self._tool_descriptions
+                f"- `{name}`: {desc}\n  Arguments: {args}" for name, desc, args in self._tool_descriptions
             )
-        return (
-            self.base_instructions_text
-            .replace("{server_name}", self.server_name)
-            .replace("{tool_block}", tool_block)
+        return self.base_instructions_text.replace("{server_name}", self.server_name).replace(
+            "{tool_block}", tool_block
         )
 
 
