@@ -60,6 +60,15 @@ MCPContextProvider(
 | `url` | sse / streamable-http | Server URL. |
 | `headers` | sse / streamable-http (optional) | HTTP headers dict. |
 | `timeout_seconds` | optional | MCP read timeout. Default 30. |
+| `mode` | optional | `ContextMode.default` (sub-agent wrap — one `query_mcp_<slug>` tool on Scout) or `ContextMode.tools` (flatten — the server's tools appear directly on Scout). |
+
+### When to pick `mode=tools` vs `mode=default`
+
+`default` routes Scout → sub-agent → MCP, which adds two LLM hops but isolates tool namespaces. Right when the server has many tools, cryptic tool names, or names that collide with another MCP server (e.g. `search`, `create_issue`).
+
+`tools` flattens the server's tools onto Scout directly. Cheaper (no extra hops) and simpler. Right when the server has few, distinctively-named tools (e.g. `get_current_time`) — Scout can route perfectly well with no help.
+
+`mode=tools` MCP sessions are pre-warmed in the app lifespan so the toolkit's `functions` dict is populated before Scout's agent pulls its tool list.
 
 ### stdio executables
 

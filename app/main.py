@@ -12,7 +12,7 @@ from agno.os import AgentOS
 from app.router import create_router
 from db import get_postgres_db
 from scout.agent import scout
-from scout.contexts import close_context_providers, create_context_providers
+from scout.contexts import close_context_providers, create_context_providers, prewarm_context_providers
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -50,6 +50,7 @@ async def lifespan(app):  # type: ignore[no-untyped-def]
 
     create_tables()
     create_context_providers()
+    await prewarm_context_providers()
     try:
         yield
     finally:

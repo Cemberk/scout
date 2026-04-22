@@ -124,6 +124,27 @@ class MCPContextProvider(ContextProvider):
             except Exception as exc:
                 log_warning(f"MCPContextProvider[{self.id}]: close() raised {type(exc).__name__}: {exc}")
 
+    async def aprewarm(self) -> None:
+        """Connect the MCP session when ``mode=tools``.
+
+        ``mode=tools`` hands the raw ``MCPTools`` toolkit to the calling
+        agent via ``get_tools()`` (which is sync). Without a prior
+        ``_connect()``, the toolkit's ``functions`` dict is empty and
+        the agent sees no tools. The lifespan awaits this on startup.
+
+        ``mode=default`` (sub-agent wrap) stays lazy — the sub-agent
+        connects on first ``aquery()``.
+        """
+        if self.mode != ContextMode.tools:
+            return
+        try:
+            await self._ensure_session()
+        except Exception as exc:
+            log_warning(
+                f"MCPContextProvider[{self.id}]: prewarm failed — "
+                f"{type(exc).__name__}: {exc}. Tools will not be visible until reconnect."
+            )
+
     def instructions(self) -> str:
         if self.mode == ContextMode.tools:
             return (
