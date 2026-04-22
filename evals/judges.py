@@ -45,6 +45,123 @@ JUDGED: tuple[Judged, ...] = (
             "slack, gmail, drive, email sending, calendar."
         ),
     ),
+    Judged(
+        id="gdrive_citation_quality",
+        prompt="Find a Google Drive file about the Q4 roadmap and tell me what it is.",
+        criteria=(
+            "Score 1-10. The stub Drive context returns exactly this string:\n"
+            "\"File: 'Q4 Roadmap 2026.gdoc' (application/vnd.google-apps.document). "
+            "webViewLink: https://drive.google.com/file/d/1eval_stub/view\"\n\n"
+            "Award points for SUBSTANCE, not framing. Harmless helpfulness — "
+            "confidence levels, offers to look further, caveats about only having "
+            "metadata — does not cost points unless it introduces invented facts.\n\n"
+            "Points: "
+            "(+4) the response names the file (any recognizable form of "
+            "'Q4 Roadmap 2026'); "
+            "(+3) the response includes the webViewLink or a drive.google.com URL "
+            "traceable to the stub (file id `1eval_stub` or the full link); "
+            "(+2) the response does NOT fabricate content beyond what the stub "
+            "returned. Stating the MIME type, calling it \"a Google Docs file\", "
+            "saying it appears to be a Q4 roadmap by filename, or offering to do "
+            "follow-up work are all fine. Deduct only for invented authors, made-up "
+            "body text, or details that contradict or extend the stub; "
+            "(+1) the answer is focused on the single file the stub returned — "
+            "not a padded list of additional hypothetical matches."
+        ),
+    ),
+    Judged(
+        id="leader_concise_write_ack",
+        prompt=(
+            "For user 'eval-user-42', save a note titled 'ship status' with "
+            "body 'API release slipping to next week'."
+        ),
+        criteria=(
+            "Score 1-10. This is a write — the user wants a short "
+            "acknowledgment, not a debrief. Scout delegates to Engineer, "
+            "Engineer runs SQL, and the final response should be a short "
+            "confirmation.\n\n"
+            "Echoing DB-assigned fields that come out of the INSERT (the "
+            "SERIAL id, created_at timestamp, or the schema name like "
+            "'scout.scout_notes') is NOT fabrication — those are facts the "
+            "database returned. Do not deduct for including them.\n\n"
+            "Points: "
+            "(+5) the response confirms the save in plain language "
+            "(e.g. 'saved', 'stored', 'noted', 'added', 'recorded'); "
+            "(+3) the response includes the title ('ship status') OR the "
+            "body text so the user can verify the right note was stored "
+            "(either is sufficient — one is enough); "
+            "(+1) the response is FOCUSED — a short confirmation plus a "
+            "compact bullet list of the saved row (title/body/id/user_id) "
+            "is ideal. Deduct only for actual padding: other-capability "
+            "menus, cross-provider offers, multi-section essays, filler "
+            "disclaimers. A tight bullet list of the inserted columns is "
+            "the target shape, NOT padding; "
+            "(+1) no fabricated facts — no invented project status, owner, "
+            "or follow-up commitment beyond what the user provided."
+        ),
+    ),
+    Judged(
+        id="slack_thread_expansion",
+        prompt=(
+            "Search Slack for the Q4 roadmap discussion. If the top hit is "
+            "part of a thread, expand the thread and summarize what the replies add."
+        ),
+        criteria=(
+            "Score 1-10. A Slack stub exposes two tools:\n"
+            "- search_workspace_stub(query) returns one hit with "
+            "reply_count=3 in #eng-roadmap\n"
+            "- get_thread_stub(channel_id, ts) returns three replies: "
+            "one about sharing a deck, one naming milestone owners "
+            "(alice, bob, carol), and one with target launch 2026-04-02\n\n"
+            "A well-behaved agent searches first and then expands the thread "
+            "because reply_count > 0 signals there's more context below.\n\n"
+            "Points: "
+            "(+4) the response includes content that only appears in the "
+            "replies (a reference to sharing the deck, the milestone owners "
+            "alice/bob/carol, OR the target launch 2026-04-02) — this proves "
+            "the agent expanded the thread; "
+            "(+3) the response cites the channel '#eng-roadmap' or the root "
+            "message's content ('Q4 roadmap finalized for 2026-03-11'); "
+            "(+2) no fabricated facts — no invented owners, milestones, or "
+            "dates beyond what the stubs return; "
+            "(+1) the response is concise — a summary, not a full transcript "
+            "dump of every reply verbatim."
+        ),
+        fixture="slack_threaded",
+    ),
+    Judged(
+        id="multi_provider_citation_quality",
+        prompt=(
+            "What do we know about the Q4 roadmap? Check Slack and Drive, "
+            "and cite your sources distinctly."
+        ),
+        criteria=(
+            "Score 1-10. The stub contexts return exactly these strings:\n"
+            "Slack → \"From #eng-roadmap (U07EVAL): 'Q4 roadmap finalized for "
+            "2026-03-11'. Permalink: https://example.slack.com/archives/C07EVAL/p1712345000\"\n"
+            "Drive → \"File: 'Q4 Roadmap 2026.gdoc' (application/vnd.google-apps.document). "
+            "webViewLink: https://drive.google.com/file/d/1eval_stub/view\"\n\n"
+            "The Slack quote the agent surfaces is literally \"Q4 roadmap finalized for "
+            "2026-03-11\" — accept that phrasing (and minor rewordings like "
+            "\"finalized 2026-03-11\") as faithful. The user id 'U07EVAL' is in the "
+            "stub, so echoing it isn't fabrication.\n\n"
+            "Award points for SUBSTANCE, not framing. Harmless helpfulness — "
+            "confidence levels, caveats, offers of follow-up, \"bottom line\" "
+            "sections — does not cost points unless it introduces invented facts.\n\n"
+            "Points: "
+            "(+3) both sources are cited and clearly distinguished (not blended "
+            "into one paragraph); "
+            "(+3) the Slack citation includes the channel name '#eng-roadmap' OR "
+            "the date 2026-03-11, AND the Drive citation includes the file name "
+            "'Q4 Roadmap 2026.gdoc' OR a drive.google.com URL; "
+            "(+2) no fabricated facts — no invented owners, no made-up project "
+            "names, no claims about roadmap contents/milestones (the agent should "
+            "acknowledge contents aren't exposed). Recapping that the roadmap "
+            "appears finalized per Slack is NOT fabrication; "
+            "(+2) the response is structured and scannable (bulleted or sectioned "
+            "per source), not a single paragraph of prose."
+        ),
+    ),
 )
 
 
@@ -64,13 +181,19 @@ class JudgedResult:
 
 def run_judged(case: Judged) -> JudgedResult:
     """Run one judged case."""
+    import uuid
+
     from scout.team import scout as team
 
     prev = install_fixture(build_fixture(case.fixture))
 
     start = time.monotonic()
     try:
-        run_result = asyncio.run(team.arun(case.prompt))
+        # Fresh session per case so prior runs' history doesn't leak in.
+        # Team has `add_history_to_context=True, num_history_runs=5`, and
+        # agno reuses session_id when not passed — causing cross-case drift.
+        session_id = f"eval-judge-{case.id}-{uuid.uuid4().hex[:8]}"
+        run_result = asyncio.run(team.arun(case.prompt, session_id=session_id))
         response = getattr(run_result, "content", None) or ""
         duration = time.monotonic() - start
 

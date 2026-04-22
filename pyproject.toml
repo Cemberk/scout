@@ -54,6 +54,7 @@ module = [
   "exa_py.*",
   "sqlalchemy.*",
   "fastapi.*",
+  "googleapiclient.*",
 ]
 ignore_missing_imports = true
 

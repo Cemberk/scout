@@ -24,9 +24,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agno.agent import Agent
-from agno.tools.google.drive import GoogleDriveTools
 
 from scout.context._utils import answer_from_run
+from scout.context.gdrive.tools import ScoutGoogleDriveTools
 from scout.context.mode import ContextMode
 from scout.context.provider import Answer, ContextProvider, Status
 
@@ -51,7 +51,7 @@ class GDriveContextProvider(ContextProvider):
         if not resolved:
             raise ValueError("GDriveContextProvider: GOOGLE_SERVICE_ACCOUNT_FILE is required")
         self.service_account_path: str = resolved
-        self._tools: GoogleDriveTools | None = None
+        self._tools: ScoutGoogleDriveTools | None = None
         self._agent: Agent | None = None
 
     def status(self) -> Status:
@@ -97,9 +97,9 @@ class GDriveContextProvider(ContextProvider):
     # Internals
     # ------------------------------------------------------------------
 
-    def _ensure_tools(self) -> GoogleDriveTools:
+    def _ensure_tools(self) -> ScoutGoogleDriveTools:
         if self._tools is None:
-            self._tools = GoogleDriveTools(
+            self._tools = ScoutGoogleDriveTools(
                 service_account_path=self.service_account_path,
                 list_files=True,
                 search_files=True,
@@ -129,16 +129,44 @@ class GDriveContextProvider(ContextProvider):
 _AGENT_INSTRUCTIONS = """\
 You answer questions by searching and reading Google Drive.
 
-Workflow:
-1. **Search with Drive query syntax.** `search_files(query=...)` accepts
-   clauses like `name contains 'roadmap'`,
-   `mimeType = 'application/vnd.google-apps.document'`,
-   `modifiedTime > '2025-01-01T00:00:00'`. Combine with `and` / `or`.
-2. **Open the most relevant hits.** `read_file(file_id)` returns plain text
-   for Docs, CSV for Sheets, raw text for non-Workspace files.
-3. **Don't read everything.** The search result has enough metadata
-   (name, mimeType, modifiedTime, webViewLink) to decide what to open.
-4. **Cite webViewLinks.** Every fact should point to a Drive link.
+You authenticate as a *service account*, not an end user. The owner
+shares folders (or individual files) with the SA email; `sharedWithMe`
+is set on the shared *root* but NOT on files inside a shared folder.
+So a bare `name contains '...'` search will miss files inside shared
+folders. Always escalate when the first search comes back empty.
 
-You are read-only. No upload, no download, no writes.
+## Search workflow (escalate on empty)
+
+1. **First try a bare name search.**
+   `search_files(query="name contains 'X'")`
+   — catches files directly owned by the SA, or files the SA can
+   reach via an ancestor shared with it.
+
+2. **If step 1 returns zero results, search shared items.**
+   `search_files(query="sharedWithMe and name contains 'X'")`
+   — catches files + folders shared with the SA directly. The folder
+   itself is here even if its contents aren't.
+
+3. **If step 2 still returns zero, traverse shared folders.**
+   a. `search_files(query="mimeType = 'application/vnd.google-apps.folder' and sharedWithMe")`
+      — enumerate every folder shared with the SA.
+   b. For each returned folder id, search inside it:
+      `search_files(query="'<folder_id>' in parents and name contains 'X'")`
+   Stop as soon as you find matches. If the user's query refers to a
+   topic (e.g. "growth"), match folder names first — a folder named
+   "Growth" probably has the files inside.
+
+4. **If the user gives a topic but not a name**, combine filters:
+   `mimeType = 'application/vnd.google-apps.document' and name contains 'roadmap'`
+   or `modifiedTime > '2025-01-01T00:00:00' and name contains 'Q4'`.
+
+## After you find the files
+
+- **Open the most relevant hit.** `read_file(file_id)` returns plain
+  text for Docs, CSV for Sheets, raw text for non-Workspace files.
+- **Don't read everything** — search metadata (name, mimeType,
+  modifiedTime, webViewLink) is usually enough to decide what to open.
+- **Cite webViewLinks.** Every fact points to a Drive link. Don't
+  speculate about file contents you didn't read.
+- **Read-only.** No upload, no download, no writes.
 """

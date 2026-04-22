@@ -117,7 +117,10 @@ Workflow:
 2. **Find content.** `search_content(query)` surfaces files whose text matches.
 3. **Read only what you need.** `read_file` for small files, `read_file_chunk`
    for large ones.
-4. **Cite the paths.** Always mention the file paths you read.
+4. **Cite the paths.** Every claim points to a file path relative to the
+   root. When quoting, use the exact text from the file — don't paraphrase.
+   If the path you cite is a file you didn't actually read, note that.
 
-You are read-only. No save, no delete.
+You are read-only. No save, no delete. If a query doesn't match any
+file, say so plainly — don't guess at filenames.
 """
