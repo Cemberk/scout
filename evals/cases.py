@@ -72,6 +72,39 @@ CASES: tuple[Case, ...] = (
         expected_tools=("list_contexts",),
         max_duration_s=120,
     ),
+    Case(
+        id="explorer_slack_search",
+        prompt="Search Slack for recent discussion of the Q4 roadmap and quote a message.",
+        expected_agent="explorer",
+        # Substring match: catches the stub's `query_slack` plus the real
+        # toolkit's `search_workspace` / `get_channel_history` / `get_thread`.
+        expected_tools=("slack",),
+        # Channel name is distinctive enough to prove the agent consumed the
+        # stub's output; LLMs tend to strip noisy permalinks on summary.
+        response_contains=("eng-roadmap",),
+        max_duration_s=180,
+    ),
+    Case(
+        id="explorer_gdrive_search",
+        prompt="Search Google Drive for files about the Q4 roadmap and cite the link.",
+        expected_agent="explorer",
+        # GDrive provider wraps its tools in a sub-agent, so Explorer only
+        # sees the namespaced `query_gdrive` — never `search_files` / `list_files`.
+        expected_tools=("query_gdrive",),
+        response_contains=("drive.google.com",),
+        max_duration_s=180,
+    ),
+    Case(
+        id="explorer_multi_provider",
+        prompt=(
+            "Summarize what we know about the Q4 roadmap from both Slack and "
+            "Google Drive; cite each source."
+        ),
+        expected_agent="explorer",
+        expected_tools=("query_gdrive", "slack"),
+        response_contains=("drive.google.com", "eng-roadmap"),
+        max_duration_s=240,
+    ),
     # -----------------------------------------------------------------------
     # Engineer
     # -----------------------------------------------------------------------
