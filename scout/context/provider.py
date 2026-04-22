@@ -116,6 +116,19 @@ class ContextProvider(ABC):
     @abstractmethod
     async def astatus(self) -> Status: ...
 
+    async def aclose(self) -> None:
+        """Release any resources this provider is holding. Default: no-op.
+
+        Override in subclasses that keep long-lived state — an open MCP
+        session, a watched inbox, a webhook subscription. The app lifespan
+        awaits ``aclose()`` across every registered provider on shutdown
+        with ``asyncio.gather(return_exceptions=True)`` so one stuck
+        teardown can't block the others. Must be safe to call even if the
+        provider was never fully initialized (e.g. lazy session never
+        connected).
+        """
+        return None
+
     def instructions(self) -> str:
         """How a calling agent should use this provider.
 
