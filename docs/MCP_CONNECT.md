@@ -49,6 +49,10 @@ MCP_FILESYSTEM_ARGS=-y,@modelcontextprotocol/server-filesystem,/tmp/mcp-test
 
 `MCP_*_HEADERS` and `MCP_*_ENV` values are interpolated against the process environment at load time. If a referenced variable is missing, the provider is skipped with a warning rather than passing an empty auth header — that 401 would otherwise be hard to diagnose downstream.
 
+### stdio executables
+
+`MCP_<SLUG>_COMMAND` must be an executable that's actually on `PATH` inside Scout's runtime. The ship image bundles Python tooling (`uv`, `uvx`, `python`), so Python MCP servers like `uvx --from mcp-server-time mcp-server-time` work out of the box. **Node-based servers (`npx @something/mcp`) need Node installed in your deploy image** — add `RUN apt-get install -y nodejs npm` (or the equivalent) to the Dockerfile before shipping.
+
 ## Lifecycle
 
 - **Connect is lazy.** The first `query_mcp_<slug>(...)` call pays the `MCPTools.initialize()` cost. `/contexts/<id>/status` also triggers a connect.
