@@ -4,7 +4,7 @@ Scout is a **context agent** — an agent that explores information sources and 
 
 Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
 
-Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, **Google Drive**, a **CRM** (the user's own contacts / projects / notes, stored in Postgres), and any **MCP server** (point `MCP_SERVERS` at stdio/HTTP MCP endpoints and each becomes its own `query_mcp_<slug>` tool). GitHub, Gmail, and Calendar land in the next release.
+Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, **Google Drive**, a **CRM** (the user's own contacts / projects / notes, stored in Postgres), and any **MCP server** (wire one up in [`scout/contexts.py`](scout/contexts.py) and it becomes its own `query_mcp_<slug>` tool). GitHub, Gmail, and Calendar land in the next release.
 
 ## Quick start
 
@@ -57,7 +57,7 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | **`DatabaseContextProvider`** (CRM) | always on — Postgres via `DB_*` | `query_crm` reads the user's contacts / projects / notes; `update_crm` saves or modifies them. Two internal sub-agents so the read path never sees the write engine; writes are scoped to the `scout` schema and guarded at the engine layer. |
 | **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md). |
 | **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Scout authenticates as its own service account — share folders with the SA email to grant access. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) (or `./scripts/google_setup.sh` for the automated path). |
-| **`MCPContextProvider`** | `MCP_SERVERS` + per-slug vars | Wraps any MCP server (stdio / SSE / streamable-HTTP). One `query_mcp_<slug>` tool on Scout per slug; sub-agent instructions built dynamically from `list_tools()`. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md). |
+| **`MCPContextProvider`** | wired in [`scout/contexts.py`](scout/contexts.py) | Wraps any MCP server (stdio / SSE / streamable-HTTP). One `query_mcp_<slug>` tool on Scout per server; sub-agent instructions built dynamically from `list_tools()`. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md). |
 
 **Web backends**, first-match selection:
 

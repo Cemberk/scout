@@ -1,57 +1,69 @@
 # Connecting Scout to MCP Servers
 
-Scout can pull any [Model Context Protocol](https://modelcontextprotocol.io) server into its context registry. Each configured server becomes one `MCPContextProvider`, exposes a single `query_mcp_<slug>` tool on Scout, and runs behind a dedicated sub-agent so tool-name collisions between MCP servers stay isolated.
+Scout can pull any [Model Context Protocol](https://modelcontextprotocol.io) server into its context registry. Each server becomes one `MCPContextProvider`, exposes a single `query_mcp_<slug>` tool on Scout, and runs behind a dedicated sub-agent so tool-name collisions between MCP servers stay isolated.
 
 ## Why run an MCP server as a context
 
-- **No custom provider to write** — point at any stdio/HTTP MCP server and Scout can use it immediately.
-- **Tool discovery stays fresh.** The sub-agent's instructions are built from the server's `list_tools()` response at connect time, so rename a tool on the server and Scout picks it up on next restart.
+- **No custom provider to write** — any stdio/HTTP MCP server works.
+- **Tool discovery stays fresh.** The sub-agent's instructions are built from the server's `list_tools()` response at connect, so rename a tool on the server and Scout picks it up on the next restart.
 - **Graceful degradation.** A crashed or unreachable server surfaces as `ok=false` on `/contexts/<id>/status` instead of taking Scout down.
 
-## Configure
+## Wire one up
 
-Each server is configured via env vars. List the slugs you want registered in `MCP_SERVERS`, then fill in the per-slug variables using the `MCP_<SLUG>_*` prefix.
+Add an `MCPContextProvider` entry to `_create_mcp_providers()` in [`scout/contexts.py`](../scout/contexts.py). Secrets come from the process env via `getenv(...)`.
 
-```bash
-MCP_SERVERS=linear,github,filesystem
+**stdio (local subprocess):**
 
-# --- linear: local stdio server launched via npx ------------------------------
-MCP_LINEAR_TRANSPORT=stdio
-MCP_LINEAR_COMMAND=npx
-MCP_LINEAR_ARGS=-y,@linear/mcp
-MCP_LINEAR_ENV=LINEAR_API_KEY=${LINEAR_API_KEY}
-
-# --- github: hosted streamable-http server ------------------------------------
-MCP_GITHUB_TRANSPORT=streamable-http
-MCP_GITHUB_URL=https://mcp.github.com/mcp
-MCP_GITHUB_HEADERS=Authorization=Bearer ${GITHUB_TOKEN}
-
-# --- filesystem: local stdio server over a fixed directory --------------------
-MCP_FILESYSTEM_TRANSPORT=stdio
-MCP_FILESYSTEM_COMMAND=npx
-MCP_FILESYSTEM_ARGS=-y,@modelcontextprotocol/server-filesystem,/tmp/mcp-test
+```python
+MCPContextProvider(
+    server_name="linear",
+    transport="stdio",
+    command="npx",
+    args=["-y", "@linear/mcp"],
+    env={"LINEAR_API_KEY": getenv("LINEAR_API_KEY", "")},
+    model=default_model(),
+)
 ```
 
-### Config schema
+**streamable-http (hosted):**
 
-| Variable | When | Description |
+```python
+MCPContextProvider(
+    server_name="github",
+    transport="streamable-http",
+    url="https://mcp.github.com/mcp",
+    headers={"Authorization": f"Bearer {getenv('GITHUB_TOKEN', '')}"},
+    model=default_model(),
+)
+```
+
+**sse:**
+
+```python
+MCPContextProvider(
+    server_name="notion",
+    transport="sse",
+    url="https://mcp.notion.so/sse",
+    model=default_model(),
+)
+```
+
+### Constructor parameters
+
+| Parameter | Required | Description |
 |---|---|---|
-| `MCP_SERVERS` | Always | Comma-separated slugs. Each slug registers as `mcp_<slug>`. |
-| `MCP_<SLUG>_TRANSPORT` | Always | One of `stdio`, `sse`, `streamable-http`. |
-| `MCP_<SLUG>_COMMAND` | stdio | Executable name (`npx`, `uvx`, `python`, etc.). |
-| `MCP_<SLUG>_ARGS` | stdio (optional) | Comma-separated CLI args. |
-| `MCP_<SLUG>_ENV` | stdio (optional) | `key=value` pairs, comma-separated. Supports `${VAR}` interpolation. |
-| `MCP_<SLUG>_URL` | sse / streamable-http | Server URL. |
-| `MCP_<SLUG>_HEADERS` | sse / streamable-http (optional) | `key=value` pairs, comma-separated. Supports `${VAR}` interpolation. |
-| `MCP_<SLUG>_TIMEOUT_SECONDS` | All (optional) | Override the 30-second default MCP read timeout. |
-
-### `${VAR}` interpolation
-
-`MCP_*_HEADERS` and `MCP_*_ENV` values are interpolated against the process environment at load time. If a referenced variable is missing, the provider is skipped with a warning rather than passing an empty auth header — that 401 would otherwise be hard to diagnose downstream.
+| `server_name` | yes | Derives `id=mcp_<server_name>` and the tool name `query_mcp_<server_name>`. |
+| `transport` | yes | One of `"stdio"`, `"sse"`, `"streamable-http"`. |
+| `command` | stdio | Executable (`npx`, `uvx`, `python`, ...). Must be on `PATH`. |
+| `args` | stdio (optional) | CLI args as a `list[str]`. |
+| `env` | stdio (optional) | Env vars passed to the child process. |
+| `url` | sse / streamable-http | Server URL. |
+| `headers` | sse / streamable-http (optional) | HTTP headers dict. |
+| `timeout_seconds` | optional | MCP read timeout. Default 30. |
 
 ### stdio executables
 
-`MCP_<SLUG>_COMMAND` must be an executable that's actually on `PATH` inside Scout's runtime. The ship image bundles Python tooling (`uv`, `uvx`, `python`), so Python MCP servers like `uvx --from mcp-server-time mcp-server-time` work out of the box. **Node-based servers (`npx @something/mcp`) need Node installed in your deploy image** — add `RUN apt-get install -y nodejs npm` (or the equivalent) to the Dockerfile before shipping.
+`command` must be an executable that's actually on `PATH` inside Scout's runtime. The ship image bundles Python tooling (`uv`, `uvx`, `python`), so Python MCP servers like `uvx --from mcp-server-time mcp-server-time` work out of the box. **Node-based servers (`npx @something/mcp`) need Node installed in your deploy image** — add `RUN apt-get install -y nodejs npm` (or the equivalent) to the Dockerfile before shipping.
 
 ## Lifecycle
 
@@ -78,14 +90,12 @@ curl -sS -X POST http://localhost:8000/agents/scout/runs \
 
 ## Debugging
 
-- **`MCP server '<slug>' misconfigured: ...` on startup.** Env-var problem — the warning names the specific variable. Fix the env and restart.
-- **`/contexts/mcp_<slug>/status` returns `ok=false`.** Either the server isn't reachable or `initialize()` errored. For stdio: check that `COMMAND` is on `PATH` (inside the container if running under compose). For HTTP: curl the URL directly to confirm it's live and your headers auth.
-- **Tool calls fail but status is OK.** Look at `MCPContextProvider` logs — agno's `MCPTools` logs tool-call exceptions at `ERROR`. Some servers declare tools they don't actually implement; `exclude_tools` support isn't wired yet (flagged as future work).
+- **`/contexts/mcp_<slug>/status` returns `ok=false`.** Either the server isn't reachable or `initialize()` errored. For stdio: check that `command` is on `PATH` (inside the container if running under compose). For HTTP: curl the URL directly to confirm it's live and your headers auth.
+- **Tool calls fail but status is OK.** Look at `MCPContextProvider` logs — agno's `MCPTools` logs tool-call exceptions at `ERROR`. Some servers declare tools they don't actually implement.
 - **Tool list looks stale.** The list is cached at connect time. Restart Scout to re-discover.
 
 ## Known gaps (v1)
 
 - **Writes aren't gated.** If an MCP server exposes a `create_issue` tool, Scout's sub-agent will call it when the user explicitly asks. There's no per-tool policy layer yet.
 - **No auto-reconnect.** A dropped session raises on the next call; the provider resets and the call after that reconnects. No retry loop beyond that.
-- **No YAML config.** Env-driven only. Revisit if >5 servers with complex headers become the norm.
 - **`list_contexts` shows tool counts, not tool schemas.** If you need the schema for a specific server, call the sub-agent directly or inspect `MCPTools.functions` in a debug shell.
