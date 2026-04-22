@@ -55,22 +55,26 @@ class WebContextProvider(ContextProvider):
         return answer_from_run(await agent.arun(question))
 
     def instructions(self) -> str:
-        if self.mode == ContextMode.agent:
+        if self.mode == ContextMode.tools:
             return (
-                f"`{self.name}`: call `{self.query_tool_name}(question)` for web research. "
-                "Returns a synthesized answer with cited URLs."
+                f"`{self.name}`: search the web for URLs/snippets, then fetch full pages when you need depth. "
+                "Cite every URL you use."
             )
         return (
-            f"`{self.name}`: search the web for URLs/snippets, then fetch full pages when you need depth. "
-            "Cite every URL you use."
+            f"`{self.name}`: call `{self.query_tool_name}(question)` for web research. "
+            "Returns a synthesized answer with cited URLs."
         )
 
     # ------------------------------------------------------------------
     # Mode resolution
     # ------------------------------------------------------------------
 
+    # Wrap in a `query_web` sub-agent by default so the calling agent
+    # gets a synthesized, cited answer back instead of orchestrating raw
+    # search + fetch itself. mode=tools still surfaces the backend's
+    # tools flat for callers that want to drive search directly.
     def _default_tools(self) -> list:
-        return self._all_tools()
+        return [self._query_tool()]
 
     def _all_tools(self) -> list:
         return self.backend.get_tools()

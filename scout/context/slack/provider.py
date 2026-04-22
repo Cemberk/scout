@@ -61,20 +61,25 @@ class SlackContextProvider(ContextProvider):
         return answer_from_run(await self._ensure_agent().arun(question))
 
     def instructions(self) -> str:
-        if self.mode == ContextMode.agent:
-            return f"`{self.name}`: call `{self.query_tool_name}(question)` to search Slack."
-        return (
-            f"`{self.name}`: `search_workspace` for topic/catch-up queries across the workspace; "
-            "`get_channel_history` for latest messages in a known channel; `get_thread(channel_id, ts)` "
-            "to expand a thread; `get_channel_info` / `get_user_info` to resolve names. Read-only."
-        )
+        if self.mode == ContextMode.tools:
+            return (
+                f"`{self.name}`: `search_workspace` for topic/catch-up queries across the workspace; "
+                "`get_channel_history` for latest messages in a known channel; `get_thread(channel_id, ts)` "
+                "to expand a thread; `get_channel_info` / `get_user_info` to resolve names. Read-only."
+            )
+        return f"`{self.name}`: call `{self.query_tool_name}(question)` to search Slack."
 
     # ------------------------------------------------------------------
     # Mode resolution
     # ------------------------------------------------------------------
 
+    # Wrap in a `query_slack` sub-agent by default — seven flat SlackTools
+    # methods (`search_workspace`, `get_channel_history`, `get_thread`,
+    # `list_users`, `get_user_info`, `get_channel_info`, `list_channels`)
+    # bloat the calling agent's prompt. The sub-agent orchestrates the
+    # multi-call dance internally. mode=tools still surfaces them flat.
     def _default_tools(self) -> list:
-        return self._all_tools()
+        return [self._query_tool()]
 
     def _all_tools(self) -> list:
         return [self._ensure_tools()]

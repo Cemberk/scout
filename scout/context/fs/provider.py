@@ -57,20 +57,25 @@ class FilesystemContextProvider(ContextProvider):
         return answer_from_run(await self._ensure_agent().arun(question))
 
     def instructions(self) -> str:
-        if self.mode == ContextMode.agent:
-            return f"`{self.name}`: call `{self.query_tool_name}(question)` to query files under {self.root}."
-        return (
-            f"`{self.name}`: browse files under {self.root}. Use `list_files` / `search_files` "
-            "(glob) / `search_content` (text search) / `read_file` / `read_file_chunk`. "
-            "Paths are relative to the root."
-        )
+        if self.mode == ContextMode.tools:
+            return (
+                f"`{self.name}`: browse files under {self.root}. Use `list_files` / `search_files` "
+                "(glob) / `search_content` (text search) / `read_file` / `read_file_chunk`. "
+                "Paths are relative to the root."
+            )
+        return f"`{self.name}`: call `{self.query_tool_name}(question)` to query files under {self.root}."
 
     # ------------------------------------------------------------------
     # Mode resolution
     # ------------------------------------------------------------------
 
+    # Wrap in a `query_fs` sub-agent because `FileTools` exposes
+    # `list_files` / `search_files` / `read_file` — names that collide with
+    # `GoogleDriveTools`, and agno's tool resolver dedupes by name across
+    # the whole list (silently dropping the second toolkit). mode=tools
+    # only works when FS is the sole file-like provider.
     def _default_tools(self) -> list:
-        return self._all_tools()
+        return [self._query_tool()]
 
     def _all_tools(self) -> list:
         return [_build_file_tools(self.root)]
