@@ -7,6 +7,7 @@ Checks:
     W4  Every registered `ContextProvider` has the expected shape.
     W5  GDrive provider uses `AllDrivesGoogleDriveTools`, not bare `GoogleDriveTools`.
     W6  `MCPContextProvider` implements the lifecycle interface cleanly.
+    W7  Scout has a non-template default user_id so missing-caller-uid doesn't leak `{user_id}` into SQL.
 
 Each check is a function that returns None on PASS and raises
 ``AssertionError`` on FAIL. Zero LLM, zero network — runs in under a second.
@@ -275,6 +276,32 @@ def w6_mcp_provider_lifecycle() -> None:
 # ---------------------------------------------------------------------------
 
 
+def w7_scout_has_default_user_id() -> None:
+    """Scout sets a sentinel ``user_id`` so callers that don't identify
+    themselves (eval runner, scripts) don't leak the ``{user_id}``
+    prompt placeholder into CRM SQL.
+
+    Regressing to ``user_id=None`` would let the CRM write sub-agent's
+    prompt template survive into SQL — every row would be stamped with
+    the literal 7-char string ``{user_id}``. This check catches the
+    regression at wiring tier, before any behavioral test writes bad
+    data.
+    """
+    from scout.agent import scout
+
+    user_id = getattr(scout, "user_id", None)
+    if not user_id:
+        raise AssertionError(
+            "Scout agent has no default user_id — callers that omit user_id will "
+            "leak the '{user_id}' template literal into CRM SQL."
+        )
+    if "{" in user_id or "}" in user_id:
+        raise AssertionError(
+            f"Scout.user_id looks like an unrendered template: {user_id!r}. "
+            "This means something upstream swapped the sentinel for a placeholder."
+        )
+
+
 CHECKS = (
     w1_scout_tool_surface,
     w2_crm_provider_surface,
@@ -282,6 +309,7 @@ CHECKS = (
     w4_context_protocol_shape,
     w5_gdrive_uses_alldrives_subclass,
     w6_mcp_provider_lifecycle,
+    w7_scout_has_default_user_id,
 )
 
 

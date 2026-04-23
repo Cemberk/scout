@@ -16,6 +16,18 @@ from evals.cases import Case
 
 Status = Literal["PASS", "FAIL", "ERROR"]
 
+_USER_IN_PROMPT = re.compile(r"[Ff]or user ['\"]([^'\"]+)['\"]")
+
+
+def _case_user_id(prompt: str) -> str | None:
+    """Eval cases declare their user inline (e.g. ``For user 'eval-user-42',
+    save a note …``). Extract that id and forward it as ``user_id`` so the
+    write sub-agent stamps a consistent row and the read sub-agent can find
+    it again on a later turn.
+    """
+    m = _USER_IN_PROMPT.search(prompt)
+    return m.group(1).strip() if m else None
+
 
 @dataclass
 class CaseResult:
@@ -378,12 +390,20 @@ def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], f
     # flake until this was pinned. Follow-up turns reuse this session_id
     # so the agent has memory across the multi-turn case.
     session_id = f"eval-{case.id}-{uuid.uuid4().hex[:8]}"
+    # Cases set their own user context in the prompt (e.g. ``For user 'X', …``).
+    # Pull that out and forward it so write+read sub-agents agree on the user
+    # across turns. Falls back to Scout's agent-level default (``anon``) when
+    # the prompt doesn't name a user.
+    user_id = _case_user_id(case.prompt)
+    kwargs = {"session_id": session_id}
+    if user_id:
+        kwargs["user_id"] = user_id
     start = time.monotonic()
-    result = asyncio.run(team.arun(case.prompt, session_id=session_id))
+    result = asyncio.run(team.arun(case.prompt, **kwargs))
     primary = _extract_turn(result)
     followups: list[TurnResult] = []
     for follow in case.followups:
-        f_result = asyncio.run(team.arun(follow.prompt, session_id=session_id))
+        f_result = asyncio.run(team.arun(follow.prompt, **kwargs))
         followups.append(_extract_turn(f_result))
     duration = time.monotonic() - start
     return (
