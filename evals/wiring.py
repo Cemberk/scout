@@ -5,7 +5,7 @@ Checks:
     W2  `DatabaseContextProvider` exposes `query_crm` AND `update_crm`.
     W3  Schema guard rejects DDL/DML targeting `public`/`ai` on the scout engine.
     W4  Every registered `ContextProvider` has the expected shape.
-    W5  GDrive provider uses `ScoutGoogleDriveTools`, not bare `GoogleDriveTools`.
+    W5  GDrive provider uses `AllDrivesGoogleDriveTools`, not bare `GoogleDriveTools`.
     W6  `MCPContextProvider` implements the lifecycle interface cleanly.
 
 Each check is a function that returns None on PASS and raises
@@ -126,7 +126,7 @@ def w1_scout_tool_surface() -> None:
 def w2_crm_provider_surface() -> None:
     """`DatabaseContextProvider` exposes both `query_crm` and `update_crm`."""
     from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
-    from scout.context.database import DatabaseContextProvider
+    from agno.context.database import DatabaseContextProvider
 
     provider = DatabaseContextProvider(
         id="crm",
@@ -186,7 +186,7 @@ def w3_schema_guard_blocks_non_scout_writes() -> None:
 
 
 def w4_context_protocol_shape() -> None:
-    from scout.context.provider import ContextProvider
+    from agno.context.provider import ContextProvider
     from scout.contexts import create_context_providers
 
     for ctx in create_context_providers():
@@ -200,23 +200,23 @@ def w4_context_protocol_shape() -> None:
                 raise AssertionError(f"ContextProvider {ctx.id!r} missing callable method {method!r}")
 
 
-def w5_gdrive_uses_scout_subclass() -> None:
-    """GDrive provider must use `ScoutGoogleDriveTools`, not bare `GoogleDriveTools`.
+def w5_gdrive_uses_alldrives_subclass() -> None:
+    """GDrive provider must use `AllDrivesGoogleDriveTools`, not bare `GoogleDriveTools`.
 
     The bare upstream toolkit queries `corpora=user` and misses every file
     the SA doesn't own directly (shared folders, Shared Drives). Regressing
     to bare `GoogleDriveTools` silently breaks every real deployment, so
     pin the subclass here.
     """
-    from scout.context.gdrive import GDriveContextProvider
-    from scout.context.gdrive.tools import ScoutGoogleDriveTools
+    from agno.context.gdrive import GDriveContextProvider
+    from agno.context.gdrive.tools import AllDrivesGoogleDriveTools
 
     provider = GDriveContextProvider(service_account_path="/tmp/eval-wiring-stub.json")
     toolkit = provider._ensure_tools()
-    if not isinstance(toolkit, ScoutGoogleDriveTools):
+    if not isinstance(toolkit, AllDrivesGoogleDriveTools):
         raise AssertionError(
             f"GDriveContextProvider._ensure_tools() returned {type(toolkit).__name__}; "
-            f"expected ScoutGoogleDriveTools so shared-folder / Shared-Drive files are visible"
+            f"expected AllDrivesGoogleDriveTools so shared-folder / Shared-Drive files are visible"
         )
 
 
@@ -231,8 +231,8 @@ def w6_mcp_provider_lifecycle() -> None:
     """
     import asyncio
 
-    from scout.context.mcp import MCPContextProvider
-    from scout.context.provider import ContextProvider
+    from agno.context.mcp import MCPContextProvider
+    from agno.context.provider import ContextProvider
 
     provider = MCPContextProvider(
         server_name="wiring_probe",
@@ -280,7 +280,7 @@ CHECKS = (
     w2_crm_provider_surface,
     w3_schema_guard_blocks_non_scout_writes,
     w4_context_protocol_shape,
-    w5_gdrive_uses_scout_subclass,
+    w5_gdrive_uses_alldrives_subclass,
     w6_mcp_provider_lifecycle,
 )
 

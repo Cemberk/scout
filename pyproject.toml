@@ -1,6 +1,6 @@
 [project]
 name = "scout"
-version = "0.1.0"
+version = "0.1.1"
 description = "An enterprise context agent that navigates your company's knowledge graph"
 requires-python = ">=3.12,<4"
 readme = "README.md"
@@ -8,7 +8,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "Agno", email = "hello@agno.com" }]
 
 dependencies = [
-  "agno[os,slack]",
+  "agno[os,slack]>=2.6,<2.7",
   "aiohttp",
   "exa-py",
   "google-api-python-client",

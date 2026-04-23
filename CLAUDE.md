@@ -15,7 +15,7 @@ Every source is a `ContextProvider`. The database is a provider too: `DatabaseCo
 
 ## ContextProvider
 
-`scout/context/provider.py` defines the base. Every external source subclasses `ContextProvider` and implements:
+`agno.context.provider` defines the base. Every external source subclasses `ContextProvider` and implements:
 
 - `query(question) -> Answer` / `aquery(question) -> Answer` — natural-language read
 - `status() -> Status` / `astatus() -> Status` — is the source reachable?
@@ -64,34 +64,10 @@ scout/
 ├── agent.py                        # The single `scout` Agent
 ├── instructions.py                 # Scout-tuned prompts: SCOUT_INSTRUCTIONS + CRM read/write
 ├── settings.py                     # Runtime objects: agent_db + default_model() factory
-├── contexts.py                     # create/get/update/close_context_providers + list_contexts tool + status row helpers
-└── context/                        # The library — ships to agno.context
-    ├── __init__.py
-    ├── _utils.py                   # answer_from_run
-    ├── backend.py                  # ContextBackend ABC
-    ├── mode.py                     # ContextMode enum
-    ├── provider.py                 # ContextProvider ABC + Status/Document/Answer + _update_tool()
-    ├── database/
-    │   ├── __init__.py
-    │   └── provider.py             # DatabaseContextProvider — CRM (query_crm + update_crm)
-    ├── fs/
-    │   ├── __init__.py
-    │   └── provider.py             # FilesystemContextProvider (read-only FileTools)
-    ├── slack/
-    │   ├── __init__.py
-    │   └── provider.py             # SlackContextProvider (read-only SlackTools)
-    ├── gdrive/
-    │   ├── __init__.py
-    │   └── provider.py             # GDriveContextProvider (read-only GoogleDriveTools)
-    ├── mcp/
-    │   ├── __init__.py
-    │   └── provider.py             # MCPContextProvider — one per MCP server
-    └── web/
-        ├── __init__.py
-        ├── provider.py             # WebContextProvider
-        ├── parallel.py             # ParallelBackend (parallel-web SDK)
-        ├── exa.py                  # ExaBackend (exa-py SDK)
-        └── exa_mcp.py              # ExaMCPBackend (keyless Exa MCP)
+└── contexts.py                     # create/get/update/close_context_providers + list_contexts tool + status row helpers
+
+# The ContextProvider library (base ABC + shipped providers) lives in `agno.context`
+# as of agno 2.6 — see `agno.context.{database,fs,gdrive,mcp,slack,web}`.
 
 app/
 ├── main.py                         # AgentOS entry (lifespan wires contexts; Slack interface if env set)
@@ -218,7 +194,7 @@ On top of AgentOS's defaults (`/agents/scout/runs`, `/health`, …):
 
 ## Model
 
-Scout and every provider sub-agent run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`, built through the `default_model()` factory in `scout/settings.py` (fresh instance per agent — avoids shared-state footguns). Each provider takes a `model=` kwarg so the library stays portable to `agno.context` — no hard OpenAI dep inside `scout/context/`.
+Scout and every provider sub-agent run on `OpenAIResponses(id="gpt-5.4")` via `agno.models.openai`, built through the `default_model()` factory in `scout/settings.py` (fresh instance per agent — avoids shared-state footguns). Each provider takes a `model=` kwarg so `agno.context` stays portable — no hard OpenAI dep inside the library.
 
 ## Environment Variables
 
@@ -238,7 +214,7 @@ Scout and every provider sub-agent run on `OpenAIResponses(id="gpt-5.4")` via `a
 
 ### ContextProvider
 
-Every external source subclasses `ContextProvider` (in `scout/context/provider.py`). Each provider lives in its own folder under `scout/context/<kind>/` — the class is in `provider.py`, pluggable backends are flat modules in the same folder (e.g. `scout/context/web/parallel.py`). Implementation is agentic by default — `_build_agent()` wraps a sub-agent with backend tools when needed (lazy). Each provider exposes its tools via `.get_tools()`; Scout wires them directly via the `scout_tools()` callable factory.
+Every external source subclasses `ContextProvider` (in `agno.context.provider`). Each provider lives in its own module under `agno.context.<kind>` — the class is in `provider.py`, pluggable backends are flat modules in the same folder (e.g. `agno.context.web.parallel`). Implementation is agentic by default — `_build_agent()` wraps a sub-agent with backend tools when needed (lazy). Each provider exposes its tools via `.get_tools()`; Scout wires them directly via the `scout_tools()` callable factory.
 
 ### Database
 
@@ -254,14 +230,14 @@ from db import db_url, get_postgres_db, get_sql_engine, get_readonly_engine, SCO
 from scout.agent import scout
 from scout.settings import agent_db
 from scout.contexts import create_context_providers, get_context_providers, update_context_providers, list_contexts, status_row, astatus_row
-from scout.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
-from scout.context.database import DatabaseContextProvider
-from scout.context.fs import FilesystemContextProvider
-from scout.context.gdrive import GDriveContextProvider
-from scout.context.mcp import MCPContextProvider
-from scout.context.slack import SlackContextProvider
-from scout.context.web import WebContextProvider
-from scout.context.web.parallel import ParallelBackend
-from scout.context.web.exa import ExaBackend
-from scout.context.web.exa_mcp import ExaMCPBackend
+from agno.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
+from agno.context.database import DatabaseContextProvider
+from agno.context.fs import FilesystemContextProvider
+from agno.context.gdrive import GDriveContextProvider
+from agno.context.mcp import MCPContextProvider
+from agno.context.slack import SlackContextProvider
+from agno.context.web import WebContextProvider
+from agno.context.web.parallel import ParallelBackend
+from agno.context.web.exa import ExaBackend
+from agno.context.web.exa_mcp import ExaMCPBackend
 ```

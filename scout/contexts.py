@@ -13,21 +13,22 @@ import json
 from os import getenv
 from pathlib import Path
 
+from agno.run import RunContext
 from agno.tools import tool
 from agno.utils.log import log_info, log_warning
 
 from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
-from scout.context.database import DatabaseContextProvider
-from scout.context.fs import FilesystemContextProvider
-from scout.context.gdrive import GDriveContextProvider
-from scout.context.mcp import MCPContextProvider
-from scout.context.mode import ContextMode
-from scout.context.provider import ContextProvider
-from scout.context.slack import SlackContextProvider
-from scout.context.web.exa import ExaBackend
-from scout.context.web.exa_mcp import ExaMCPBackend
-from scout.context.web.parallel import ParallelBackend
-from scout.context.web.provider import WebContextProvider
+from agno.context.database import DatabaseContextProvider
+from agno.context.fs import FilesystemContextProvider
+from agno.context.gdrive import GDriveContextProvider
+from agno.context.mcp import MCPContextProvider
+from agno.context.mode import ContextMode
+from agno.context.provider import ContextProvider
+from agno.context.slack import SlackContextProvider
+from agno.context.web.exa import ExaBackend
+from agno.context.web.exa_mcp import ExaMCPBackend
+from agno.context.web.parallel import ParallelBackend
+from agno.context.web.provider import WebContextProvider
 from scout.instructions import SCOUT_CRM_READ, SCOUT_CRM_WRITE
 from scout.settings import default_model
 
@@ -118,7 +119,8 @@ async def close_context_providers() -> None:
     `aclose()`; the base class default is a no-op. `return_exceptions=True`
     so one stuck teardown can't block others on the way down.
     """
-    providers = list(get_context_providers())
+    # Close only what's already cached — don't lazily build during teardown.
+    providers = list(context_providers)
     if not providers:
         return
     results = await asyncio.gather(
@@ -225,7 +227,7 @@ async def astatus_row(ctx: ContextProvider) -> dict:
 
 
 @tool
-async def list_contexts() -> str:
+async def list_contexts(run_context: RunContext | None = None) -> str:
     """List registered contexts with current status.
 
     Returns:

@@ -70,16 +70,17 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 Subclass `ContextProvider`, implement four methods, register it in [`scout/contexts.py`](scout/contexts.py):
 
 ```python
-from scout.context import Answer, ContextProvider, Status
+from agno.context import Answer, ContextProvider, Status
+from agno.run import RunContext
 
 class MyProvider(ContextProvider):
     def status(self) -> Status: ...
     async def astatus(self) -> Status: ...
-    def query(self, question: str) -> Answer: ...
-    async def aquery(self, question: str) -> Answer: ...
+    def query(self, question: str, *, run_context: RunContext | None = None) -> Answer: ...
+    async def aquery(self, question: str, *, run_context: RunContext | None = None) -> Answer: ...
 ```
 
-See [`scout/context/web/provider.py`](scout/context/web/provider.py) for a worked example.
+See [`agno.context.web.provider`](https://github.com/agno-agi/agno/blob/main/libs/agno/agno/context/web/provider.py) for a worked example.
 
 ## Storage
 

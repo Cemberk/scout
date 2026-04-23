@@ -65,7 +65,7 @@ def _real_crm() -> Any:
     Uses Scout's tuned CRM prompts so eval fixtures mirror the real wiring.
     """
     from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
-    from scout.context.database import DatabaseContextProvider
+    from agno.context.database import DatabaseContextProvider
     from scout.contexts import SCOUT_CRM_READ, SCOUT_CRM_WRITE
     from scout.settings import default_model
 
@@ -203,8 +203,8 @@ def _threaded_slack_stub():
 
     from agno.tools import tool
 
-    from scout.context.provider import Answer, ContextProvider
-    from scout.context.provider import Status as ProviderStatus
+    from agno.context.provider import Answer, ContextProvider
+    from agno.context.provider import Status as ProviderStatus
 
     SEARCH_HIT = {
         "channel_id": "C07ROAD",
@@ -222,12 +222,12 @@ def _threaded_slack_stub():
     ]
 
     @tool(name="search_workspace_stub")
-    async def search_workspace_stub(query: str) -> str:
+    async def search_workspace_stub(query: str, run_context=None) -> str:
         """Stubbed Slack search. Returns one message with `reply_count > 0`."""
         return json.dumps({"query": query, "hits": [SEARCH_HIT]})
 
     @tool(name="get_thread_stub")
-    async def get_thread_stub(channel_id: str, ts: str) -> str:
+    async def get_thread_stub(channel_id: str, ts: str, run_context=None) -> str:
         """Stubbed Slack thread expansion. Returns replies for the message."""
         return json.dumps({"channel_id": channel_id, "root_ts": ts, "replies": THREAD_REPLIES})
 
@@ -241,10 +241,10 @@ def _threaded_slack_stub():
         async def astatus(self):
             return self.status()
 
-        def query(self, question):
+        def query(self, question, *, run_context=None):
             return Answer(text=f"[threaded stub] search_workspace_stub({question!r}) then get_thread_stub(...)")
 
-        async def aquery(self, question):
+        async def aquery(self, question, *, run_context=None):
             return self.query(question)
 
         def _default_tools(self):
@@ -288,8 +288,8 @@ def _stub_mcp_context(
     to ``query_response`` via the ``ContextProvider`` base's tool
     wrapper).
     """
-    from scout.context.provider import Answer, ContextProvider
-    from scout.context.provider import Status as ProviderStatus
+    from agno.context.provider import Answer, ContextProvider
+    from agno.context.provider import Status as ProviderStatus
 
     tool_count = len(tools)
 
@@ -308,7 +308,7 @@ def _stub_mcp_context(
         async def astatus(self) -> ProviderStatus:
             return self.status()
 
-        def query(self, question: str) -> Answer:
+        def query(self, question: str, *, run_context=None) -> Answer:
             if not ok:
                 raise RuntimeError(f"mcp {server_name}: connection refused")
             if callable(query_response):
@@ -316,7 +316,7 @@ def _stub_mcp_context(
                 return result if isinstance(result, Answer) else Answer(text=str(result))
             return Answer(text=query_response)
 
-        async def aquery(self, question: str) -> Answer:
+        async def aquery(self, question: str, *, run_context=None) -> Answer:
             return self.query(question)
 
     return StubMCPContext()
@@ -329,8 +329,8 @@ def _stub_context(ctx_id: str, display_name: str, answer: str | Callable[[str], 
     or a callable ``answer(question)`` that returns an Answer or raises to
     simulate provider failure.
     """
-    from scout.context.provider import Answer, ContextProvider
-    from scout.context.provider import Status as ProviderStatus
+    from agno.context.provider import Answer, ContextProvider
+    from agno.context.provider import Status as ProviderStatus
 
     class StubContext(ContextProvider):
         def __init__(self) -> None:
@@ -342,13 +342,13 @@ def _stub_context(ctx_id: str, display_name: str, answer: str | Callable[[str], 
         async def astatus(self):
             return self.status()
 
-        def query(self, question):
+        def query(self, question, *, run_context=None):
             if callable(answer):
                 result = answer(question)
                 return result if isinstance(result, Answer) else Answer(text=str(result))
             return Answer(text=answer)
 
-        async def aquery(self, question):
+        async def aquery(self, question, *, run_context=None):
             return self.query(question)
 
     return StubContext()
