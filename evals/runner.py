@@ -395,15 +395,18 @@ def _run_in_process(case: Case) -> tuple[str, list[str], list[str], list[str], f
     # across turns. Falls back to Scout's agent-level default (``anon``) when
     # the prompt doesn't name a user.
     user_id = _case_user_id(case.prompt)
-    kwargs = {"session_id": session_id}
-    if user_id:
-        kwargs["user_id"] = user_id
     start = time.monotonic()
-    result = asyncio.run(team.arun(case.prompt, **kwargs))
+    if user_id:
+        result = asyncio.run(team.arun(case.prompt, session_id=session_id, user_id=user_id))
+    else:
+        result = asyncio.run(team.arun(case.prompt, session_id=session_id))
     primary = _extract_turn(result)
     followups: list[TurnResult] = []
     for follow in case.followups:
-        f_result = asyncio.run(team.arun(follow.prompt, **kwargs))
+        if user_id:
+            f_result = asyncio.run(team.arun(follow.prompt, session_id=session_id, user_id=user_id))
+        else:
+            f_result = asyncio.run(team.arun(follow.prompt, session_id=session_id))
         followups.append(_extract_turn(f_result))
     duration = time.monotonic() - start
     return (
