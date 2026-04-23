@@ -98,7 +98,7 @@ The same principle applies to Gmail and Calendar when those providers ship: Scou
 ## Security notes
 
 - **The JSON key is a credential.** Don't commit it. Don't paste it into chat. Rotate it in GCP Console if exposed.
-- **Role on shared folders is `Viewer`.** Scout cannot modify or delete your files. The Drive toolkit also runs with `upload_file=False, download_file=False` in code (see [`scout/context/gdrive/provider.py`](../scout/context/gdrive/provider.py)).
+- **Role on shared folders is `Viewer`.** Scout cannot modify or delete your files. The Drive toolkit also runs with `upload_file=False, download_file=False` in code (see [`agno.context.gdrive.provider`](https://github.com/agno-agi/agno/blob/main/libs/agno/agno/context/gdrive/provider.py)).
 - **Scout only sees what's shared with it.** There's no domain-wide delegation path in Scout — that's the flow where an SA impersonates a real user, which is exactly the thing we're not doing.
 
 ## Troubleshooting

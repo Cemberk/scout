@@ -7,10 +7,12 @@ POST /contexts/{id}/query      — debug: query context directly
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import asdict
 
 from agno.os.auth import get_authentication_dependency
 from agno.os.settings import AgnoAPISettings
+from agno.run import RunContext
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -20,6 +22,7 @@ from scout.contexts import get_context_providers, status_row
 
 class QueryRequest(BaseModel):
     question: str
+    user_id: str | None = None
 
 
 def create_router(settings: AgnoAPISettings) -> APIRouter:
@@ -43,7 +46,8 @@ def create_router(settings: AgnoAPISettings) -> APIRouter:
         target = _target(target_id)
         if target is None:
             return JSONResponse({"error": f"unknown target {target_id}"}, status_code=404)
-        answer = await target.aquery(body.question)
+        run_context = _build_debug_run_context(body.user_id)
+        answer = await target.aquery(body.question, run_context=run_context)
         return {
             "text": answer.text,
             "results": [asdict(r) for r in answer.results],
@@ -57,3 +61,19 @@ def _target(target_id: str):
         if ctx.id == target_id:
             return ctx
     return None
+
+
+def _build_debug_run_context(user_id: str | None) -> RunContext | None:
+    """Fresh RunContext per debug call so the sub-agent's {user_id} template
+    substitutes correctly. run_id/session_id are required by the constructor
+    but the sub-agent picks its own session when it runs; these IDs just
+    identify this debug hop in traces.
+    """
+    if not user_id:
+        return None
+    debug_id = uuid.uuid4().hex[:8]
+    return RunContext(
+        run_id=f"debug-{debug_id}",
+        session_id=f"debug-{debug_id}",
+        user_id=user_id,
+    )

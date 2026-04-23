@@ -32,7 +32,7 @@ Run wiring first — it catches structural regressions fastest. `--case <id>` na
 1. Run each tier. Note every FAIL / ERROR.
 2. Re-run failures with `--case <id> --verbose`.
 3. Diagnose one of three:
-   - **Agent bug** → fix instructions in `scout/instructions.py` (Scout's top-level prompt + tuned CRM prompts) or `scout/context/**/*.py` (a provider sub-agent's prompt).
+   - **Agent bug** → fix instructions in `scout/instructions.py` (Scout's top-level prompt + tuned CRM prompts) or override `_build_agent()` in a `ContextProvider` subclass (shipped providers live in `agno.context.<kind>.provider`).
    - **Stale assertion** → edit the case; commit note explains why.
    - **Runner bug** (a whole class of cases fails with the same error) → fix `evals/runner.py` or `evals/wiring.py`.
 4. Confirm green. Commit. One fix per commit.
@@ -48,7 +48,7 @@ Run wiring first — it catches structural regressions fastest. `--case <id>` na
 | Scout refuses when a tool-call is expected | Prompt stacks safety triggers | Strip loaded phrases ("API keys", "just do it") |
 | `expected_tools=("query_web",)` but run used `web_search` | Case stub-shaped | Use substring `("web",)` |
 | `Async function X can't be used with synchronous agent.run()` across many cases | Runner regressed to sync | Ensure `_run_in_process` uses `asyncio.run(scout.arun(...))` |
-| Read-only agent got a writer tool | Code wrong | Fix `tools=` in `scout/agent.py` (Scout) or `scout/context/<kind>/provider.py` (provider sub-agents) |
+| Read-only agent got a writer tool | Code wrong | Fix `tools=` in `scout/agent.py` (Scout) or in `agno.context.<kind>.provider` (provider sub-agents) |
 
 ## Out of scope — flag, don't fix
 
