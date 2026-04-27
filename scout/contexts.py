@@ -16,7 +16,7 @@ from pathlib import Path
 from agno.context.database import DatabaseContextProvider
 from agno.context.gdrive import GDriveContextProvider
 from agno.context.mcp import MCPContextProvider
-from agno.context.provider import ContextProvider, Status
+from agno.context.provider import Answer, ContextProvider, Status
 from agno.context.slack import SlackContextProvider
 from agno.context.web.parallel import ParallelBackend
 from agno.context.web.parallel_mcp import ParallelMCPBackend
@@ -177,6 +177,13 @@ class WorkspaceContextProvider(ContextProvider):
 
     async def astatus(self) -> Status:
         return self.status()
+
+    def query(self, question: str, *, run_context: RunContext | None = None) -> Answer:
+        # Tools-based provider — use Workspace tools directly
+        return Answer(text="Use read_file, list_files, or search_content tools to explore the workspace.")
+
+    async def aquery(self, question: str, *, run_context: RunContext | None = None) -> Answer:
+        return self.query(question, run_context=run_context)
 
     def get_tools(self) -> list:
         return [self._workspace]
