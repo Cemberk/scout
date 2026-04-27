@@ -65,5 +65,9 @@ tmp
 # Scout local state — credentials, tokens, provider state
 .scout/
 
+# Local-only Docker Compose overrides (e.g. host port remaps)
+compose.override.yaml
+compose.override.yml
+
 # Optional: local PyPI creds (uncomment if you ever create it)
 # .pypirc

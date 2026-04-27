@@ -99,8 +99,8 @@ CASES: tuple[Case, ...] = (
     Case(
         id="scout_web_query",
         prompt="Ask the web context for one fact about the Python language and cite the source.",
-        # Permissive: matches stub's `query_web`, Parallel's `web_search` /
-        # `web_extract`, and Exa MCP's `web_search_exa` / `web_fetch_exa`.
+        # Permissive: matches stub's `query_web` plus Parallel's `web_search` /
+        # `web_extract` (SDK) and `web_fetch` (MCP).
         expected_tools=("web",),
         max_duration_s=180,
     ),

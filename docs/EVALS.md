@@ -22,8 +22,9 @@ Each invariant is a function that returns `None` on PASS and raises `AssertionEr
 - `W2` `DatabaseContextProvider` exposes both `query_crm` and `update_crm`; `aupdate` is overridden.
 - `W3` The scout engine's `before_cursor_execute` hook rejects DDL/DML against `public` / `ai`.
 - `W4` Every registered `ContextProvider` has the expected shape (`id`/`name` + `query`/`status`/`get_tools`/`instructions`).
-- `W5` `GDriveContextProvider` uses `ScoutGoogleDriveTools` (the shared-drive-aware subclass).
+- `W5` `GDriveContextProvider` uses `AllDrivesGoogleDriveTools` (the shared-drive-aware subclass).
 - `W6` `MCPContextProvider` implements the lifecycle interface cleanly — exposes `query_mcp_<slug>`, `aclose` is safe pre-connect, `status()` doesn't raise when unconnected, sync `query()` refuses (MCP is async-only).
+- `W7` Scout sets a sentinel default `user_id` so callers that don't identify themselves can't leak the `{user_id}` prompt template into CRM SQL.
 
 ```bash
 python -m evals wiring          # exits 0 on PASS, non-zero on FAIL
@@ -84,7 +85,7 @@ python -m evals judges --verbose      # responses + judge reason on FAIL
 
 ## Shell env
 
-The LLM tiers hit OpenAI/Parallel/Exa from the host, so `.env` must be loaded. See [CLAUDE.md — Environment loading](../CLAUDE.md#environment-loading-for-cli-work). Docker picks up `.env` automatically via `docker compose`.
+The LLM tiers hit OpenAI/Parallel from the host, so `.env` must be loaded. See [CLAUDE.md — Environment loading](../CLAUDE.md#environment-loading-for-cli-work). Docker picks up `.env` automatically via `docker compose`.
 
 ## Fixing a failing case
 

@@ -13,22 +13,20 @@ import json
 from os import getenv
 from pathlib import Path
 
+from agno.context.database import DatabaseContextProvider
+from agno.context.fs import FilesystemContextProvider
+from agno.context.gdrive import GDriveContextProvider
+from agno.context.mcp import MCPContextProvider
+from agno.context.provider import ContextProvider
+from agno.context.slack import SlackContextProvider
+from agno.context.web.parallel import ParallelBackend
+from agno.context.web.parallel_mcp import ParallelMCPBackend
+from agno.context.web.provider import WebContextProvider
 from agno.run import RunContext
 from agno.tools import tool
 from agno.utils.log import log_info, log_warning
 
 from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
-from agno.context.database import DatabaseContextProvider
-from agno.context.fs import FilesystemContextProvider
-from agno.context.gdrive import GDriveContextProvider
-from agno.context.mcp import MCPContextProvider
-from agno.context.mode import ContextMode
-from agno.context.provider import ContextProvider
-from agno.context.slack import SlackContextProvider
-from agno.context.web.exa import ExaBackend
-from agno.context.web.exa_mcp import ExaMCPBackend
-from agno.context.web.parallel import ParallelBackend
-from agno.context.web.provider import WebContextProvider
 from scout.instructions import SCOUT_CRM_READ, SCOUT_CRM_WRITE
 from scout.settings import default_model
 
@@ -155,9 +153,7 @@ def _create_web_provider() -> WebContextProvider:
     model = default_model()
     if getenv("PARALLEL_API_KEY"):
         return WebContextProvider(backend=ParallelBackend(), model=model)
-    if getenv("EXA_API_KEY"):
-        return WebContextProvider(backend=ExaBackend(), model=model)
-    return WebContextProvider(backend=ExaMCPBackend(), model=model)
+    return WebContextProvider(backend=ParallelMCPBackend(), model=model)
 
 
 def _create_filesystem_provider() -> FilesystemContextProvider:
@@ -178,7 +174,7 @@ def _create_database_provider() -> DatabaseContextProvider:
 
 
 def _create_slack_provider() -> SlackContextProvider | None:
-    if not (getenv("SLACK_BOT_TOKEN") or getenv("SLACK_TOKEN")):
+    if not getenv("SLACK_BOT_TOKEN"):
         return None
     return SlackContextProvider(model=default_model())
 
@@ -196,16 +192,7 @@ def _create_mcp_providers() -> list[MCPContextProvider]:
     from env via ``getenv(...)`` inside the constructor call. See
     ``docs/MCP_CONNECT.md``.
     """
-    return [
-        MCPContextProvider(
-            server_name="time",
-            transport="stdio",
-            command="uvx",
-            args=["mcp-server-time"],
-            mode=ContextMode.tools,
-            model=default_model(),
-        ),
-    ]
+    return []
 
 
 def status_row(ctx: ContextProvider) -> dict:

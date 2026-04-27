@@ -76,8 +76,9 @@ def _real_crm() -> Any:
 
     Uses Scout's tuned CRM prompts so eval fixtures mirror the real wiring.
     """
-    from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
     from agno.context.database import DatabaseContextProvider
+
+    from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
     from scout.contexts import SCOUT_CRM_READ, SCOUT_CRM_WRITE
     from scout.settings import default_model
 
@@ -213,10 +214,9 @@ def _threaded_slack_stub():
     """
     import json
 
-    from agno.tools import tool
-
     from agno.context.provider import Answer, ContextProvider
     from agno.context.provider import Status as ProviderStatus
+    from agno.tools import tool
 
     SEARCH_HIT = {
         "channel_id": "C07ROAD",

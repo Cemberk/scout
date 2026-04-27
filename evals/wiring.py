@@ -126,8 +126,9 @@ def w1_scout_tool_surface() -> None:
 
 def w2_crm_provider_surface() -> None:
     """`DatabaseContextProvider` exposes both `query_crm` and `update_crm`."""
-    from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
     from agno.context.database import DatabaseContextProvider
+
+    from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
 
     provider = DatabaseContextProvider(
         id="crm",
@@ -188,6 +189,7 @@ def w3_schema_guard_blocks_non_scout_writes() -> None:
 
 def w4_context_protocol_shape() -> None:
     from agno.context.provider import ContextProvider
+
     from scout.contexts import create_context_providers
 
     for ctx in create_context_providers():

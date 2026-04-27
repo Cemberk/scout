@@ -1,6 +1,6 @@
 # Scout
 
-Scout is a **context agent** — an agent that explores information sources and assembles context on demand. It follows the "navigation over search" pattern that makes coding agents so effective: instead of fetching chunks from a pre-built index, Scout queries live sources the way a human would.
+Scout is a **context agent**: an agent that queries information sources to assemble context on demand. It follows the "navigation over search" pattern that makes coding agents so effective: instead of fetching chunks from a pre-built vector index, Scout navigates live sources the same way a human would.
 
 Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
 
@@ -59,11 +59,10 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Scout authenticates as its own service account — share folders with the SA email to grant access. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) (or `./scripts/google_setup.sh` for the automated path). |
 | **`MCPContextProvider`** | wired in [`scout/contexts.py`](scout/contexts.py) | Wraps any MCP server (stdio / SSE / streamable-HTTP). One `query_mcp_<slug>` tool on Scout per server; sub-agent instructions built dynamically from `list_tools()`. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md). |
 
-**Web backends**, first-match selection:
+**Web backends**:
 
-- **`ParallelBackend`** — premium research + extraction. Activates when `PARALLEL_API_KEY` is set.
-- **`ExaBackend`** — Exa SDK path (search + contents). Activates when `EXA_API_KEY` is set.
-- **`ExaMCPBackend`** — keyless web research via Exa's public MCP server. Default when neither key is set.
+- **`ParallelBackend`** — premium research + extraction via the Parallel SDK. Activates when `PARALLEL_API_KEY` is set.
+- **`ParallelMCPBackend`** — keyless web research via Parallel's public MCP server (`web_search` + `web_fetch`). Default when no key is set.
 
 ### Add your own
 
@@ -116,8 +115,7 @@ On top of AgentOS's defaults (`/agents/scout/runs`, `/health`):
 | Variable | Required | Purpose |
 |---|---|---|
 | `OPENAI_API_KEY` | **Yes** | Model and embeddings |
-| `PARALLEL_API_KEY` | No | Premium web research + URL extraction. Selects `ParallelBackend`. |
-| `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK path). Ignored if `PARALLEL_API_KEY` is set. |
+| `PARALLEL_API_KEY` | No | Selects `ParallelBackend` (Parallel SDK). Without it, web falls back to `ParallelMCPBackend` (keyless). |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` for the Slack interface; alone, activates the Slack context provider. |
 | `SLACK_SIGNING_SECRET` | No | Slack signing secret for request verification. |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |

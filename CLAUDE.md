@@ -111,7 +111,7 @@ python -m evals judges                # LLM-scored quality tier
 
 ### Environment loading for CLI work
 
-Secrets live in `.env`. Anything that hits OpenAI / Parallel / Exa from the host (`python -m evals`, etc.) needs `.env` loaded:
+Secrets live in `.env`. Anything that hits OpenAI / Parallel from the host (`python -m evals`, etc.) needs `.env` loaded:
 
 1. **Prefer direnv:** `direnv allow .` once per repo.
 2. **Fallback:** `set -a; source .env; set +a; python -m evals`
@@ -152,13 +152,12 @@ Registered provider set (in order):
 
 `create_context_providers()` dedupes by `id` globally (first wins, warns on collision) so Scout never ends up with two `query_<id>` tools sharing a name.
 
-Web backend selection (first match wins):
+Web backend selection:
 
 | Trigger | Backend |
 |---|---|
-| `PARALLEL_API_KEY` set | `ParallelBackend` (premium research + extract) |
-| `EXA_API_KEY` set | `ExaBackend` (Exa SDK) |
-| neither | `ExaMCPBackend` (keyless, via Exa's public MCP) |
+| `PARALLEL_API_KEY` set | `ParallelBackend` (Parallel SDK — `web_search` + `web_extract`) |
+| unset | `ParallelMCPBackend` (keyless, via Parallel's public MCP — `web_search` + `web_fetch`) |
 
 ## User Data Tables
 
@@ -201,8 +200,7 @@ Scout and every provider sub-agent run on `OpenAIResponses(id="gpt-5.4")` via `a
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent |
-| `PARALLEL_API_KEY` | No | Selects `ParallelBackend` for web research. |
-| `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK). Ignored if `PARALLEL_API_KEY` is set. |
+| `PARALLEL_API_KEY` | No | Selects `ParallelBackend` (Parallel SDK). Without it, web falls back to `ParallelMCPBackend` (keyless). |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` to enable Slack interface. |
 | `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |
@@ -238,6 +236,5 @@ from agno.context.mcp import MCPContextProvider
 from agno.context.slack import SlackContextProvider
 from agno.context.web import WebContextProvider
 from agno.context.web.parallel import ParallelBackend
-from agno.context.web.exa import ExaBackend
-from agno.context.web.exa_mcp import ExaMCPBackend
+from agno.context.web.parallel_mcp import ParallelMCPBackend
 ```
