@@ -20,7 +20,7 @@ Scout is now running at `http://localhost:8000`.
 
 ## Chat with Scout
 
-1. Open [os.agno.com](https://os.agno.com) and log in.
+1. Open [os.agno.com](https://os.agno.com?utm_source=github&utm_medium=example-repo&utm_campaign=agent-example&utm_content=scout&utm_term=agentos) and log in.
 2. Click **Add OS**, choose **Local**, enter **http://localhost:8000**, then **Connect**.
 3. Try the pre-configured prompts.
 
@@ -152,4 +152,4 @@ Prereqs: [Railway CLI](https://docs.railway.app/guides/cli) + `railway login`.
 
 ## Architecture
 
-Built on [Agno](https://github.com/agno-agi/agno) and AgentOS ([docs.agno.com](https://docs.agno.com)). Implementation notes: [CLAUDE.md](CLAUDE.md).
+Built on [Agno](https://github.com/agno-agi/agno) and AgentOS ([docs.agno.com](https://docs.agno.com?utm_source=github&utm_medium=example-repo&utm_campaign=agent-example&utm_content=scout&utm_term=docs)). Implementation notes: [CLAUDE.md](CLAUDE.md).
