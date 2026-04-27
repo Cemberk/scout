@@ -13,22 +13,20 @@ import json
 from os import getenv
 from pathlib import Path
 
+from agno.context.database import DatabaseContextProvider
+from agno.context.gdrive import GDriveContextProvider
+from agno.context.mcp import MCPContextProvider
+from agno.context.provider import Answer, ContextProvider, Status
+from agno.context.slack import SlackContextProvider
+from agno.context.web.parallel import ParallelBackend
+from agno.context.web.parallel_mcp import ParallelMCPBackend
+from agno.context.web.provider import WebContextProvider
 from agno.run import RunContext
 from agno.tools import tool
+from agno.tools.workspace import Workspace
 from agno.utils.log import log_info, log_warning
 
 from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
-from agno.context.database import DatabaseContextProvider
-from agno.context.fs import FilesystemContextProvider
-from agno.context.gdrive import GDriveContextProvider
-from agno.context.mcp import MCPContextProvider
-from agno.context.mode import ContextMode
-from agno.context.provider import ContextProvider
-from agno.context.slack import SlackContextProvider
-from agno.context.web.exa import ExaBackend
-from agno.context.web.exa_mcp import ExaMCPBackend
-from agno.context.web.parallel import ParallelBackend
-from agno.context.web.provider import WebContextProvider
 from scout.instructions import SCOUT_CRM_READ, SCOUT_CRM_WRITE
 from scout.settings import default_model
 
@@ -55,7 +53,7 @@ def create_context_providers() -> list[ContextProvider]:
     """
     configured_providers: list[ContextProvider] = [
         _create_web_provider(),
-        _create_filesystem_provider(),
+        _create_workspace_provider(),
         _create_database_provider(),
     ]
     for factory in (_create_slack_provider, _create_gdrive_provider):
@@ -155,13 +153,50 @@ def _create_web_provider() -> WebContextProvider:
     model = default_model()
     if getenv("PARALLEL_API_KEY"):
         return WebContextProvider(backend=ParallelBackend(), model=model)
-    if getenv("EXA_API_KEY"):
-        return WebContextProvider(backend=ExaBackend(), model=model)
-    return WebContextProvider(backend=ExaMCPBackend(), model=model)
+    return WebContextProvider(backend=ParallelMCPBackend(), model=model)
 
 
-def _create_filesystem_provider() -> FilesystemContextProvider:
-    return FilesystemContextProvider(root=FS_ROOT, model=default_model())
+class WorkspaceContextProvider(ContextProvider):
+    """Thin wrapper around Workspace to fit the ContextProvider interface."""
+
+    def __init__(self, root: Path, *, id: str = "workspace", name: str = "Workspace") -> None:
+        super().__init__(id=id, name=name)
+        self.root = root.resolve()
+        self._workspace = Workspace(
+            root=self.root,
+            allowed=["read", "list", "search"],
+            confirm=[],
+        )
+
+    def status(self) -> Status:
+        if not self.root.exists():
+            return Status(ok=False, detail=f"root does not exist: {self.root}")
+        if not self.root.is_dir():
+            return Status(ok=False, detail=f"root is not a directory: {self.root}")
+        return Status(ok=True, detail=str(self.root))
+
+    async def astatus(self) -> Status:
+        return self.status()
+
+    def query(self, question: str, *, run_context: RunContext | None = None) -> Answer:
+        # Tools-based provider — use Workspace tools directly
+        return Answer(text="Use read_file, list_files, or search_content tools to explore the workspace.")
+
+    async def aquery(self, question: str, *, run_context: RunContext | None = None) -> Answer:
+        return self.query(question, run_context=run_context)
+
+    def get_tools(self) -> list:
+        return [self._workspace]
+
+    def instructions(self) -> str:
+        return (
+            f"`{self.name}`: browse files under {self.root}. Use `read_file` / `list_files` "
+            "(recursive option) / `search_content` (text grep). Paths are relative to the root."
+        )
+
+
+def _create_workspace_provider() -> WorkspaceContextProvider:
+    return WorkspaceContextProvider(root=FS_ROOT)
 
 
 def _create_database_provider() -> DatabaseContextProvider:
@@ -178,7 +213,7 @@ def _create_database_provider() -> DatabaseContextProvider:
 
 
 def _create_slack_provider() -> SlackContextProvider | None:
-    if not (getenv("SLACK_BOT_TOKEN") or getenv("SLACK_TOKEN")):
+    if not getenv("SLACK_BOT_TOKEN"):
         return None
     return SlackContextProvider(model=default_model())
 
@@ -196,16 +231,7 @@ def _create_mcp_providers() -> list[MCPContextProvider]:
     from env via ``getenv(...)`` inside the constructor call. See
     ``docs/MCP_CONNECT.md``.
     """
-    return [
-        MCPContextProvider(
-            server_name="time",
-            transport="stdio",
-            command="uvx",
-            args=["mcp-server-time"],
-            mode=ContextMode.tools,
-            model=default_model(),
-        ),
-    ]
+    return []
 
 
 def status_row(ctx: ContextProvider) -> dict:

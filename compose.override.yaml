@@ -1,4 +1,0 @@
-services:
-  scout-db:
-    ports: !override
-      - "5435:5432"

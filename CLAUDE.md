@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a single `agno.Agent` with N `ContextProvider`s. Ships with `WebContextProvider`, `FilesystemContextProvider`, `DatabaseContextProvider` (the CRM — user's contacts/projects/notes), `SlackContextProvider`, `GDriveContextProvider`, and `MCPContextProvider` (any MCP server → one `query_mcp_<slug>` tool on Scout). GitHub, Gmail, and Calendar land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
+Scout is an **enterprise context agent** — a single `agno.Agent` with N `ContextProvider`s. Ships with `WebContextProvider`, `WorkspaceContextProvider` (local files via `agno.tools.Workspace`), `DatabaseContextProvider` (the CRM — user's contacts/projects/notes), `SlackContextProvider`, `GDriveContextProvider`, and `MCPContextProvider` (any MCP server → one `query_mcp_<slug>` tool on Scout). GitHub, Gmail, and Calendar land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
 
 ## Architecture
 
@@ -111,7 +111,7 @@ python -m evals judges                # LLM-scored quality tier
 
 ### Environment loading for CLI work
 
-Secrets live in `.env`. Anything that hits OpenAI / Parallel / Exa from the host (`python -m evals`, etc.) needs `.env` loaded:
+Secrets live in `.env`. Anything that hits OpenAI / Parallel from the host (`python -m evals`, etc.) needs `.env` loaded:
 
 1. **Prefer direnv:** `direnv allow .` once per repo.
 2. **Fallback:** `set -a; source .env; set +a; python -m evals`
@@ -144,7 +144,7 @@ Registered provider set (in order):
 | Provider | Trigger | Notes |
 |---|---|---|
 | `WebContextProvider` | always | Backend picked below |
-| `FilesystemContextProvider` | always | Read-only; `FileTools` scoped to `FS_ROOT` in `scout/contexts.py` (defaults to the scout repo) |
+| `WorkspaceContextProvider` | always | Read-only; `Workspace` scoped to `FS_ROOT` in `scout/contexts.py` (defaults to the scout repo). Tools: `read_file`, `list_files`, `search_content`. |
 | `DatabaseContextProvider` | always | CRM — the user's contacts/projects/notes. Exposes `query_crm` + `update_crm`; read path uses `get_readonly_engine()`, write path uses `get_sql_engine()` (scout-schema-guarded). |
 | `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting). Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md) |
 | `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; Scout authenticates as its own service account (no user impersonation). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) or `./scripts/google_setup.sh` |
@@ -152,13 +152,12 @@ Registered provider set (in order):
 
 `create_context_providers()` dedupes by `id` globally (first wins, warns on collision) so Scout never ends up with two `query_<id>` tools sharing a name.
 
-Web backend selection (first match wins):
+Web backend selection:
 
 | Trigger | Backend |
 |---|---|
-| `PARALLEL_API_KEY` set | `ParallelBackend` (premium research + extract) |
-| `EXA_API_KEY` set | `ExaBackend` (Exa SDK) |
-| neither | `ExaMCPBackend` (keyless, via Exa's public MCP) |
+| `PARALLEL_API_KEY` set | `ParallelBackend` (Parallel SDK — `web_search` + `web_extract`) |
+| unset | `ParallelMCPBackend` (keyless, via Parallel's public MCP — `web_search` + `web_fetch`) |
 
 ## User Data Tables
 
@@ -201,8 +200,7 @@ Scout and every provider sub-agent run on `OpenAIResponses(id="gpt-5.4")` via `a
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | **Yes** | GPT-5.4 for every agent |
-| `PARALLEL_API_KEY` | No | Selects `ParallelBackend` for web research. |
-| `EXA_API_KEY` | No | Selects `ExaBackend` (Exa SDK). Ignored if `PARALLEL_API_KEY` is set. |
+| `PARALLEL_API_KEY` | No | Selects `ParallelBackend` (Parallel SDK). Without it, web falls back to `ParallelMCPBackend` (keyless). |
 | `SLACK_BOT_TOKEN` | No | Bot User OAuth Token. Pair with `SLACK_SIGNING_SECRET` to enable Slack interface. |
 | `SLACK_SIGNING_SECRET` | No | Slack request signing secret. Pair with `SLACK_BOT_TOKEN`. |
 | `GOOGLE_SERVICE_ACCOUNT_FILE` | No | Path to Scout's Google service-account JSON key. Activates the Drive context provider. |
@@ -232,12 +230,11 @@ from scout.settings import agent_db
 from scout.contexts import create_context_providers, get_context_providers, update_context_providers, list_contexts, status_row, astatus_row
 from agno.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
 from agno.context.database import DatabaseContextProvider
-from agno.context.fs import FilesystemContextProvider
+from agno.tools.workspace import Workspace
 from agno.context.gdrive import GDriveContextProvider
 from agno.context.mcp import MCPContextProvider
 from agno.context.slack import SlackContextProvider
 from agno.context.web import WebContextProvider
 from agno.context.web.parallel import ParallelBackend
-from agno.context.web.exa import ExaBackend
-from agno.context.web.exa_mcp import ExaMCPBackend
+from agno.context.web.parallel_mcp import ParallelMCPBackend
 ```

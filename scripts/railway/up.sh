@@ -96,8 +96,7 @@ railway add -s scout \
     -v "WAIT_FOR_DB=True" \
     -v "PORT=8000" \
     -v "OPENAI_API_KEY=${OPENAI_API_KEY}" \
-    -v "PARALLEL_API_KEY=${PARALLEL_API_KEY:-}" \
-    -v "EXA_API_KEY=${EXA_API_KEY:-}"
+    -v "PARALLEL_API_KEY=${PARALLEL_API_KEY:-}"
 
 echo ""
 echo -e "${BOLD}Deploying application...${NC}"
