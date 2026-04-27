@@ -53,7 +53,7 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 | Provider | Env trigger | What it exposes |
 |---|---|---|
 | **`WebContextProvider`** | always on — picks a backend based on keys below | `web_search` / `web_extract` |
-| **`FilesystemContextProvider`** | always on — rooted at the scout repo (see `FS_ROOT` in [`scout/contexts.py`](scout/contexts.py)) | read-only `list_files` / `search_files` (glob) / `search_content` / `read_file` |
+| **`WorkspaceContextProvider`** | always on — rooted at the scout repo (see `FS_ROOT` in [`scout/contexts.py`](scout/contexts.py)) | read-only `read_file` / `list_files` (recursive) / `search_content` (grep) via `agno.tools.Workspace` |
 | **`DatabaseContextProvider`** (CRM) | always on — Postgres via `DB_*` | `query_crm` reads the user's contacts / projects / notes; `update_crm` saves or modifies them. Two internal sub-agents so the read path never sees the write engine; writes are scoped to the `scout` schema and guarded at the engine layer. |
 | **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md). |
 | **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Scout authenticates as its own service account — share folders with the SA email to grant access. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) (or `./scripts/google_setup.sh` for the automated path). |
