@@ -324,9 +324,7 @@ def w8_wiki_provider_surfaces() -> None:
     if "query_voice" not in voice_tools:
         raise AssertionError(f"voice wiki should expose query_voice; got {voice_tools}")
     if any("update_voice" in n for n in voice_tools):
-        raise AssertionError(
-            f"voice wiki should be read-only (write=False) — found update tool in {voice_tools}"
-        )
+        raise AssertionError(f"voice wiki should be read-only (write=False) — found update tool in {voice_tools}")
 
 
 def w10_learning_machine_wired() -> None:
@@ -372,7 +370,9 @@ def w9_followups_in_canonical_ddl() -> None:
     from db.tables import DDL
 
     if not any("scout_followups" in stmt for stmt in DDL):
-        raise AssertionError("canonical DDL is missing scout_followups; closed-loop reads will break on fresh deployments")
+        raise AssertionError(
+            "canonical DDL is missing scout_followups; closed-loop reads will break on fresh deployments"
+        )
 
 
 CHECKS = (

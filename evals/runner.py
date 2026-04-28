@@ -110,9 +110,7 @@ def _real_wiki(path: Any) -> list[Any]:
     knowledge_path.mkdir(parents=True, exist_ok=True)
     voice_path.mkdir(parents=True, exist_ok=True)
     (voice_path / "slack-message.md").write_text(
-        "# Slack Voice\n\n"
-        "- Lead with the point. One line if possible.\n"
-        "- No 'hey team' preamble.\n"
+        "# Slack Voice\n\n- Lead with the point. One line if possible.\n- No 'hey team' preamble.\n"
     )
     return [
         WikiContextProvider(

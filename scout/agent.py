@@ -46,7 +46,6 @@ scout = Agent(
         knowledge=scout_learnings,
         learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
     ),
-    add_learnings_to_context=True,
     # Sentinel user_id when a caller (eval runner, unauthenticated script)
     # invokes Scout without identifying the user. Keeps the CRM sub-agent's
     # `{user_id}` prompt template from surviving as a literal into SQL.

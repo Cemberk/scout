@@ -228,8 +228,7 @@ CASES: tuple[Case, ...] = (
         # a future scheduled cron will read for `due_at <= NOW() AND
         # status = 'pending'`. Verifies write + read on the new shape.
         prompt=(
-            "For user 'eval-followups-42', add a follow-up titled "
-            "'circle back with Alice on auth' due 2026-05-01."
+            "For user 'eval-followups-42', add a follow-up titled 'circle back with Alice on auth' due 2026-05-01."
         ),
         expected_tools=("update_crm",),
         forbidden_tools=("query_web", "query_slack", "query_gdrive", "update_knowledge"),
@@ -294,8 +293,7 @@ CASES: tuple[Case, ...] = (
         # Voice provider is read-only (write=False). Verifies query_voice
         # is reachable and that update_voice is NOT in Scout's tool list.
         prompt=(
-            "Draft a one-line Slack message announcing that we shipped "
-            "wiki support. Consult the voice rules first."
+            "Draft a one-line Slack message announcing that we shipped wiki support. Consult the voice rules first."
         ),
         expected_tools=("query_voice",),
         forbidden_tools=("update_voice",),
