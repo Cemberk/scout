@@ -158,6 +158,20 @@ CASES: tuple[Case, ...] = (
         ),
     ),
     Case(
+        id="scout_save_note_bare",
+        # Same shape as scout_save_note but without the "For user X" anchor
+        # that cues CRM routing. Real failure (TEST_WITH_CLAUDE.md smoke,
+        # 2026-04-28): Scout routed the bare phrasing to update_knowledge,
+        # filing a wiki page instead of inserting into scout_notes. The
+        # word "note" is overloaded between CRM and the knowledge wiki —
+        # this case locks the routing to CRM on the bare wording.
+        prompt="Save a note titled 'docker-smoke' with body 'live container check'.",
+        expected_tools=("update_crm",),
+        forbidden_tools=("update_knowledge", "query_web", "query_slack", "query_gdrive"),
+        response_matches=(r"(saved|stored|inserted|added|noted|recorded)",),
+        max_duration_s=180,
+    ),
+    Case(
         id="scout_save_contact",
         prompt=("For user 'eval-user-42', add a new contact: name 'John Doe', phone '555-0100', tag 'vendor'."),
         # Writes go through the namespaced update tool now.
@@ -276,7 +290,7 @@ CASES: tuple[Case, ...] = (
         ),
         expected_tools=("update_knowledge",),
         forbidden_tools=("update_crm",),
-        response_matches=(r"(saved|filed|stored|added|wrote|recorded)",),
+        response_matches=(r"(saved|filed|stored|added|wrote|recorded|created)",),
         fixture="wiki",
         max_duration_s=240,
         followups=(
@@ -351,6 +365,39 @@ CASES: tuple[Case, ...] = (
         expected_tools=("query_gdrive",),
         response_contains=("20",),
         fixture="large_gdrive",
+        max_duration_s=180,
+    ),
+    Case(
+        id="scout_slack_channel_list_summary",
+        # When the Slack provider returns a long channel list, Scout must
+        # summarize with a count (and optionally a small sample) — not
+        # re-enumerate the entire list. Real failure: a "which channels
+        # can you see?" run produced ~1,400 output tokens that just
+        # mirrored the sub-agent's own list, doubling the work for zero
+        # information gain. Mid-list channel names only appear when Scout
+        # is dumping the full list verbatim, so they're forbidden here.
+        prompt="Which Slack channels can you see?",
+        expected_tools=("query_slack",),
+        response_contains=("165",),
+        response_forbids=("#channel-020", "#channel-040", "#channel-080", "#channel-120"),
+        fixture="slack_many_channels",
+        max_duration_s=120,
+    ),
+    Case(
+        id="scout_slack_channels_no_user_lookup",
+        # The Slack sub-agent must not call list_users when the user only
+        # asked about channels. Real failure: Scout interpolated user_id
+        # into the natural-language question handed to query_slack
+        # ("...for user ashpreet@agno.com"), cueing the sub-agent to
+        # resolve email→user-id before listing — wasted call, wrong
+        # answer shape (sub-agent went on a user-resolution detour).
+        # Only meaningful with `fixture="real"` because stub mode
+        # short-circuits the sub-agent. Skip locally if SLACK_BOT_TOKEN
+        # isn't set; this case will fail without it.
+        prompt="Which Slack channels can you see?",
+        expected_tools=("query_slack",),
+        forbidden_tools=("list_users", "get_user_info"),
+        fixture="real",
         max_duration_s=180,
     ),
     # -----------------------------------------------------------------------
