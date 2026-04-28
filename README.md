@@ -33,10 +33,10 @@ Step-by-step setup (app manifest, scopes, install flow): [docs/SLACK_CONNECT.md]
 
 ## How it works
 
-Scout is a single agent with multiple context providers. Each information source (slack, drive, CRM) becomes a context provider and exposes two tools to the main agent:
+Scout is a single agent with multiple context providers. Each information source (Slack, Drive, CRM, …) becomes a context provider and exposes:
 
-- `query_<source>` for natural-language reads
-- `update_<source>` for natural-language writes
+- `query_<source>` — natural-language reads
+- `update_<source>` — natural-language writes (where the source supports it)
 
 > *"Find the latest benchmark numbers for model X."* → Scout calls `query_web`, cites sources.
 >
@@ -57,8 +57,8 @@ A `ContextProvider` exposes a source to the agent.
 | **`DatabaseContextProvider`** (CRM) | always on | `query_crm`, `update_crm` — contacts, projects, notes, follow-ups |
 | **`WikiContextProvider`** (knowledge) | always on | `query_knowledge`, `update_knowledge` — Scout's prose memory |
 | **`WikiContextProvider`** (voice) | always on | `query_voice` — code-managed style guide for emails, Slack, X, long-form |
-| **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace`, `get_channel_history`, `get_thread`, `list_users` |
-| **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files`, `list_files`, `read_file` |
+| **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | `query_slack` — read-only access to messages, channel history, threads, users |
+| **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | `query_gdrive` — read-only access to files, folders, contents |
 | **`MCPContextProvider`** | per-server in [`scout/contexts.py`](scout/contexts.py) | one `query_mcp_<slug>` per registered server (stdio / SSE / streamable-HTTP) |
 
 **Web backends:** `ParallelBackend` (Parallel SDK, when `PARALLEL_API_KEY` is set) or `ParallelMCPBackend` (keyless default).
@@ -78,7 +78,7 @@ See [`docs/EVALS.md`](docs/EVALS.md) for the full picture.
 
 ## Deploy
 
-Scout comes with one-command deployment for Railway but any Docker-capable host with a Postgres addon works.
+Scout deploys to any Docker-capable host with Postgres. Railway scripts are included for one-command provisioning:
 
 ```sh
 ./scripts/railway/up.sh        # first-time provisioning (Postgres + app service)
