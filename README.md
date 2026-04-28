@@ -6,9 +6,9 @@ YC's Summer 2026 RFS named "Company Brain" and "AI Operating System for Companie
 
 Scout stitches them together using patterns that already work: **navigation over search**, **context providers**, agentic SQL, and persistent memory.
 
-**Navigation over search.** The default move when working with knowledge sources is to ingest everything into a vector db, chunk, embed, and pray. The index is always stale. Chunks split at the wrong boundaries. Citations point at fragments that were true last Tuesday. Half the time the relevant content was a Slack thread that never got indexed because nobody indexes Slack. Coding agents figured this out — they don't search, they navigate: `ls`, `grep`, open the file, follow the import. Scout does the same thing across Slack, Drive, and the rest.
+**Navigation over search.** The default move when working with knowledge sources is to ingest everything into a vector db, chunk, embed, and pray. There are many reasons this doesn't work. Coding agents figured out the right approach. They navigate: `ls`, `grep`, open the file, follow the import. Scout does the same thing across Slack, Drive, and the rest.
 
-**Scout also builds its own CRM.** Some things don't have a natural source home. *"Josh from Anthropic shared a new RLM paper"* — that lives nowhere obvious. Scout adds Josh to the CRM, parses the paper into the wiki, and links them.
+**Scout maintains its own wiki and CRM.** Most information Scout learns from working with you is perfect for a wiki and CRM. *"Josh from Anthropic shared a new RLM paper"*. Scout adds Josh to the CRM, parses the paper into the wiki, and links them.
 
 ## Quick start
 
@@ -35,16 +35,16 @@ Scout is now running at `http://localhost:8000`.
 
 Scout is designed to live in Slack as your teammate. Follow [docs/SLACK_CONNECT.md](docs/SLACK_CONNECT.md) to add Scout to your slack workspace.
 
-## How it works
+## How Scout works
 
-Scout is a single agent with many context providers. Each information source becomes a provider and exposes two natural-language tools to Scout:
+Scout is a single agent with multiple context providers. Each context provider exposes 2 natural-language tools to interact with an information source:
 
-- `query_<source>` — reads
-- `update_<source>` — writes (when supported)
+- `query_<source>`: reads
+- `update_<source>`: writes (when supported)
 
-This thin layer solves three problems that hit any agent with a real tool surface: context pollution from too many tools, degrading performance from overlapping scopes, and the main agent forgetting its job because its context is all tool quirks.
+This thin layer solves three problems that hit any agent with a diverse tool surface: context pollution from too many tools, degrading performance from overlapping scopes, and the main agent forgetting its job because its context is all tool quirks.
 
-The win isn't fewer tools — it's that **a sub-agent behind each provider owns the source's quirks**. Scout sees `query_slack`. Behind it, a sub-agent knows to look up the user before DMing, paginate by cursor, and prefer `conversations.replies` for threads. Scout's context never sees any of that. (And no, [skills](https://www.anthropic.com/news/skills) don't solve this: skills load task instructions on-demand, but the tools still land on the main agent and intermediate tool results still land in the main context.)
+The win is that **a sub-agent behind each provider owns the source's quirks**. Scout sees `query_slack`. Behind it, a sub-agent knows to look up the user before DMing, paginate by cursor, and prefer `conversations.replies` for threads. Scout's context never sees any of that.
 
 > *"Find the latest benchmark numbers for model X."* → `query_web`, cites sources.
 >
@@ -52,13 +52,13 @@ The win isn't fewer tools — it's that **a sub-agent behind each provider owns 
 >
 > *"File a runbook for incident response."* → `update_knowledge` → wiki sub-agent writes a markdown page under `wiki/knowledge/runbooks/`.
 >
-> *"Track my coffee consumption — flat white, extra shot."* → `update_crm` → write sub-agent creates `scout.scout_coffee_orders` and inserts the row. Schema on demand.
+> *"Track my coffee consumption: flat white, extra shot."* → `update_crm` → write sub-agent creates `scout.scout_coffee_orders` and inserts the row. Schema on demand.
 >
 > *"Draft a Slack message announcing the launch."* → `query_voice` first to load the style guide, then drafts in that voice.
 
 ## Context Providers
 
-A `ContextProvider` exposes a source to the agent.
+A `ContextProvider` exposes an information source to the agent.
 
 | Provider | Trigger | Tools |
 |---|---|---|
@@ -92,7 +92,7 @@ See [`docs/EVALS.md`](docs/EVALS.md) for the full picture.
 
 ## Deploy to Railway
 
-Scout runs on any cloud provider — we ship Railway scripts for one-command provisioning.
+Scout runs on any cloud provider. We provide scripts for Railway.
 
 **Prereqs:** [Railway CLI](https://docs.railway.app/guides/cli) installed and `railway login` run.
 
@@ -110,18 +110,22 @@ Edit `.env.production` if any values should differ from local (e.g. a different 
 
 ```sh
 ./scripts/railway/up.sh        # first-time: Postgres + app service
+```
+
+Scripts to update env and redeploy after code changes
+
+```sh
 ./scripts/railway/env.sh       # sync .env.production → Railway
 ./scripts/railway/redeploy.sh  # push code updates after up.sh
 ```
 
-### 3. Your first deploy will fail — that's expected
+### 3. Your first deploy will fail. That's expected.
 
-Production endpoints require RBAC authorization (Scout enables it whenever `RUNTIME_ENV=prd`, which is the default). Without a `JWT_VERIFICATION_KEY`, the app refuses to serve traffic — Scout's job is to keep your company data off the public web. The fix is to generate a key from AgentOS and set it in your env.
+Production endpoints require RBAC authorization by default (Scout enables it when `RUNTIME_ENV=prd`). Without a `JWT_VERIFICATION_KEY`, the app refuses to serve traffic. Scout's job is to keep your company data off the public web. The fix is to generate a key from AgentOS and set it in your env.
 
 ### 4. Get your verification key
 
-1. Open [os.agno.com](https://os.agno.com?utm_source=github&utm_medium=example-repo&utm_campaign=agent-example&utm_content=scout&utm_term=agentos), click **Add OS** → **Live**, and enter your Railway domain. The connection will fail — that's the app rejecting unsigned requests. Continue anyway.
-2. Open **Settings**, generate an RSA key pair.
+1. Open [os.agno.com](https://os.agno.com?utm_source=github&utm_medium=example-repo&utm_campaign=agent-example&utm_content=scout&utm_term=agentos), click **Add OS** → **Live**, and enter your Railway domain. 2. Enable **Token Based Authorization**
 3. Paste the public key into `.env.production` (the full PEM block, no surrounding quotes):
 
 ```sh
@@ -134,10 +138,15 @@ MIIBIjANBgkq...
 
 ```sh
 ./scripts/railway/env.sh
+```
+
+Railway will auto-deploy when values change, but if you need to redeploy manually:
+
+```sh
 ./scripts/railway/redeploy.sh
 ```
 
-Once redeployed, AgentOS connects, Scout starts serving requests, and every API call (UI, Slack, scheduled tasks) runs signed-and-verified from here on. The Agno control plane handles JWT issuance, session management, traces, metrics, and the web UI; Scout just verifies the JWTs it sees. See the [AgentOS Security docs](https://docs.agno.com/agent-os/security/overview) for details.
+Once redeployed, AgentOS connects, Scout starts serving requests, and every API call (UI, Slack, scheduled tasks) runs signed-and-verified from here on. The Agno control plane handles JWT issuance, session management, traces, metrics, and the web UI. Scout just verifies the JWTs it sees. See the [AgentOS Security docs](https://docs.agno.com/agent-os/security/overview) for details.
 
 ### 5. Point Slack at the new URL
 
@@ -145,17 +154,17 @@ Once redeployed, AgentOS connects, Scout starts serving requests, and every API 
 2. In your [Slack App settings](https://api.slack.com/apps) → **Event Subscriptions**, set the Request URL to `https://<your-railway-domain>/slack/events`.
 3. Wait for Slack to verify.
 
-If you were running ngrok locally, you can shut it down — Slack will route to the deployed instance.
+If you were running ngrok locally, you can shut it down. Slack will route to the deployed instance.
 
 ### Opting out (not recommended)
 
-If you must run production without auth — e.g. inside a private VPC behind another auth layer — flip `authorization=False` at [app/main.py:67](app/main.py:67) and redeploy. We strongly recommend keeping authorization on for any deploy that holds real company data; without it, anyone who guesses your Railway domain can query your CRM, wiki, and connected sources.
+If you must run production without auth (e.g. inside a private VPC behind another auth layer), flip `authorization=False` at [app/main.py:67](app/main.py:67) and redeploy. We strongly recommend keeping authorization on for any deploy that holds real company data. Without it, anyone who guesses your Railway domain can query your CRM, wiki, and connected sources.
 
 ## What's next
 
-- **Scheduled tasks** — Scout surfaces pending follow-ups automatically (e.g. a daily 8am summary of `scout_followups` where `due_at <= NOW()`).
-- **Proactive provider actions** — `update_slack`, `update_github` running on cron, not just on demand.
-- **GitHub, Gmail, Calendar providers** — built and verified on `feat/slack-interface`; landing in the next release once we've tested with real tokens.
+- **Scheduled tasks.** Scout surfaces pending follow-ups automatically (e.g. a daily 8am summary of `scout_followups` where `due_at <= NOW()`).
+- **Proactive provider actions.** `update_slack`, `update_github` running on cron, not just on demand.
+- **GitHub, Gmail, Calendar providers.** Built and verified on `feat/slack-interface`. Landing in the next release once we've tested with real tokens.
 
 ## Architecture
 
