@@ -79,7 +79,7 @@ def _real_crm() -> Any:
     from agno.context.database import DatabaseContextProvider
 
     from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
-    from scout.contexts import SCOUT_CRM_READ, SCOUT_CRM_WRITE
+    from scout.instructions import SCOUT_CRM_READ, SCOUT_CRM_WRITE
     from scout.settings import default_model
 
     return DatabaseContextProvider(
