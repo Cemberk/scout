@@ -1,6 +1,6 @@
 # Scout: company intelligence
 
-Scout is a **context agent**: an agent that queries live information sources to assemble context on demand. It follows the "navigation over search" pattern that makes coding agents effective. Instead of fetching chunks from a pre-built vector index, Scout navigates live sources the same way a human would.
+Scout is a **company intelligence agent**: an agent that queries live information sources to assemble context on demand. It follows the "navigation over search" pattern that makes coding agents effective. Instead of fetching chunks from a pre-built vector index, Scout navigates live sources the same way a human would.
 
 Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
 
