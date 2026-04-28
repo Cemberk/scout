@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from agno.agent import Agent
 
-from scout.contexts import get_context_providers, list_contexts
+from scout.contexts import context_providers_summary, get_context_providers, list_contexts
 from scout.instructions import SCOUT_INSTRUCTIONS
 from scout.settings import agent_db, default_model
 
@@ -43,6 +43,10 @@ scout = Agent(
     # Production surfaces (UI, Slack) always override this with a real id.
     user_id="anon",
     cache_callables=False,
+    # Resolved per run by agno: `{context_providers}` in SCOUT_INSTRUCTIONS
+    # gets the live list of registered providers — re-evaluated when eval
+    # fixtures swap them.
+    dependencies={"context_providers": context_providers_summary},
     enable_agentic_memory=True,
     add_datetime_to_context=True,
     add_history_to_context=True,

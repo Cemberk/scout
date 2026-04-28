@@ -236,6 +236,19 @@ def _create_mcp_providers() -> list[MCPContextProvider]:
     return []
 
 
+def context_providers_summary() -> str:
+    """Markdown summary of registered providers, for prompt interpolation.
+
+    Wired as a callable on `Agent.dependencies["context_providers"]` so
+    agno re-resolves it per run — picks up provider swaps from eval
+    fixtures without Scout holding a stale snapshot.
+    """
+    providers = get_context_providers()
+    if not providers:
+        return "(no context providers registered)"
+    return "\n".join(f"- `{p.id}`: {p.name}" for p in providers)
+
+
 def status_row(ctx: ContextProvider) -> dict:
     """Row-shape summary of one context's current status."""
     try:

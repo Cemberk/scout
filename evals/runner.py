@@ -51,6 +51,9 @@ SLACK_STUB_TEXT = (
     "From #eng-roadmap (U07EVAL): 'Q4 roadmap finalized for 2026-03-11'. "
     "Permalink: https://example.slack.com/archives/C07EVAL/p1712345000"
 )
+SLACK_MANY_CHANNELS_TEXT = "Found 165 public channels visible to the bot:\n" + "\n".join(
+    f"#channel-{i:03d}" for i in range(1, 166)
+)
 GDRIVE_STUB_TEXT = (
     "File: 'Q4 Roadmap 2026.gdoc' (application/vnd.google-apps.document). "
     "webViewLink: https://drive.google.com/file/d/1eval_stub/view"
@@ -205,6 +208,13 @@ def build_fixture(name: str) -> list[Any]:
         return [
             _stub_context("web", "Web (stub)", WEB_STUB_TEXT),
             _threaded_slack_stub(),
+            _stub_context("gdrive", "Google Drive (stub)", GDRIVE_STUB_TEXT),
+            _real_crm(),
+        ]
+    if name == "slack_many_channels":
+        return [
+            _stub_context("web", "Web (stub)", WEB_STUB_TEXT),
+            _stub_context("slack", "Slack (stub)", SLACK_MANY_CHANNELS_TEXT),
             _stub_context("gdrive", "Google Drive (stub)", GDRIVE_STUB_TEXT),
             _real_crm(),
         ]

@@ -1,14 +1,15 @@
 # Scout Evals
 
-Scout comes with three tiers of evaluations:
+Scout comes with three tiers of evaluations, plus a fourth black-box layer for live deployments:
 
 | Tier | Entry point | What it catches | Needs LLM? |
 |---|---|---|---|
 | **Wiring** (code-level invariants) | `python -m evals wiring` | Scout's tool shape drifts (bare SQL leaks onto Scout, CRM provider loses `update_crm`, schema guard disappears) | No |
 | **Behavioral** (cases) | `python -m evals` | Scout picks the wrong tool / responses miss expected substrings / forbidden tools fire | Yes |
 | **Judges** (LLM-scored quality) | `python -m evals judges` | Answer quality, anything a regex can't express | Yes |
+| **Live container** (black-box probes) | [`docs/TEST_WITH_CLAUDE.md`](TEST_WITH_CLAUDE.md) | Deployment-level smoke tests via curl + docker logs against a running Scout container | (manual) |
 
-`scripts/validate.sh` runs `ruff` + `mypy` only. Wiring / behavioral / judges are direct `python -m evals ...` invocations; the LLM-hitting tiers aren't wired into pre-commit.
+`scripts/validate.sh` runs `ruff` + `mypy` only. Wiring / behavioral / judges are direct `python -m evals ...` invocations; the LLM-hitting tiers aren't wired into pre-commit. The live-container layer is for hand-running against a deployed instance.
 
 > **PostgreSQL must be running for every tier, including wiring.** The CRM provider builds `SQLTools(db_engine=get_sql_engine(), …)` / `get_readonly_engine()` at module import, and both engines open a connection + bootstrap the `scout` schema on first call. Start the DB container (`docker compose up -d scout-db`) before running any eval tier.
 
@@ -25,6 +26,8 @@ Each invariant is a function that returns `None` on PASS and raises `AssertionEr
 - `W5` `GDriveContextProvider` uses `AllDrivesGoogleDriveTools` (the shared-drive-aware subclass).
 - `W6` `MCPContextProvider` implements the lifecycle interface cleanly — exposes `query_mcp_<slug>`, `aclose` is safe pre-connect, `status()` doesn't raise when unconnected, sync `query()` refuses (MCP is async-only).
 - `W7` Scout sets a sentinel default `user_id` so callers that don't identify themselves can't leak the `{user_id}` prompt template into CRM SQL.
+- `W8` Knowledge wiki exposes both `query_knowledge` and `update_knowledge`; voice wiki is read-only (`update_voice` must not appear).
+- `W9` `scout_followups` ships in the canonical DDL — fresh deployments need the table for the closed-loop primitive (cron read of `due_at <= NOW() AND status = 'pending'`).
 
 ```bash
 python -m evals wiring          # exits 0 on PASS, non-zero on FAIL
@@ -40,7 +43,7 @@ One flat `CASES` tuple. Fields:
 - `expected_agent` — kept for back-compat; with single-agent Scout, leave as `None` (runner skips the delegation check)
 - `response_contains` / `response_forbids` / `response_matches` (regex) — deterministic assertions
 - `expected_tools` / `forbidden_tools` — substring match against tool names Scout called this turn
-- `fixture` — `"default"` (stub web/slack/gdrive + real CRM) or `"real"` (env-built contexts; hits actual providers)
+- `fixture` — selects the provider set the case runs against (see table below)
 - `max_duration_s`
 - `followups` — additional turns in the same session (for memory / multi-turn flows)
 
@@ -63,6 +66,24 @@ python -m evals --verbose             # response + tool previews
 ```
 
 On FAIL, the failure reasons are printed inline. Re-run with `--case <id> --verbose` to drill in.
+
+### Fixtures
+
+| Fixture | Provider set |
+|---|---|
+| `default` | stub web/slack/gdrive + stub MCP-jira + real CRM |
+| `default_with_fs` | `default` + filesystem stub for fs-search cases |
+| `injected` | web stub embeds a prompt-injection payload + real CRM |
+| `web_errors` / `slack_errors` / `gdrive_errors` | named provider raises on query — graceful degradation cases |
+| `empty_results` | every stub returns empty — no-results handling |
+| `slack_threaded` | Slack stub exposing `search_workspace_stub` + `get_thread_stub` for thread-expansion routing |
+| `slack_many_channels` | Slack stub returning 165 channel names — summarize-don't-enumerate cases |
+| `large_gdrive` | Drive stub returning 20 results — curation cases |
+| `wiki` | real wiki backends in a tmp dir — for write→read round-trips |
+| `mcp_unavailable` | MCP stub marked `ok=false` — graceful degradation |
+| `real` | env-built providers; hits real APIs (use sparingly) |
+
+Add a fixture by extending `build_fixture(name)` in [`evals/runner.py`](../evals/runner.py).
 
 ## 3. Judges — LLM-scored quality
 
