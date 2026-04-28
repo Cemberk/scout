@@ -327,37 +327,6 @@ def w8_wiki_provider_surfaces() -> None:
         raise AssertionError(f"voice wiki should be read-only (write=False) — found update tool in {voice_tools}")
 
 
-def w10_learning_machine_wired() -> None:
-    """Scout has a `LearningMachine` configured in AGENTIC mode with the
-    shared `scout_learnings` Knowledge.
-
-    The closed-loop primitive: Scout decides when to save cross-session
-    patterns and pulls relevant ones into context automatically. If a
-    refactor drops `learning=...` or flips the mode to `propose`/`hitl`,
-    `save_learning` either disappears (no recall) or starts gating every
-    write behind a human approval (silent behavior change). Either is a
-    regression we want to catch before evals run.
-    """
-    from agno.learn import LearningMachine, LearningMode
-
-    from scout.agent import scout
-
-    lm = getattr(scout, "learning", None)
-    if not isinstance(lm, LearningMachine):
-        raise AssertionError(f"Scout.learning should be a LearningMachine; got {type(lm).__name__}")
-
-    if lm.knowledge is None:
-        raise AssertionError("Scout.learning.knowledge is None — `save_learning` will have nowhere to write")
-
-    lk = lm.learned_knowledge
-    mode = getattr(lk, "mode", None)
-    if mode != LearningMode.AGENTIC:
-        raise AssertionError(
-            f"Scout.learning.learned_knowledge.mode is {mode!r}; expected LearningMode.AGENTIC "
-            "so the agent decides when to save (closed-loop primitive)"
-        )
-
-
 def w9_followups_in_canonical_ddl() -> None:
     """``scout_followups`` ships in the canonical DDL alongside contacts/projects/notes.
 
@@ -385,7 +354,6 @@ CHECKS = (
     w7_scout_has_default_user_id,
     w8_wiki_provider_surfaces,
     w9_followups_in_canonical_ddl,
-    w10_learning_machine_wired,
 )
 
 

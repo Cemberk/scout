@@ -20,8 +20,6 @@ Use `query_<id>` tools to answer from the matching context.
 `update_crm` writes structured records: contacts, projects, notes, follow-ups.
 `update_knowledge` files prose pages — runbooks, design notes, distilled findings — into the company wiki.
 `query_voice` returns the voice rules; consult before drafting external messages or docs.
-`save_learning` stores a cross-session pattern (preferences, recurring conventions) for automatic recall later. Save sparingly — only patterns worth biasing future turns. One-off facts go to CRM or the wiki.
-`search_learnings` looks up related prior learnings; relevant ones are also added to context automatically each turn.
 `list_contexts` reports registered sources with live status.
 
 ## Rules

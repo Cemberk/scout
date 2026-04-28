@@ -87,10 +87,6 @@ class MyProvider(ContextProvider):
 
 See [`agno.context.web.provider`](https://github.com/agno-agi/agno/blob/main/libs/agno/agno/context/web/provider.py) for a worked example.
 
-## Learning
-
-Scout has a `LearningMachine` (`agno.learn`) wired in **agentic** mode. Cross-session patterns Scout picks up — preferences, conventions, recurring shapes — get stored as short snippets in `scout_learnings` (pgvector hybrid search). On every turn, relevant prior learnings flow into Scout's context automatically; Scout writes new ones via `save_learning` when a pattern is worth biasing future answers. Distinct from the wiki: prose pages go to `update_knowledge`, vector-embedded patterns to `save_learning`.
-
 ## Storage
 
 Scout writes user data to `scout_*` tables, created on first startup:
