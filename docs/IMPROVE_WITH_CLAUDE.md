@@ -2,7 +2,7 @@
 
 **Goal:** keep Scout's behavior crisp and on-purpose. You probe a live Scout container with hundreds of natural-language prompts, find drift, fix it by editing `scout/instructions.py`, verify the fix, and stop when the container behaves consistently across the whole probe library.
 
-**Mode:** autonomous, loop-friendly, worktree-isolated. Built to run unattended via `/loop`, but every iteration is also runnable by hand.
+**Mode:** autonomous, loop-friendly, branch-isolated. Built to run unattended via `/loop`, but every iteration is also runnable by hand. **The loop never touches Docker** — it probes your already-running scout-api and edits `scout/instructions.py` directly; `RUNTIME_ENV=dev` hot-reloads the edit in ~1s.
 
 **Complement to** [`docs/EVAL_AND_IMPROVE.md`](EVAL_AND_IMPROVE.md). That doc fixes deterministic eval failures (regex assertions, tool-name checks). This doc catches the open-ended drift the deterministic suite can't express — verbosity, fabrication, source attribution, multi-turn slip, refusal misfires, weird phrasings.
 
@@ -11,14 +11,16 @@
 ## TL;DR
 
 ```bash
-# 0. Set up the worktree (one-time per loop run; see §0)
-docker compose down                                                # in main scout repo
-SCOUT_DIR="$HOME/code/scout-improve-$(date +%Y%m%d-%H%M%S)"
-git worktree add -b "agent/improve-$(date +%Y%m%d-%H%M)" "$SCOUT_DIR" origin/main
-cd "$SCOUT_DIR" && ln -s "$OLDPWD/.env" .env
-docker compose up -d --build && mkdir -p tmp/improve-probes
+# 0. Pre-condition: scout-api is already running on localhost:8000
+#    (your usual `docker compose up -d` from the main repo). The loop
+#    will not start, stop, or restart any container.
 
-# 1. Kick off the loop
+# 1. Branch off whatever base you want (usually main)
+git fetch origin
+git checkout -b "agent/improve-$(date +%Y%m%d-%H%M)" origin/main
+mkdir -p tmp/improve-probes
+
+# 2. Kick off the loop
 /loop 30m run one iteration of docs/IMPROVE_WITH_CLAUDE.md
 ```
 
@@ -45,39 +47,28 @@ It's the slow, exploratory complement to `EVAL_AND_IMPROVE.md`. Run that first; 
 | Surface | in-process `agent.arun()` | live Docker container, real APIs |
 | Inputs | frozen `evals/cases.py` | open-ended probe categories below |
 | Loop | one fix per failing case | broad sweep → trim prompt → re-sweep |
-| Branch | `main` is fine for assertion edits | **always** a worktree branch — edits are aggressive |
+| Branch | `main` is fine for assertion edits | **always** a feature branch — edits are aggressive |
 | Fix budget | one fix per case | one *category* per iteration |
 | Stops on | all tiers green | two clean sweeps OR remaining failures need code |
 | Cadence | one shot | recurring `/loop` |
 
 ---
 
-## 0. Worktree setup (one time per loop run)
+## 0. Branch setup (one time per loop run)
 
-> **Pre-condition:** stop any running Scout instance bound to port 8000 — the loop owns `scout-api` for its duration.
-> ```bash
-> docker compose down               # in your main scout repo
-> ```
+> **Pre-condition:** scout-api is already running on `localhost:8000` (your usual `docker compose up -d` from the main repo). **The loop never runs, restarts, or stops a container.** It probes the container you already have, edits `scout/instructions.py` in place, and lets uvicorn hot-reload pick up the change.
 
-The improvement loop runs on its **own git worktree** so your main checkout stays untouched. Each loop run gets its own branch — old runs leave a clean history of what was tried.
+The improvement loop runs on its **own git branch** in your main repo. Each loop run gets its own branch — old runs leave a clean history of what was tried, and `main` is never touched.
 
 ```bash
-# From the main scout repo (any branch):
-SCOUT_DIR="$HOME/code/scout-improve-$(date +%Y%m%d-%H%M%S)"
-BRANCH="agent/improve-$(date +%Y%m%d-%H%M)"
-
-git fetch origin main
-git worktree add -b "$BRANCH" "$SCOUT_DIR" origin/main
-cd "$SCOUT_DIR"
-
-# Reuse the main repo's .env (don't copy secrets into the worktree)
-ln -s "$OLDPWD/.env" .env
-
-# Bring the loop's container up
-docker compose up -d --build
+# From the main scout repo, base off whatever branch you want
+# (usually main; pass `origin/<your-feature>` to layer prompt
+# improvements on top of in-flight work):
+git fetch origin
+git checkout -b "agent/improve-$(date +%Y%m%d-%H%M)" origin/main
 ```
 
-Wait for the container to be healthy:
+Confirm the running container is reachable:
 
 ```bash
 until curl -sSf http://localhost:8000/health >/dev/null 2>&1; do sleep 2; done
@@ -86,11 +77,9 @@ curl -sS http://localhost:8000/contexts | jq '.[] | {id, ok: .status.ok, detail:
 
 The `/contexts` snapshot tells you which providers actually lit up. Note `ok=true` rows; conditional probes for missing providers (Slack/GDrive/MCP without their env triggers) are **skipped, not failed** — no env var, no probe.
 
-`RUNTIME_ENV=dev` (the compose default) hot-reloads `scout/` on file change, so prompt edits take effect within ~1s. If a probe behavior doesn't match a recent edit, force a reload:
+`RUNTIME_ENV=dev` (the compose default) hot-reloads `scout/` on file change, so prompt edits take effect within ~1s. The loop relies on this — it never restarts the container.
 
-```bash
-docker compose restart scout-api
-```
+> **Heads-up for concurrent users.** While the loop is running, Scout's prompt is being mutated each iteration. If you use Scout for actual work during the loop, behavior may shift between commits. Pause Scout-driven work for the loop's duration, or stop the loop first when you need stable behavior.
 
 ### State files
 
@@ -112,11 +101,14 @@ If `tmp/improve-state.md` doesn't exist when an iteration starts, treat it as it
 
 ### Tear-down (when done)
 
+The loop opens a PR and exits. Cleanup is just:
+
 ```bash
-docker compose down
-cd "$OLDPWD"
-git worktree remove "$SCOUT_DIR"           # or leave it for inspection
+git checkout main
+git branch -D agent/improve-...            # only after the PR is merged
 ```
+
+Your scout-api keeps running the whole time.
 
 ---
 
@@ -887,17 +879,17 @@ Things that will go wrong; how to recover without abandoning the loop.
 
 | Symptom | Likely cause | Recovery |
 |---|---|---|
-| `curl: (7) Failed to connect to localhost:8000` | Container not up | `docker compose up -d`; wait on `/health`; resume |
-| `HTTP 500` from `/agents/scout/runs` | Crash, likely a bad edit | `docker logs scout-api --tail 50`; revert last `instructions.py` edit; resume |
-| Hot-reload didn't pick up edit | uvicorn reload window missed | `docker compose restart scout-api`; resume |
+| `curl: (7) Failed to connect to localhost:8000` | scout-api not running | **End the loop** — write `STOPPED: scout-api unreachable` to `tmp/improve-state.md`. Restarting the container is the user's call, not the loop's. |
+| `HTTP 500` from `/agents/scout/runs` | Crash, likely a bad `instructions.py` edit | Read `docker logs scout-api --tail 50` for diagnosis; `git checkout HEAD~1 -- scout/instructions.py` to revert the last edit; resume. Do not restart the container — uvicorn picks the revert up on save. |
+| Hot-reload didn't pick up edit | uvicorn reload window missed (rare) | Re-save the file (`touch scout/instructions.py`) to force a reload event; **do not** `docker compose restart`. |
 | `/contexts` shows a provider was `ok=true` and is now `ok=false` | Token rotated, network blip, rate limit | Mark category dependent on it as skipped this iteration; resume |
 | Probe takes >2 minutes | Real network hang or model overload | Kill the curl, log as DRIFT, move on |
 | Same probe behaves differently run-to-run | Routing on a fuzzy boundary | Re-probe twice; accept majority; flag if 50/50 |
-| `tmp/improve-state.md` is missing or corrupt | Manual deletion or worktree wipe | Restart from iteration 1; the git history holds the rest |
-| Worktree branch can't push | Diverged from origin | `git fetch origin main && git rebase origin/main` (rare on a fresh worktree) |
+| `tmp/improve-state.md` is missing or corrupt | Manual deletion | Restart from iteration 1; the git history holds the rest |
+| Branch can't push | Diverged from origin's base | `git fetch origin && git rebase origin/main` (rare on a fresh branch) |
 | Disk fills with `tmp/improve-probes/*.jsonl` | Long loop runs | Old iterations' jsonl files are safe to delete after their commit; only the latest matters |
 
-Don't try to be clever. If the container is unhealthy and you can't recover in 5 minutes, **end the loop** with a clear stop reason and let a human triage.
+Don't try to be clever. The loop never owns the container — if scout-api is unreachable or unhealthy, end the loop and let a human triage.
 
 ---
 
@@ -962,7 +954,7 @@ You can also paste this whole doc into a fresh Claude Code session for a single 
 ```
 [paste this doc]
 
-Run the loop end-to-end on a fresh worktree until a stop criterion fires.
+Run the loop end-to-end on a fresh branch until a stop criterion fires.
 ```
 
 The loop commits and pushes a PR exactly the same way; only the pacing differs.
@@ -971,11 +963,10 @@ The loop commits and pushes a PR exactly the same way; only the pacing differs.
 
 ## 13. Checklist before you start
 
-- [ ] Main scout-api stopped (`docker compose down` in main repo)
-- [ ] Worktree created (`git worktree add -b agent/improve-… …`)
-- [ ] Worktree's container healthy (`curl /health` returns 200)
+- [ ] Your usual scout-api is running (`curl /health` returns 200) — the loop will probe it, not start it
+- [ ] Feature branch checked out (`git branch --show-current` matches `agent/improve-…`)
 - [ ] `/contexts` snapshot saved to `tmp/improve-contexts.json`
-- [ ] `tmp/improve-tools.txt` populated from `docker logs … | grep "Added tool"`
+- [ ] `tmp/improve-tools.txt` populated from `docker logs scout-api 2>&1 | grep "Added tool" | sort -u`
 - [ ] `tmp/improve-probes/` directory exists
 - [ ] Previous PR (if any) from a prior run merged or closed; branch name doesn't collide
 
