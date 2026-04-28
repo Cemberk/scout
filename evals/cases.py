@@ -160,7 +160,7 @@ CASES: tuple[Case, ...] = (
     Case(
         id="scout_save_note_bare",
         # Same shape as scout_save_note but without the "For user X" anchor
-        # that cues CRM routing. Real failure (TEST_WITH_CLAUDE.md smoke,
+        # that cues CRM routing. Real failure (IMPROVE_WITH_CLAUDE.md smoke,
         # 2026-04-28): Scout routed the bare phrasing to update_knowledge,
         # filing a wiki page instead of inserting into scout_notes. The
         # word "note" is overloaded between CRM and the knowledge wiki —

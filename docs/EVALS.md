@@ -7,7 +7,7 @@ Scout comes with three tiers of evaluations, plus a fourth black-box layer for l
 | **Wiring** (code-level invariants) | `python -m evals wiring` | Scout's tool shape drifts (bare SQL leaks onto Scout, CRM provider loses `update_crm`, schema guard disappears) | No |
 | **Behavioral** (cases) | `python -m evals` | Scout picks the wrong tool / responses miss expected substrings / forbidden tools fire | Yes |
 | **Judges** (LLM-scored quality) | `python -m evals judges` | Answer quality, anything a regex can't express | Yes |
-| **Live container** (black-box probes) | [`docs/TEST_WITH_CLAUDE.md`](TEST_WITH_CLAUDE.md) | Deployment-level smoke tests via curl + docker logs against a running Scout container | (manual) |
+| **Live container** (black-box probes) | [`docs/IMPROVE_WITH_CLAUDE.md`](IMPROVE_WITH_CLAUDE.md) | Worktree-isolated improvement loop: probe a live container, find drift, tune `scout/instructions.py`, commit, repeat. Built to run on `/loop`. | (Claude) |
 
 `scripts/validate.sh` runs `ruff` + `mypy` only. Wiring / behavioral / judges are direct `python -m evals ...` invocations; the LLM-hitting tiers aren't wired into pre-commit. The live-container layer is for hand-running against a deployed instance.
 
