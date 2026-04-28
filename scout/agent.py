@@ -10,10 +10,11 @@ A single ``agno.Agent`` with N ``ContextProvider``s. Exposes
 from __future__ import annotations
 
 from agno.agent import Agent
+from agno.learn import LearnedKnowledgeConfig, LearningMachine, LearningMode
 
 from scout.contexts import get_context_providers, list_contexts
 from scout.instructions import SCOUT_INSTRUCTIONS
-from scout.settings import agent_db, default_model
+from scout.settings import agent_db, default_model, scout_learnings
 
 
 def scout_tools() -> list:
@@ -37,6 +38,15 @@ scout = Agent(
     db=agent_db,
     instructions=SCOUT_INSTRUCTIONS,
     tools=scout_tools,
+    # Cross-session learnings — Scout decides when to save (agentic) and
+    # relevant prior patterns are pulled into context on every turn.
+    # `add_learnings_to_context=True` is Agent's default; spelled out here
+    # for clarity.
+    learning=LearningMachine(
+        knowledge=scout_learnings,
+        learned_knowledge=LearnedKnowledgeConfig(mode=LearningMode.AGENTIC),
+    ),
+    add_learnings_to_context=True,
     # Sentinel user_id when a caller (eval runner, unauthenticated script)
     # invokes Scout without identifying the user. Keeps the CRM sub-agent's
     # `{user_id}` prompt template from surviving as a literal into SQL.

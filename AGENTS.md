@@ -131,7 +131,7 @@ Docker picks up `.env` automatically via `docker compose`, so code inside `scout
 
 | Tier | Command | Speed | LLM? | What it catches |
 |---|---|---|---|---|
-| Wiring | `python -m evals wiring` | <1s | No | Scout's tool shape drifts (bare SQL on Scout, CRM provider loses `update_crm`, schema guard removed, default `user_id` sentinel regresses, GDrive backend drops shared-drive coverage, MCP lifecycle breaks) |
+| Wiring | `python -m evals wiring` | <1s | No | Scout's tool shape drifts (bare SQL on Scout, CRM provider loses `update_crm`, schema guard removed, default `user_id` sentinel regresses, GDrive backend drops shared-drive coverage, MCP lifecycle breaks, voice gains a write tool, `scout_followups` falls out of canonical DDL, learning machine drops out of agentic mode) |
 | Behavioral | `python -m evals` | ~3min | Yes (gpt-5.4) | Scout picks the wrong tool, over-tools, responses miss expected substrings |
 | Judges | `python -m evals judges` | ~1min/case | Yes | Answer quality a regex can't express |
 
@@ -182,7 +182,7 @@ Beyond these four, the CRM provider's write sub-agent creates new `scout_*` tabl
 
 | Surface | Tools |
 |---------|-------|
-| Scout (single Agent) | `query_<id>` + `update_<id>` for each registered provider (`provider.get_tools()`), plus `list_contexts` |
+| Scout (single Agent) | `query_<id>` + `update_<id>` for each registered provider (`provider.get_tools()`), `list_contexts`, plus `save_learning` / `search_learnings` from the `LearningMachine` |
 | CRM read sub-agent | `SQLTools` (**read-only engine**, `scout` schema) |
 | CRM write sub-agent | `SQLTools` (scout engine, **schema-guarded** to `scout`) |
 
@@ -197,6 +197,14 @@ On top of AgentOS's defaults (`/agents/scout/runs`, `/health`, …):
 | `/contexts` | GET | List every registered context + status |
 | `/contexts/{id}/status` | GET | One context's status |
 | `/contexts/{id}/query` | POST | Debug: ask one context directly |
+
+## Learning
+
+Scout has a `LearningMachine` configured in **agentic** mode (`agno.learn`). Two tools land on Scout: `save_learning` (Scout decides when to write a cross-session pattern) and `search_learnings` (lookup related prior learnings). `add_learnings_to_context=True` pulls relevant prior learnings into context automatically on every turn — Scout doesn't have to call `search_learnings` to benefit. Storage is `scout_learnings` (pgvector hybrid search via the same `create_knowledge` factory the wiki could use).
+
+Distinct from the wiki:
+- **Wiki** (`update_knowledge`) writes prose pages users would skim. Pages are durable artifacts — runbooks, designs, distilled findings.
+- **Learnings** (`save_learning`) are short snippets that bias future turns automatically. Preferences, conventions, recurring patterns. The agent saves sparingly; otherwise the recall channel turns into noise.
 
 ## Model
 
