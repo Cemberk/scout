@@ -43,7 +43,6 @@ scout = Agent(
     # Production surfaces (UI, Slack) always override this with a real id.
     user_id="anon",
     cache_callables=False,
-    enable_agentic_memory=True,
     add_datetime_to_context=True,
     add_history_to_context=True,
     read_chat_history=True,
