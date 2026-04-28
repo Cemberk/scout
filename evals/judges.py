@@ -14,7 +14,7 @@ from typing import Literal
 
 from agno.eval.agent_as_judge import AgentAsJudgeEval
 
-from evals.runner import build_fixture, install_fixture, restore_contexts
+from evals.runner import _case_user_id, build_fixture, install_fixture, restore_contexts
 from scout.settings import default_model
 
 JUDGE_MODEL = default_model()
@@ -263,7 +263,16 @@ def run_judged(case: Judged) -> JudgedResult:
         # Team has `add_history_to_context=True, num_history_runs=5`, and
         # agno reuses session_id when not passed — causing cross-case drift.
         session_id = f"eval-judge-{case.id}-{uuid.uuid4().hex[:8]}"
-        run_result = asyncio.run(team.arun(case.prompt, session_id=session_id))
+        # Cases anchor a user inline ("For user 'eval-judge-crm', …"); without
+        # forwarding that as ``user_id``, Scout falls back to ``anon`` and the
+        # CRM sub-agent refuses the write — judge then sees a failure that
+        # was a runner artifact, not Scout's behavior. Mirror the behavioral
+        # runner's extraction so the user in the prompt matches the runtime.
+        user_id = _case_user_id(case.prompt)
+        if user_id:
+            run_result = asyncio.run(team.arun(case.prompt, session_id=session_id, user_id=user_id))
+        else:
+            run_result = asyncio.run(team.arun(case.prompt, session_id=session_id))
         response = getattr(run_result, "content", None) or ""
         duration = time.monotonic() - start
 

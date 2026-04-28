@@ -580,12 +580,46 @@ def _assert_case(
 # ---------------------------------------------------------------------------
 
 
+def _wipe_user_memories(user_id: str) -> None:
+    """Clear Scout's agentic memories for ``user_id`` before the case runs.
+
+    Scout has ``enable_agentic_memory=True``, which persists `update_user_memory`
+    rows keyed by user_id. Several cases share `eval-user-42` (save_note,
+    save_contact, recall_contact, ddl_on_demand…); without this wipe, prior
+    cases' memories accumulate and bias the model toward update_user_memory
+    over update_crm. Production has no such cross-case bleed — each user has
+    their own namespace; this is purely an eval-fixture concern.
+    """
+    from agno.utils.log import log_warning
+
+    from scout.settings import agent_db
+
+    try:
+        result = agent_db.get_user_memories(user_id=user_id, deserialize=False)
+        # deserialize=False returns (list[dict], total_count) per agno's API.
+        # Narrow with isinstance so mypy can see the dict shape.
+        if not isinstance(result, tuple):
+            return
+        memory_dicts, _ = result
+        ids = [m["memory_id"] for m in memory_dicts if m.get("memory_id")]
+        if ids:
+            agent_db.delete_user_memories(memory_ids=ids, user_id=user_id)
+    except Exception as exc:
+        # Wipe is best-effort — don't let it derail a run.
+        log_warning(f"failed to wipe agentic memories for user_id={user_id!r}: {exc}")
+
+
 def run_case(case: Case) -> CaseResult:
     """Run one case and return the result."""
     try:
         prev = install_fixture(build_fixture(case.fixture))
     except Exception as exc:
         return _error(case.id, f"fixture failed: {type(exc).__name__}: {exc}")
+
+    # Cases without a "For user X" anchor run under Scout's default user_id
+    # of "anon"; the runner forwards the explicit user otherwise. Wipe the
+    # one we'll actually use so this case starts clean.
+    _wipe_user_memories(_case_user_id(case.prompt) or "anon")
 
     try:
         try:
