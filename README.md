@@ -148,6 +148,10 @@ Railway will auto-deploy when values change, but if you need to redeploy manuall
 
 Once redeployed, AgentOS connects, Scout starts serving requests, and every API call (UI, Slack, scheduled tasks) runs signed-and-verified from here on. The Agno control plane handles JWT issuance, session management, traces, metrics, and the web UI. Scout just verifies the JWTs it sees. See the [AgentOS Security docs](https://docs.agno.com/agent-os/security/overview) for details.
 
+### Opting out of JWT verification (not recommended)
+
+If you must run production without auth (e.g. inside a private VPC behind another auth layer), flip `authorization=False` at [app/main.py:67](app/main.py:67) and redeploy. We strongly recommend keeping authorization on for any deploy that holds real company data. Without it, anyone who guesses your Railway domain can query your CRM, wiki, and connected sources.
+
 ### 5. Point Slack at the new URL
 
 1. Copy your Railway domain.
@@ -156,9 +160,31 @@ Once redeployed, AgentOS connects, Scout starts serving requests, and every API 
 
 If you were running ngrok locally, you can shut it down. Slack will route to the deployed instance.
 
-### Opting out (not recommended)
+### 6. Use GitHub for the knowledge wiki (recommended)
 
-If you must run production without auth (e.g. inside a private VPC behind another auth layer), flip `authorization=False` at [app/main.py:67](app/main.py:67) and redeploy. We strongly recommend keeping authorization on for any deploy that holds real company data. Without it, anyone who guesses your Railway domain can query your CRM, wiki, and connected sources.
+The filesystem wiki resets on every container restart. For production, swap to a Git-backed wiki so pages persist with an audit trail and reviewers can comment. Full setup guide in [docs/WIKI_GIT.md](docs/WIKI_GIT.md).
+
+1. Create a private wiki repo and mint a fine-grained PAT (Contents: Read and write, scoped to that one repo).
+2. Add to `.env.production`:
+
+```sh
+WIKI_REPO_URL=https://github.com/your-org/your-wiki.git
+WIKI_GITHUB_TOKEN=github_pat_***
+```
+
+3. Sync and redeploy:
+
+```sh
+./scripts/railway/env.sh
+```
+
+Scout detects both env vars on startup and switches the knowledge wiki to `GitBackend` automatically — no code changes needed. On boot you'll see `Knowledge wiki: GitBackend (<repo_url>)` in the logs.
+
+Railway will auto-deploy when values change, but if you need to redeploy manually:
+
+```sh
+./scripts/railway/redeploy.sh
+```
 
 ## What's next
 

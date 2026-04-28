@@ -1,14 +1,12 @@
 # Git-Backed Knowledge Wiki
 
-Scout ships with the knowledge wiki on the local filesystem
-(`wiki/knowledge/`). Pages live on whatever host runs Scout. Fine for a
-demo. Not fine for a real deployment — restart the container and the
-wiki is gone, share the host across environments and pages diverge.
+Scout ships with the knowledge wiki hosted on the local filesystem
+(`wiki/knowledge/`). This is a good for a local development but in
+production we should use use something we can share across containers.
 
-`GitBackend` swaps the storage layer for a real git repository. Every
-`update_knowledge` call stages the changed files, commits with an
-LLM-summarised one-line message, rebases onto the remote, and pushes.
-You get durability, an audit trail, and a place reviewers can leave
+`GitBackend` swaps the storage layer for a git repository. Every time
+`update_knowledge` is called, the backend stages the changed files,
+commits with an LLM-summarised one-line message, rebases onto the remote, and pushes. You get durability, an audit trail, and a place reviewers can leave
 comments on what Scout has learned.
 
 The voice wiki stays filesystem-backed. Voice rules are code-managed by
@@ -35,6 +33,8 @@ GitHub → Settings → Developer settings → Personal access tokens →
 - **Repository access**: only `your-org/your-wiki`
 - **Repository permissions** → **Contents**: **Read and write**
 
+> Note: make sure to have read and write permissions.
+
 Copy the `github_pat_*` value.
 
 > The PAT is registered with `agno.context.wiki.GitBackend`'s `Scrubber`
@@ -43,52 +43,34 @@ Copy the `github_pat_*` value.
 
 ### 3. Set env vars
 
-In `.env`:
+In `.env` (or `.env.production` for Railway):
 
 ```sh
 WIKI_REPO_URL=https://github.com/your-org/your-wiki.git
 WIKI_GITHUB_TOKEN=github_pat_***
 # Optional:
-WIKI_BRANCH=main                       # defaults to main
-WIKI_LOCAL_PATH=/var/lib/scout/wiki    # where the clone lives on disk
+# WIKI_BRANCH=main                       # defaults to main
+# WIKI_LOCAL_PATH=/var/lib/scout/wiki    # defaults to /repos/<your-wiki>
 ```
 
-### 4. Switch the factory
+Both `WIKI_REPO_URL` and `WIKI_GITHUB_TOKEN` must be set. Setting only one
+logs a warning and falls back to `FileSystemBackend`.
 
-In [`scout/contexts.py`](../scout/contexts.py), replace
-`_create_knowledge_wiki()`:
+### 4. Restart Scout
 
-```python
-from os import getenv
-
-from agno.context.wiki import GitBackend, WikiContextProvider
-
-
-def _create_knowledge_wiki() -> WikiContextProvider:
-    return WikiContextProvider(
-        id="knowledge",
-        name="Company Knowledge",
-        backend=GitBackend(
-            repo_url=getenv("WIKI_REPO_URL", ""),
-            branch=getenv("WIKI_BRANCH", "main"),
-            github_token=getenv("WIKI_GITHUB_TOKEN", ""),
-            local_path=getenv("WIKI_LOCAL_PATH"),  # None -> default tmp clone
-        ),
-        model=default_model(),
-    )
-```
-
-That's the entire code change. The provider keeps the same id (`knowledge`)
-and the same tools (`query_knowledge`, `update_knowledge`) — Scout's
-prompts and evals don't need to know which backend is wired in.
-
-### 5. Restart Scout
+`scout/contexts.py::_create_knowledge_wiki()` detects the env vars at
+startup and switches the backend automatically — no code changes
+needed. On startup you'll see `Knowledge wiki: GitBackend (<repo_url>)`
+in the logs.
 
 The first `update_knowledge` call clones the repo into `WIKI_LOCAL_PATH`
 (or a default tmp path if unset), writes the page, commits with an
-LLM-summarised message, rebases onto the remote, and pushes.
+LLM-summarised message, rebases onto the remote, and pushes. Subsequent
+calls reuse the clone.
 
-Subsequent calls reuse the clone.
+The provider keeps the same id (`knowledge`) and the same tools
+(`query_knowledge`, `update_knowledge`) — Scout's prompts and evals
+don't need to know which backend is wired in.
 
 ## What gets committed
 

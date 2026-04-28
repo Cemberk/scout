@@ -21,7 +21,7 @@ from agno.context.slack import SlackContextProvider
 from agno.context.web.parallel import ParallelBackend
 from agno.context.web.parallel_mcp import ParallelMCPBackend
 from agno.context.web.provider import WebContextProvider
-from agno.context.wiki import FileSystemBackend, WikiContextProvider
+from agno.context.wiki import FileSystemBackend, GitBackend, WikiContextProvider
 from agno.context.workspace import WorkspaceContextProvider
 from agno.run import RunContext
 from agno.tools import tool
@@ -37,9 +37,9 @@ from scout.settings import default_model
 SCOUT_FS_ROOT = Path(__file__).resolve().parents[1]
 
 # Wiki roots — knowledge is the prose memory Scout files into; voice is the
-# code-managed style guide read-only. Both are filesystem-backed by default;
-# swap `_create_knowledge_wiki` to `GitBackend` for durable, auditable
-# knowledge across deployments — see `docs/WIKI_GIT.md`.
+# code-managed style guide read-only. Knowledge is filesystem-backed by
+# default; set WIKI_REPO_URL + WIKI_GITHUB_TOKEN to switch to GitBackend
+# at startup (see `docs/WIKI_GIT.md`). Voice is always filesystem-backed.
 WIKI_KNOWLEDGE_PATH = SCOUT_FS_ROOT / "wiki" / "knowledge"
 WIKI_VOICE_PATH = SCOUT_FS_ROOT / "wiki" / "voice"
 
@@ -174,14 +174,36 @@ def _create_workspace_provider() -> WorkspaceContextProvider:
 def _create_knowledge_wiki() -> WikiContextProvider:
     """The company knowledge wiki — read + write, prose pages.
 
-    Filesystem-backed by default. For durable storage with an audit trail,
-    swap to ``GitBackend`` (see ``docs/WIKI_GIT.md``).
+    Filesystem-backed by default. Set ``WIKI_REPO_URL`` AND
+    ``WIKI_GITHUB_TOKEN`` to switch to ``GitBackend`` for durable storage
+    with an audit trail (see ``docs/WIKI_GIT.md``). Optional knobs:
+    ``WIKI_BRANCH`` (default ``main``), ``WIKI_LOCAL_PATH``.
     """
-    WIKI_KNOWLEDGE_PATH.mkdir(parents=True, exist_ok=True)
+    repo_url = getenv("WIKI_REPO_URL", "").strip()
+    github_token = getenv("WIKI_GITHUB_TOKEN", "").strip()
+
+    backend: FileSystemBackend | GitBackend
+    if repo_url and github_token:
+        backend = GitBackend(
+            repo_url=repo_url,
+            github_token=github_token,
+            branch=getenv("WIKI_BRANCH", "main"),
+            local_path=getenv("WIKI_LOCAL_PATH") or None,
+        )
+        log_info(f"Knowledge wiki: GitBackend ({repo_url})")
+    else:
+        if repo_url or github_token:
+            log_warning(
+                "Knowledge wiki: WIKI_REPO_URL and WIKI_GITHUB_TOKEN must both be set "
+                "to enable GitBackend; falling back to FileSystemBackend."
+            )
+        WIKI_KNOWLEDGE_PATH.mkdir(parents=True, exist_ok=True)
+        backend = FileSystemBackend(path=WIKI_KNOWLEDGE_PATH)
+
     return WikiContextProvider(
         id="knowledge",
         name="Company Knowledge",
-        backend=FileSystemBackend(path=WIKI_KNOWLEDGE_PATH),
+        backend=backend,
         model=default_model(),
     )
 
