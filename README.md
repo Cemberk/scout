@@ -1,4 +1,4 @@
-# Scout: company intelligence agent
+# Scout: Company Intelligence Agent
 
 Scout is an open-source company intelligence agent. It navigates live information sources (web, slack, drive, wiki, CRM, MCP servers) to assemble context on demand - and builds its own wiki and CRM as it learns about your company.
 
@@ -31,9 +31,13 @@ Scout is now running at `http://localhost:8000`.
 2. Click **Add OS**, choose **Local**, enter **http://localhost:8000**, then **Connect**.
 3. Try the pre-configured prompts.
 
+https://github.com/user-attachments/assets/ed49a6c4-926b-4d5d-a105-8a0d15021d3b
+
 ## Chat with Scout in Slack
 
 Scout is designed to live in Slack as your teammate. Follow [docs/SLACK_CONNECT.md](docs/SLACK_CONNECT.md) to add Scout to your slack workspace.
+
+https://github.com/user-attachments/assets/69d1c409-ff94-4c8e-b5e8-64c6e1a0518a
 
 ## How Scout works
 
