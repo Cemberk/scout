@@ -304,6 +304,46 @@ def w7_scout_has_default_user_id() -> None:
         )
 
 
+def w8_wiki_provider_surfaces() -> None:
+    """`knowledge` exposes read + write; `voice` is read-only.
+
+    Passes ``write=False`` is the only thing keeping ``update_voice`` off
+    Scout's tool list. If a refactor drops the kwarg, voice silently gains
+    a write tool and the agent will start editing voice rules — exactly
+    the regression the cookbook pattern is designed to prevent.
+    """
+    from scout.contexts import _create_knowledge_wiki, _create_voice_wiki
+
+    knowledge_tools = _tool_names(_create_knowledge_wiki().get_tools())
+    if "query_knowledge" not in knowledge_tools or "update_knowledge" not in knowledge_tools:
+        raise AssertionError(
+            f"knowledge wiki should expose query_knowledge AND update_knowledge; got {knowledge_tools}"
+        )
+
+    voice_tools = _tool_names(_create_voice_wiki().get_tools())
+    if "query_voice" not in voice_tools:
+        raise AssertionError(f"voice wiki should expose query_voice; got {voice_tools}")
+    if any("update_voice" in n for n in voice_tools):
+        raise AssertionError(f"voice wiki should be read-only (write=False) — found update tool in {voice_tools}")
+
+
+def w9_followups_in_canonical_ddl() -> None:
+    """``scout_followups`` ships in the canonical DDL alongside contacts/projects/notes.
+
+    Codifying the table here (rather than relying on the write sub-agent
+    to CREATE it on demand) gives a stable column shape the future
+    scheduled cron can query for ``due_at <= NOW() AND status = 'pending'``.
+    If the DDL drops it, follow-up reads start failing on cold Postgres
+    instances.
+    """
+    from db.tables import DDL
+
+    if not any("scout_followups" in stmt for stmt in DDL):
+        raise AssertionError(
+            "canonical DDL is missing scout_followups; closed-loop reads will break on fresh deployments"
+        )
+
+
 CHECKS = (
     w1_scout_tool_surface,
     w2_crm_provider_surface,
@@ -312,6 +352,8 @@ CHECKS = (
     w5_gdrive_uses_alldrives_subclass,
     w6_mcp_provider_lifecycle,
     w7_scout_has_default_user_id,
+    w8_wiki_provider_surfaces,
+    w9_followups_in_canonical_ddl,
 )
 
 

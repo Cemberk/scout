@@ -65,5 +65,10 @@ tmp
 # Scout local state — credentials, tokens, provider state
 .scout/
 
+# Knowledge wiki content — Scout fills this on the host. Voice rules
+# (wiki/voice/) are committed; knowledge pages aren't.
+wiki/knowledge/*
+!wiki/knowledge/README.md
+
 # Optional: local PyPI creds (uncomment if you ever create it)
 # .pypirc

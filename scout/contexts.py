@@ -16,23 +16,32 @@ from pathlib import Path
 from agno.context.database import DatabaseContextProvider
 from agno.context.gdrive import GDriveContextProvider
 from agno.context.mcp import MCPContextProvider
-from agno.context.provider import Answer, ContextProvider, Status
+from agno.context.provider import ContextProvider
 from agno.context.slack import SlackContextProvider
 from agno.context.web.parallel import ParallelBackend
 from agno.context.web.parallel_mcp import ParallelMCPBackend
 from agno.context.web.provider import WebContextProvider
+from agno.context.wiki import FileSystemBackend, WikiContextProvider
+from agno.context.workspace import WorkspaceContextProvider
 from agno.run import RunContext
 from agno.tools import tool
-from agno.tools.workspace import Workspace
 from agno.utils.log import log_info, log_warning
 
 from db import SCOUT_SCHEMA, get_readonly_engine, get_sql_engine
 from scout.instructions import SCOUT_CRM_READ, SCOUT_CRM_WRITE
 from scout.settings import default_model
 
-# Filesystem context root — the scout repo. Edit this one line to scope
-# Scout to a different directory.
-FS_ROOT = Path(__file__).resolve().parents[1]
+# Workspace root for the always-on filesystem context. Hardcoded to the
+# scout repo so Scout can answer questions about its own codebase out of
+# the box. Forks/private deployments can re-point this to their own repo.
+SCOUT_FS_ROOT = Path(__file__).resolve().parents[1]
+
+# Wiki roots — knowledge is the prose memory Scout files into; voice is the
+# code-managed style guide read-only. Both are filesystem-backed by default;
+# swap `_create_knowledge_wiki` to `GitBackend` for durable, auditable
+# knowledge across deployments — see `docs/WIKI_GIT.md`.
+WIKI_KNOWLEDGE_PATH = SCOUT_FS_ROOT / "wiki" / "knowledge"
+WIKI_VOICE_PATH = SCOUT_FS_ROOT / "wiki" / "voice"
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +64,8 @@ def create_context_providers() -> list[ContextProvider]:
         _create_web_provider(),
         _create_workspace_provider(),
         _create_database_provider(),
+        _create_knowledge_wiki(),
+        _create_voice_wiki(),
     ]
     for factory in (_create_slack_provider, _create_gdrive_provider):
         try:
@@ -156,47 +167,38 @@ def _create_web_provider() -> WebContextProvider:
     return WebContextProvider(backend=ParallelMCPBackend(), model=model)
 
 
-class WorkspaceContextProvider(ContextProvider):
-    """Thin wrapper around Workspace to fit the ContextProvider interface."""
-
-    def __init__(self, root: Path, *, id: str = "workspace", name: str = "Workspace") -> None:
-        super().__init__(id=id, name=name)
-        self.root = root.resolve()
-        self._workspace = Workspace(
-            root=self.root,
-            allowed=["read", "list", "search"],
-            confirm=[],
-        )
-
-    def status(self) -> Status:
-        if not self.root.exists():
-            return Status(ok=False, detail=f"root does not exist: {self.root}")
-        if not self.root.is_dir():
-            return Status(ok=False, detail=f"root is not a directory: {self.root}")
-        return Status(ok=True, detail=str(self.root))
-
-    async def astatus(self) -> Status:
-        return self.status()
-
-    def query(self, question: str, *, run_context: RunContext | None = None) -> Answer:
-        # Tools-based provider — use Workspace tools directly
-        return Answer(text="Use read_file, list_files, or search_content tools to explore the workspace.")
-
-    async def aquery(self, question: str, *, run_context: RunContext | None = None) -> Answer:
-        return self.query(question, run_context=run_context)
-
-    def get_tools(self) -> list:
-        return [self._workspace]
-
-    def instructions(self) -> str:
-        return (
-            f"`{self.name}`: browse files under {self.root}. Use `read_file` / `list_files` "
-            "(recursive option) / `search_content` (text grep). Paths are relative to the root."
-        )
-
-
 def _create_workspace_provider() -> WorkspaceContextProvider:
-    return WorkspaceContextProvider(root=FS_ROOT)
+    return WorkspaceContextProvider(root=SCOUT_FS_ROOT, model=default_model())
+
+
+def _create_knowledge_wiki() -> WikiContextProvider:
+    """The company knowledge wiki — read + write, prose pages.
+
+    Filesystem-backed by default. For durable storage with an audit trail,
+    swap to ``GitBackend`` (see ``docs/WIKI_GIT.md``).
+    """
+    WIKI_KNOWLEDGE_PATH.mkdir(parents=True, exist_ok=True)
+    return WikiContextProvider(
+        id="knowledge",
+        name="Company Knowledge",
+        backend=FileSystemBackend(path=WIKI_KNOWLEDGE_PATH),
+        model=default_model(),
+    )
+
+
+def _create_voice_wiki() -> WikiContextProvider:
+    """The company voice guide — read-only, code-managed.
+
+    Voice rules are committed to the repo and changed via PR, not by the
+    agent. ``write=False`` removes the ``update_voice`` tool from Scout.
+    """
+    return WikiContextProvider(
+        id="voice",
+        name="Company Voice",
+        backend=FileSystemBackend(path=WIKI_VOICE_PATH),
+        write=False,
+        model=default_model(),
+    )
 
 
 def _create_database_provider() -> DatabaseContextProvider:
@@ -259,5 +261,5 @@ async def list_contexts(run_context: RunContext | None = None) -> str:
     Returns:
         JSON list of ``{id, name, ok, detail}``.
     """
-    rows = [await astatus_row(ctx) for ctx in context_providers]
+    rows = [await astatus_row(ctx) for ctx in get_context_providers()]
     return json.dumps(rows)

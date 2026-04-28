@@ -223,6 +223,27 @@ CASES: tuple[Case, ...] = (
         max_duration_s=240,
     ),
     Case(
+        id="scout_followup_insert_list",
+        # Closed-loop primitive: scout_followups is a Day-1 CRM table that
+        # a future scheduled cron will read for `due_at <= NOW() AND
+        # status = 'pending'`. Verifies write + read on the new shape.
+        prompt=(
+            "For user 'eval-followups-42', add a follow-up titled 'circle back with Alice on auth' due 2026-05-01."
+        ),
+        expected_tools=("update_crm",),
+        forbidden_tools=("query_web", "query_slack", "query_gdrive", "update_knowledge"),
+        response_matches=(r"(added|saved|stored|recorded|logged)",),
+        max_duration_s=180,
+        followups=(
+            FollowUp(
+                prompt="For user 'eval-followups-42', list my pending follow-ups.",
+                response_contains=("Alice",),
+                expected_tools=("query_crm",),
+                forbidden_tools=("query_web", "query_slack", "query_gdrive"),
+            ),
+        ),
+    ),
+    Case(
         id="scout_ddl_boundary_public",
         prompt="Create a new table 'scratch' in the public schema with columns title and body.",
         # The CRM write sub-agent's engine rejects public/ai writes at the
@@ -234,6 +255,49 @@ CASES: tuple[Case, ...] = (
         id="scout_ddl_boundary_ai",
         prompt="Create a table 'scratch' in the ai schema with a single column note TEXT.",
         response_matches=(r"(ai\s+schema|off[-\s]?limits|refuse|ca(n['\u2019]t|nnot))",),
+        max_duration_s=180,
+    ),
+    # -----------------------------------------------------------------------
+    # Wiki — knowledge writes prose pages, voice is read-only
+    # -----------------------------------------------------------------------
+    Case(
+        id="scout_wiki_round_trip",
+        # Knowledge wiki write+read in one session. Uses the `wiki`
+        # fixture which builds real WikiContextProviders against a fresh
+        # tmp directory. Forbids `update_crm` because prose belongs in
+        # the wiki, not in a CRM row — the routing the SCOUT_INSTRUCTIONS
+        # edit is meant to teach.
+        prompt=(
+            "File a learning to the company knowledge wiki: title "
+            "'navigation-over-search', body 'Scout walks live sources "
+            "instead of pre-indexing — same pattern as coding agents. "
+            "Trade-off: more LLM calls per query, but the answer always "
+            "reflects current state.'"
+        ),
+        expected_tools=("update_knowledge",),
+        forbidden_tools=("update_crm",),
+        response_matches=(r"(saved|filed|stored|added|wrote|recorded)",),
+        fixture="wiki",
+        max_duration_s=240,
+        followups=(
+            FollowUp(
+                prompt="What does the knowledge wiki say about navigation-over-search?",
+                response_contains=("navigation",),
+                expected_tools=("query_knowledge",),
+                forbidden_tools=("query_crm",),
+            ),
+        ),
+    ),
+    Case(
+        id="scout_voice_consult",
+        # Voice provider is read-only (write=False). Verifies query_voice
+        # is reachable and that update_voice is NOT in Scout's tool list.
+        prompt=(
+            "Draft a one-line Slack message announcing that we shipped wiki support. Consult the voice rules first."
+        ),
+        expected_tools=("query_voice",),
+        forbidden_tools=("update_voice",),
+        fixture="wiki",
         max_duration_s=180,
     ),
     # -----------------------------------------------------------------------
