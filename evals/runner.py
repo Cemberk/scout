@@ -94,6 +94,43 @@ def _real_crm() -> Any:
     )
 
 
+def _real_wiki(path: Any) -> list[Any]:
+    """Real wiki providers — `knowledge` writable, `voice` read-only.
+
+    Seeds a minimal Slack voice file so ``query_voice`` cases return
+    something the model can use; knowledge starts empty so write→read
+    round-trip cases prove the new page actually got filed.
+    """
+    from agno.context.wiki import FileSystemBackend, WikiContextProvider
+
+    from scout.settings import default_model
+
+    knowledge_path = path / "knowledge"
+    voice_path = path / "voice"
+    knowledge_path.mkdir(parents=True, exist_ok=True)
+    voice_path.mkdir(parents=True, exist_ok=True)
+    (voice_path / "slack-message.md").write_text(
+        "# Slack Voice\n\n"
+        "- Lead with the point. One line if possible.\n"
+        "- No 'hey team' preamble.\n"
+    )
+    return [
+        WikiContextProvider(
+            id="knowledge",
+            name="Company Knowledge",
+            backend=FileSystemBackend(path=knowledge_path),
+            model=default_model(),
+        ),
+        WikiContextProvider(
+            id="voice",
+            name="Company Voice",
+            backend=FileSystemBackend(path=voice_path),
+            write=False,
+            model=default_model(),
+        ),
+    ]
+
+
 def build_fixture(name: str) -> list[Any]:
     """Build contexts for a fixture by name.
 
@@ -186,6 +223,21 @@ def build_fixture(name: str) -> list[Any]:
                     for i in range(1, 21)
                 ),
             ),
+            _real_crm(),
+        ]
+    if name == "wiki":
+        import shutil
+        import uuid
+        from pathlib import Path
+
+        wiki_root = Path("tmp") / f"eval-wiki-{uuid.uuid4().hex[:8]}"
+        if wiki_root.exists():
+            shutil.rmtree(wiki_root)
+        return [
+            _stub_context("web", "Web (stub)", WEB_STUB_TEXT),
+            _stub_context("slack", "Slack (stub)", SLACK_STUB_TEXT),
+            _stub_context("gdrive", "Google Drive (stub)", GDRIVE_STUB_TEXT),
+            *_real_wiki(wiki_root),
             _real_crm(),
         ]
     if name == "real":

@@ -21,6 +21,7 @@ from agno.context.slack import SlackContextProvider
 from agno.context.web.parallel import ParallelBackend
 from agno.context.web.parallel_mcp import ParallelMCPBackend
 from agno.context.web.provider import WebContextProvider
+from agno.context.wiki import FileSystemBackend, WikiContextProvider
 from agno.context.workspace import WorkspaceContextProvider
 from agno.run import RunContext
 from agno.tools import tool
@@ -34,6 +35,13 @@ from scout.settings import default_model
 # scout repo so Scout can answer questions about its own codebase out of
 # the box. Forks/private deployments can re-point this to their own repo.
 SCOUT_FS_ROOT = Path(__file__).resolve().parents[1]
+
+# Wiki roots — knowledge is the prose memory Scout files into; voice is the
+# code-managed style guide read-only. Both are filesystem-backed by default;
+# swap `_create_knowledge_wiki` to `GitBackend` for durable, auditable
+# knowledge across deployments — see `docs/WIKI_GIT.md`.
+WIKI_KNOWLEDGE_PATH = SCOUT_FS_ROOT / "wiki" / "knowledge"
+WIKI_VOICE_PATH = SCOUT_FS_ROOT / "wiki" / "voice"
 
 
 # ---------------------------------------------------------------------------
@@ -56,6 +64,8 @@ def create_context_providers() -> list[ContextProvider]:
         _create_web_provider(),
         _create_workspace_provider(),
         _create_database_provider(),
+        _create_knowledge_wiki(),
+        _create_voice_wiki(),
     ]
     for factory in (_create_slack_provider, _create_gdrive_provider):
         try:
@@ -159,6 +169,36 @@ def _create_web_provider() -> WebContextProvider:
 
 def _create_workspace_provider() -> WorkspaceContextProvider:
     return WorkspaceContextProvider(root=SCOUT_FS_ROOT, model=default_model())
+
+
+def _create_knowledge_wiki() -> WikiContextProvider:
+    """The company knowledge wiki — read + write, prose pages.
+
+    Filesystem-backed by default. For durable storage with an audit trail,
+    swap to ``GitBackend`` (see ``docs/WIKI_GIT.md``).
+    """
+    WIKI_KNOWLEDGE_PATH.mkdir(parents=True, exist_ok=True)
+    return WikiContextProvider(
+        id="knowledge",
+        name="Company Knowledge",
+        backend=FileSystemBackend(path=WIKI_KNOWLEDGE_PATH),
+        model=default_model(),
+    )
+
+
+def _create_voice_wiki() -> WikiContextProvider:
+    """The company voice guide — read-only, code-managed.
+
+    Voice rules are committed to the repo and changed via PR, not by the
+    agent. ``write=False`` removes the ``update_voice`` tool from Scout.
+    """
+    return WikiContextProvider(
+        id="voice",
+        name="Company Voice",
+        backend=FileSystemBackend(path=WIKI_VOICE_PATH),
+        write=False,
+        model=default_model(),
+    )
 
 
 def _create_database_provider() -> DatabaseContextProvider:

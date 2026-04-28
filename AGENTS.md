@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Scout is an **enterprise context agent** — a single `agno.Agent` with N `ContextProvider`s. Ships with `WebContextProvider`, `WorkspaceContextProvider` (local files via `agno.tools.Workspace`), `DatabaseContextProvider` (the CRM — user's contacts/projects/notes), `SlackContextProvider`, `GDriveContextProvider`, and `MCPContextProvider` (any MCP server → one `query_mcp_<slug>` tool on Scout). GitHub, Gmail, and Calendar land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
+Scout is an **enterprise context agent** — a single `agno.Agent` with N `ContextProvider`s. Ships with `WebContextProvider`, `WorkspaceContextProvider` (local files via `agno.tools.Workspace`), `DatabaseContextProvider` (the CRM — user's contacts/projects/notes/follow-ups), two `WikiContextProvider`s (a writable `knowledge` wiki and a read-only `voice` wiki), `SlackContextProvider`, `GDriveContextProvider`, and `MCPContextProvider` (any MCP server → one `query_mcp_<slug>` tool on Scout). GitHub, Gmail, and Calendar land in the next release (were built and verified on the `feat/slack-interface` branch; dropped from the ship slice until we can test end-to-end with real tokens).
 
 ## Architecture
 
@@ -67,7 +67,7 @@ scout/
 └── contexts.py                     # create/get/update/close_context_providers + list_contexts tool + status row helpers
 
 # The ContextProvider library (base ABC + shipped providers) lives in `agno.context`
-# as of agno 2.6 — see `agno.context.{database,gdrive,mcp,slack,web,workspace}`.
+# as of agno 2.6 — see `agno.context.{database,gdrive,mcp,slack,web,wiki,workspace}`.
 
 app/
 ├── main.py                         # AgentOS entry (lifespan wires contexts; Slack interface if env set)
@@ -77,7 +77,11 @@ app/
 db/
 ├── session.py                      # get_sql_engine (guarded) / get_readonly_engine / get_postgres_db / create_knowledge
 ├── url.py                          # DB URL builder
-└── tables.py                       # Canonical DDL: scout_contacts / projects / notes
+└── tables.py                       # Canonical DDL: scout_contacts / projects / notes / followups
+
+wiki/
+├── knowledge/                      # Prose memory Scout files into (gitignored except README)
+└── voice/                          # Code-managed style guide (committed, read-only to Scout)
 
 evals/
 ├── cases.py                        # Behavioral Case dataclass + CASES tuple
@@ -145,7 +149,9 @@ Registered provider set (in order):
 |---|---|---|
 | `WebContextProvider` | always | Backend picked below |
 | `WorkspaceContextProvider` | always | Read-only; `Workspace` scoped to `SCOUT_FS_ROOT` in `scout/contexts.py` (the scout repo — Scout answers questions about itself). One `query_workspace` tool that routes through a tuned sub-agent. |
-| `DatabaseContextProvider` | always | CRM — the user's contacts/projects/notes. Exposes `query_crm` + `update_crm`; read path uses `get_readonly_engine()`, write path uses `get_sql_engine()` (scout-schema-guarded). |
+| `DatabaseContextProvider` | always | CRM — the user's contacts/projects/notes/follow-ups. Exposes `query_crm` + `update_crm`; read path uses `get_readonly_engine()`, write path uses `get_sql_engine()` (scout-schema-guarded). |
+| `WikiContextProvider` (knowledge) | always | Prose memory — runbooks, design notes, learnings. `FileSystemBackend` on `wiki/knowledge/` by default; swap to `GitBackend` for durability + audit trail (see [`docs/WIKI_GIT.md`](docs/WIKI_GIT.md)). Tools: `query_knowledge` + `update_knowledge`. |
+| `WikiContextProvider` (voice) | always | Read-only (`write=False`) style guide for external content. Filesystem-backed on `wiki/voice/`; rules are code-managed (PR, not agent edits). Tool: `query_voice` only — no `update_voice`. |
 | `SlackContextProvider` | `SLACK_BOT_TOKEN` | Read-only; search + channel history + threads. Sending is disabled (Slack interface handles posting). Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md) |
 | `GDriveContextProvider` | `GOOGLE_SERVICE_ACCOUNT_FILE` | Read-only; Scout authenticates as its own service account (no user impersonation). Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) or `./scripts/google_setup.sh` |
 | `MCPContextProvider` | wired in `scout/contexts.py` | One per server; transports `stdio`/`sse`/`streamable-http`. Sub-agent instructions rebuilt from `list_tools()` at connect. `aclose()` closes the session on shutdown. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md) |
@@ -168,8 +174,9 @@ Shipped tables under the `scout` schema (created on first startup via `db/tables
 | `scout_contacts` | People | `name`, `emails TEXT[]`, `phone`, `tags TEXT[]`, `notes` |
 | `scout_projects` | Things in motion | `name`, `status`, `tags TEXT[]` |
 | `scout_notes` | Free-form notes | `title`, `body`, `tags TEXT[]`, `source_url` |
+| `scout_followups` | Things to come back to | `title`, `notes`, `due_at TIMESTAMPTZ`, `status` (`pending` / `done` / `dropped`), `tags TEXT[]` |
 
-Beyond these three, the CRM provider's write sub-agent creates new `scout_*` tables on demand — always in the `scout` schema, always with the standard columns.
+Beyond these four, the CRM provider's write sub-agent creates new `scout_*` tables on demand — always in the `scout` schema, always with the standard columns. `scout_followups` is the closed-loop primitive: a future scheduled cron reads `due_at <= NOW() AND status = 'pending'` to surface what needs attention each morning.
 
 ## Tools on Scout
 
@@ -231,6 +238,7 @@ from scout.contexts import create_context_providers, get_context_providers, upda
 from agno.context import ContextBackend, ContextProvider, ContextMode, Answer, Document, Status
 from agno.context.database import DatabaseContextProvider
 from agno.context.workspace import WorkspaceContextProvider
+from agno.context.wiki import FileSystemBackend, GitBackend, WikiContextProvider
 from agno.context.gdrive import GDriveContextProvider
 from agno.context.mcp import MCPContextProvider
 from agno.context.slack import SlackContextProvider

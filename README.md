@@ -4,7 +4,7 @@ Scout is a **context agent**: an agent that queries information sources to assem
 
 Every team eventually battles context sprawl. Knowledge ends up scattered across chat, drives, repos, and wikis, and no one person holds it all in their head. Scout is the teammate who does.
 
-Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, **Google Drive**, a **CRM** (the user's own contacts / projects / notes, stored in Postgres), and any **MCP server** (wire one up in [`scout/contexts.py`](scout/contexts.py) and it becomes its own `query_mcp_<slug>` tool). GitHub, Gmail, and Calendar land in the next release.
+Scout is built around a small `ContextProvider` abstraction — any source is just a subclass. Today ships providers for the **web**, **local filesystem**, **Slack**, **Google Drive**, a **CRM** (contacts / projects / notes / follow-ups, stored in Postgres), a writable **knowledge wiki** (Scout files prose pages — runbooks, design notes, learnings — as it learns), a read-only **voice wiki** (the company style guide for external content, code-managed), and any **MCP server** (wire one up in [`scout/contexts.py`](scout/contexts.py) and it becomes its own `query_mcp_<slug>` tool). GitHub, Gmail, and Calendar land in the next release.
 
 ## Quick start
 
@@ -37,6 +37,10 @@ Scout is a single agent with N context providers. One LLM hop per turn — no ro
 > *"Find the latest benchmark numbers for model X."* → Scout calls `web_search`, cites sources.
 >
 > *"Save that as a note."* → Scout calls `update_crm` → the CRM provider's write sub-agent `INSERT`s into `scout.scout_notes`.
+>
+> *"File a runbook for our incident response."* → Scout calls `update_knowledge` → the wiki provider writes a markdown page under `wiki/knowledge/runbooks/`.
+>
+> *"Draft a Slack message announcing the launch."* → Scout calls `query_voice` first to load the style guide, then drafts in that voice.
 
 ## Contexts
 
@@ -54,7 +58,9 @@ A `ContextProvider` exposes a source to the team. Each provider has a `mode`:
 |---|---|---|
 | **`WebContextProvider`** | always on — picks a backend based on keys below | `web_search` / `web_extract` |
 | **`WorkspaceContextProvider`** | always on — rooted at the scout repo (see `SCOUT_FS_ROOT` in [`scout/contexts.py`](scout/contexts.py)), so Scout can answer questions about its own codebase | one `query_workspace` tool routed through a tuned read-only sub-agent (lists, searches, and reads files; common dependency / build / cache directories excluded) |
-| **`DatabaseContextProvider`** (CRM) | always on — Postgres via `DB_*` | `query_crm` reads the user's contacts / projects / notes; `update_crm` saves or modifies them. Two internal sub-agents so the read path never sees the write engine; writes are scoped to the `scout` schema and guarded at the engine layer. |
+| **`DatabaseContextProvider`** (CRM) | always on — Postgres via `DB_*` | `query_crm` reads the user's contacts / projects / notes / follow-ups; `update_crm` saves or modifies them. Two internal sub-agents so the read path never sees the write engine; writes are scoped to the `scout` schema and guarded at the engine layer. |
+| **`WikiContextProvider`** (knowledge) | always on — rooted at `wiki/knowledge/` (gitignored) | `query_knowledge` / `update_knowledge` — Scout's prose memory. Filesystem-backed by default; flip to `GitBackend` for durability + audit trail (see [`docs/WIKI_GIT.md`](docs/WIKI_GIT.md)). |
+| **`WikiContextProvider`** (voice) | always on — rooted at `wiki/voice/` (committed) | `query_voice` only (`write=False`) — code-managed style guide for emails, Slack messages, X posts, and long-form docs. |
 | **`SlackContextProvider`** | `SLACK_BOT_TOKEN` | read-only `search_workspace` / `get_channel_history` / `get_thread` / `list_users`. Sending is disabled — post via the Slack interface instead. Setup: [`docs/SLACK_CONNECT.md`](docs/SLACK_CONNECT.md). |
 | **`GDriveContextProvider`** | `GOOGLE_SERVICE_ACCOUNT_FILE` | read-only `search_files` / `list_files` / `read_file`. Scout authenticates as its own service account — share folders with the SA email to grant access. Setup: [`docs/GDRIVE_CONNECT.md`](docs/GDRIVE_CONNECT.md) (or `./scripts/google_setup.sh` for the automated path). |
 | **`MCPContextProvider`** | wired in [`scout/contexts.py`](scout/contexts.py) | Wraps any MCP server (stdio / SSE / streamable-HTTP). One `query_mcp_<slug>` tool on Scout per server; sub-agent instructions built dynamically from `list_tools()`. Setup: [`docs/MCP_CONNECT.md`](docs/MCP_CONNECT.md). |
@@ -88,6 +94,7 @@ Scout writes user data to `scout_*` tables, created on first startup:
 - `scout_contacts` — people (`name, emails[], phone, tags[], notes`)
 - `scout_projects` — things in motion (`name, status, tags[]`)
 - `scout_notes` — free-form notes (`title, body, tags[], source_url`)
+- `scout_followups` — things to come back to (`title, notes, due_at, status, tags[]`)
 
 All tables carry `id SERIAL PK`, `user_id TEXT NOT NULL`, `created_at TIMESTAMPTZ`. The CRM provider's write sub-agent creates new `scout_*` tables on demand when intent doesn't fit an existing one.
 

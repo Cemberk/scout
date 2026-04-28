@@ -13,10 +13,12 @@ User data (canonical, Day-1 shape for the CRM context provider):
 - ``scout.scout_contacts``  — people: name, emails, phone, tags, notes.
 - ``scout.scout_projects``  — things in motion: name, status, tags.
 - ``scout.scout_notes``     — free-form notes: title, body, tags, source_url.
+- ``scout.scout_followups`` — follow-ups Scout should look at: title, notes,
+  due_at, status, tags. Status is one of ``pending`` / ``done`` / ``dropped``.
 
 Every user-data table carries the same standard columns:
 ``id SERIAL PK``, ``user_id TEXT NOT NULL``, ``created_at TIMESTAMPTZ``.
-Beyond these three, the CRM provider's write sub-agent creates tables on demand.
+Beyond these four, the CRM provider's write sub-agent creates tables on demand.
 """
 
 from __future__ import annotations
@@ -57,6 +59,18 @@ DDL = [
         body            TEXT NOT NULL DEFAULT '',
         tags            TEXT[] NOT NULL DEFAULT '{{}}',
         source_url      TEXT,
+        user_id         TEXT NOT NULL,
+        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    f"""
+    CREATE TABLE IF NOT EXISTS {SCOUT_SCHEMA}.scout_followups (
+        id              SERIAL PRIMARY KEY,
+        title           TEXT NOT NULL,
+        notes           TEXT,
+        due_at          TIMESTAMPTZ,
+        status          TEXT NOT NULL DEFAULT 'pending',
+        tags            TEXT[] NOT NULL DEFAULT '{{}}',
         user_id         TEXT NOT NULL,
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
