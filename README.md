@@ -186,6 +186,18 @@ Railway will auto-deploy when values change, but if you need to redeploy manuall
 ./scripts/railway/redeploy.sh
 ```
 
+### 7. Connect Railway to GitHub for auto-deploys
+
+So far every code update needs `./scripts/railway/redeploy.sh`. To auto-deploy on every push to `main` instead, connect the repo in Railway:
+
+1. Open the Railway dashboard → your project → the **scout** service → **Settings**.
+2. Under **Source**, click **Connect Repo** and pick the repo where Scout lives.
+3. Set the deploy branch to `main`, then save.
+
+Every push to `main` now triggers a fresh build and rolling deploy. `./scripts/railway/env.sh` is still how you sync `.env.production` changes.
+
+> Scout deploys with **2 replicas** by default — configured in [`railway.json`](railway.json) (`"numReplicas": 2`, `4Gi` memory, 2 vCPU per replica). Two replicas give you zero-downtime rolling deploys and modest fault tolerance. Bump `numReplicas` and `limits` as your usage grows.
+
 ## What's next
 
 - **Scheduled tasks.** Scout surfaces pending follow-ups automatically (e.g. a daily 8am summary of `scout_followups` where `due_at <= NOW()`).
