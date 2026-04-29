@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(git rm:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(cp:*)",
+      "Bash(cp .claude/SKILL_SETUP.md plugins/scout/)",
+      "Bash(cp .claude/CLAUDE_SKILL.md plugins/scout/)"
     ]
   }
 }

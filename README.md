@@ -54,7 +54,18 @@ Check what's connected:
 
 ## Installation
 
-### Global (Available in all projects)
+### Via Claude Code Plugin (Recommended)
+
+```bash
+/plugin marketplace add Cemberk/scout
+/plugin install scout@cemberk-scout
+```
+
+This auto-installs the skill globally for use in all your projects.
+
+### Manual Installation
+
+#### Global (Available in all projects)
 
 ```bash
 # Linux/Mac
@@ -64,7 +75,7 @@ cp .claude/skills/scout.md ~/.claude/skills/
 copy .claude\skills\scout.md %USERPROFILE%\.claude\skills\
 ```
 
-### Project-Specific
+#### Project-Specific
 
 ```bash
 cp .claude/skills/scout.md {your-project}/.claude/skills/
@@ -74,8 +85,15 @@ See [SKILL_SETUP.md](.claude/SKILL_SETUP.md) for detailed setup.
 
 ## Quick Start
 
-### 1. Install the skill
+### 1. Install the plugin
 
+```bash
+# In Claude Code
+/plugin marketplace add Cemberk/scout
+/plugin install scout@cemberk-scout
+```
+
+Or manually:
 ```bash
 cp .claude/skills/scout.md ~/.claude/skills/
 ```
@@ -85,7 +103,7 @@ cp .claude/skills/scout.md ~/.claude/skills/
 ```bash
 cd {your-project}
 mkdir -p .claude/projects/{project}/memory/{knowledge/{people,projects,patterns,runbooks},tickets,codebase}
-cp {scout-repo}/.claude/memory-template/MEMORY.md .claude/projects/{project}/memory/
+cp {scout-install-dir}/memory-template/MEMORY.md .claude/projects/{project}/memory/
 ```
 
 ### 3. Add to CLAUDE.md (optional)

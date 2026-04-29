@@ -1,0 +1,13 @@
+{
+  "name": "cemberk-scout",
+  "owner": {
+    "name": "Cemberk"
+  },
+  "plugins": [
+    {
+      "name": "scout",
+      "source": "./plugins/scout",
+      "description": "Company intelligence skill that navigates organizational knowledge sources and builds institutional memory"
+    }
+  ]
+}
